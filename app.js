@@ -51,6 +51,9 @@
   let toastTimer;
   let petActionTimer;
   let deferredInstallPrompt = null;
+  let activeAudio = null;
+  let speechRequestId = 0;
+  let networkVoiceNoticeShown = false;
 
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -106,7 +109,28 @@
 
   const save = () => { const snapshot={...state};if(TEST_MODE){snapshot.suns=persistedEconomy.suns;snapshot.foods=persistedEconomy.foods;}localStorage.setItem(profileStoreKey(activeUserId), JSON.stringify(snapshot)); renderHeader(); };
   const toast = (msg) => { const el=$("toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2200); };
-  const speak = (text,rate=.78) => { if (!("speechSynthesis" in window)) return toast("当前浏览器不支持语音"); speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=rate; speechSynthesis.speak(u); };
+  const speechChunks = text => {
+    const parts=String(text||"").trim().match(/[^.!?。！？]+[.!?。！？]?/g)||[];const chunks=[];
+    parts.forEach(part=>{let rest=part.trim();while(rest.length>150){let cut=rest.lastIndexOf(" ",150);if(cut<50)cut=150;chunks.push(rest.slice(0,cut));rest=rest.slice(cut).trim();}if(rest)chunks.push(rest);});
+    return chunks.length?chunks:[String(text||"").trim()];
+  };
+  function stopVoice(){speechRequestId+=1;try{window.speechSynthesis?.cancel();}catch{}if(activeAudio){activeAudio.pause();activeAudio.src="";activeAudio=null;}}
+  function playNetworkVoice(text,rate,requestId){
+    const chunks=speechChunks(text);let index=0;
+    if(!networkVoiceNoticeShown){networkVoiceNoticeShown=true;toast("已自动切换到在线英语语音");}
+    const playNext=()=>{if(requestId!==speechRequestId||index>=chunks.length)return;const chunk=chunks[index],sources=[`https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(chunk)}`,`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(chunk)}&type=2`];let sourceIndex=0;
+      const trySource=()=>{if(requestId!==speechRequestId)return;const audio=new Audio(sources[sourceIndex]);activeAudio=audio;audio.preload="auto";audio.playbackRate=Math.max(.7,Math.min(1.05,rate+.12));audio.onended=()=>{index+=1;playNext()};audio.onerror=()=>{sourceIndex+=1;if(sourceIndex<sources.length)trySource();else if(requestId===speechRequestId)toast("语音加载失败，请检查网络后再试")};audio.play().catch(()=>{if(requestId===speechRequestId)toast("请再次点击播放按钮")});};trySource();};
+    playNext();
+  }
+  function speak(text,rate=.78){
+    const content=String(text||"").trim();if(!content)return;stopVoice();const requestId=speechRequestId;
+    if(!("speechSynthesis" in window)||typeof SpeechSynthesisUtterance==="undefined"){playNetworkVoice(content,rate,requestId);return;}
+    try{
+      const utterance=new SpeechSynthesisUtterance(content),voices=window.speechSynthesis.getVoices?.()||[];utterance.lang="en-US";utterance.rate=rate;utterance.pitch=1;utterance.voice=voices.find(voice=>voice.lang==="en-US")||voices.find(voice=>String(voice.lang).startsWith("en"))||null;
+      let started=false;utterance.onstart=()=>{started=true};utterance.onerror=event=>{if(requestId!==speechRequestId||["canceled","interrupted"].includes(event.error))return;playNetworkVoice(content,rate,requestId)};window.speechSynthesis.speak(utterance);
+      setTimeout(()=>{if(requestId===speechRequestId&&!started&&!window.speechSynthesis.speaking&&!window.speechSynthesis.pending)playNetworkVoice(content,rate,requestId)},1200);
+    }catch{playNetworkVoice(content,rate,requestId);}
+  }
   const speakPhoneme = (symbol) => speak(PHONEME_VOICE[symbol]||symbol,.48);
   const daysBetween = (a,b) => Math.floor((new Date(`${b}T00:00:00`)-new Date(`${a}T00:00:00`))/86400000);
   const plantProgress = (id=state.plant.selected) => {if(!state.plant.progress[id])state.plant.progress[id]={energy:70,xp:0,lastFed:""};return state.plant.progress[id];};
@@ -709,5 +733,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=19",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=20",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
