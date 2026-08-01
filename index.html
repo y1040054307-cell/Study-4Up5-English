@@ -9,7 +9,7 @@
   <meta property="og:title" content="向阳英语成长岛｜闽教版三至六年级">
   <meta property="og:description" content="每天20分钟，真正听懂、读懂、会说、会用。">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=6">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -29,6 +29,7 @@
     <button data-view="courses"><span>📚</span>课程</button>
     <button data-view="today"><span>✅</span>每日任务</button>
     <button data-view="words"><span>🔤</span>单词本</button>
+    <button data-view="phonics"><span>👄</span>音标课堂</button>
     <button data-view="garden"><span>🌱</span>成长花园</button>
     <button data-view="report"><span>📈</span>成长报告</button>
   </nav>
@@ -81,6 +82,13 @@
     <section class="view" id="view-courses">
       <div class="page-title"><span class="eyebrow">CURRICULUM LIBRARY</span><h1>三至六年级课程库</h1><p>先选年级和学期，再进入单元。每单元包含理解、单词、句型、对话、阅读和练习。</p></div>
       <div class="version-note"><span>📌</span><p><strong>教材版本提示</strong>　新版教材正在分年级启用，各校进度可能不同。这里按闽教版主题编排原创学习内容；请先对照学校发放课本的单元名称。</p></div>
+      <div class="library-stats">
+        <article><b>8</b><span>册课程教材</span></article><article><b>52</b><span>个完整单元</span></article><article><b>518</b><span>必备与拓展词条</span></article><article><b>156</b><span>重点句型</span></article>
+      </div>
+      <section class="start-guide">
+        <strong>第一次使用这样开始：</strong>
+        <span><i>1</i>选择年级</span><span><i>2</i>选择上册或下册</span><span><i>3</i>点击“进入单元教材”</span><span><i>4</i>按3课时完成学习</span>
+      </section>
       <div class="grade-switch" id="gradeSwitch"></div>
       <div class="term-switch" id="termSwitch"></div>
       <div class="book-summary" id="bookSummary"></div>
@@ -100,6 +108,7 @@
         <section class="panel"><div class="daily-heading"><div><b id="todayDate"></b><span id="todayCourse"></span></div><div class="circle-progress" id="circleProgress">0/5</div></div><div id="dailyTasks" class="daily-tasks"></div></section>
         <aside class="panel reward-panel"><span class="big-sun">☀️</span><h2>今日奖励</h2><p>每项任务 +1 小太阳<br>全部完成再 +3 小太阳</p><button class="primary" id="claimDailyBonus">领取全勤奖励</button><small id="bonusHint"></small></aside>
       </div>
+      <section class="daily-practice-zone" id="dailyPracticeZone"></section>
     </section>
 
     <section class="view" id="view-words">
@@ -108,6 +117,19 @@
       <div class="memory-card" id="memoryCard"></div>
       <div class="memory-actions"><button class="danger-soft" id="wordAgain">还不熟</button><button class="primary" id="wordKnow">我记住了</button></div>
       <div class="word-dots" id="wordDots"></div>
+    </section>
+
+    <section class="view" id="view-phonics">
+      <div class="page-title"><span class="eyebrow">PHONICS &amp; IPA</span><h1>基础音标课堂</h1><p>先学会辨别声音，再把声音和字母组合连接起来。点击示例词听发音，观察口型并跟读。</p></div>
+      <div class="phonics-intro">
+        <article><span>1</span><div><b>音标不是字母</b><p>字母是单词的写法，音标表示实际听到的声音。例如字母 a 在不同单词中可能发不同音。</p></div></article>
+        <article><span>2</span><div><b>符号 / / 表示发音</b><p>如 sheep /ʃiːp/；符号 ː 表示长音，要比短音多保持一会儿。</p></div></article>
+        <article><span>3</span><div><b>听—看—模仿—对比</b><p>先听示例词，看口型提示，跟读3遍，再用最小对立词比较两个相近音。</p></div></article>
+      </div>
+      <div class="phonics-groups" id="phonicsGroups"></div>
+      <div class="phonics-grid" id="phonicsGrid"></div>
+      <section class="panel minimal-panel"><div class="section-head"><div><span class="eyebrow">MINIMAL PAIRS</span><h2>最小对立词辨音</h2></div></div><p>两个单词通常只差一个音。先分别点读，再闭眼判断听到的是哪一个。</p><div class="minimal-grid" id="minimalGrid"></div></section>
+      <section class="panel phonics-method"><h2>每天5分钟发音训练</h2><div><span><b>第1分钟</b>听5个示例词</span><span><b>第2分钟</b>看口型慢读</span><span><b>第3分钟</b>正常速度跟读</span><span><b>第4分钟</b>对比相近音</span><span><b>第5分钟</b>离开提示读词</span></div></section>
     </section>
 
     <section class="view" id="view-garden">
@@ -128,7 +150,7 @@
   </main>
 
   <div class="toast" id="toast" role="status"></div>
-  <script src="curriculum.js"></script>
-  <script src="app.js"></script>
+  <script src="curriculum.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
