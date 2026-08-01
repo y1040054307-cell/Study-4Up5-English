@@ -16,15 +16,9 @@
       {id:"world_tree",name:"宇宙世界树",rarity:"神话",price:1000,color:"#e3b446",stages:["🌟","🌱🌟","🌳✨","🌍🌳","🌌🌍🌳👑✨"],forms:["宇宙星核","创世嫩芽","星辉巨树","世界守护树","宇宙创世终极神树"],description:"商城最高荣誉，终极形态连接星辰与世界。"}
     ].map(item => ({...item, thresholds})),
     pets: [
-      {id:"cat_british",species:"小猫",breed:"英国短毛猫",price:120,icon:"🐱",color:"#8095aa",stages:["🐾","🐱","😺","👑😺✨"],forms:["奶萌幼崽","圆脸小猫","稳重成猫","蓝晶猫王"],description:"圆脸安静，喜欢陪你一起复习。"},
-      {id:"cat_orange",species:"小猫",breed:"中华橘猫",price:70,icon:"🐈",color:"#e79a43",stages:["🐾","🐈","😸","☀️👑😸"],forms:["橘色幼崽","活力小橘","阳光成猫","太阳橘猫王"],description:"亲人活泼，是常见又温暖的伙伴。"},
-      {id:"cat_ragdoll",species:"小猫",breed:"布偶猫",price:220,icon:"🐱",color:"#9b8dd0",stages:["🐾","🐱","😻","🌌👑😻"],forms:["云朵幼崽","温柔小猫","优雅成猫","星河布偶女王"],description:"温柔优雅，终极形态拥有星河披风。"},
-      {id:"dog_golden",species:"小狗",breed:"金毛寻回犬",price:180,icon:"🐕",color:"#d89a45",stages:["🐾","🐶","🐕","🏅👑🐕✨"],forms:["金色幼崽","热情小狗","可靠金毛","荣耀守护犬王"],description:"友善可靠，会认真守护学习成果。"},
-      {id:"dog_corgi",species:"小狗",breed:"威尔士柯基犬",price:140,icon:"🐕",color:"#d8773f",stages:["🐾","🐶","🐕","🌈👑🐶"],forms:["短腿幼崽","快乐柯基","勇气成犬","彩虹柯基骑士"],description:"短腿却很有勇气，陪你跑完长期任务。"},
-      {id:"dog_shiba",species:"小狗",breed:"柴犬",price:260,icon:"🐕",color:"#b66b3d",stages:["🐾","🐶","🐕","🔥👑🐕"],forms:["柴柴幼崽","机灵小柴","沉稳成犬","赤焰柴犬将军"],description:"独立机灵，终极形态是赤焰守护将军。"},
-      {id:"turtle_pond",species:"小乌龟",breed:"中华草龟",price:90,icon:"🐢",color:"#668660",stages:["🥚","🐢","🐢🌿","🌿👑🐢"],forms:["温暖龟蛋","小草龟","沉稳成龟","青木玄武守卫"],description:"成长缓慢而稳定，最适合象征长期坚持。"},
-      {id:"turtle_slider",species:"小乌龟",breed:"巴西红耳龟",price:130,icon:"🐢",color:"#6b9b63",stages:["🥚","🐢","🐢💧","🌊👑🐢"],forms:["水纹龟蛋","红耳幼龟","活力成龟","碧海红耳领主"],description:"常见活泼，喜欢清水和规律的照顾。"},
-      {id:"turtle_box",species:"小乌龟",breed:"黄缘闭壳龟",price:300,icon:"🐢",color:"#9b7a38",stages:["🥚","🐢","🐢⭐","🌌👑🐢"],forms:["金纹龟蛋","黄缘幼龟","星甲成龟","星甲玄武神兽"],description:"稀有稳重，终极星甲需要漫长陪伴。"}
+      {id:"cat",species:"小猫",name:"橘色小猫",price:80,icon:"🐱",color:"#e79a43",image:"assets/cat-growth.webp",stages:["幼崽","少年","成年","完全成长"],forms:["奶萌小猫","活力小猫","阳光成猫","威风大猫"],description:"从小小橘猫逐渐长成蓬松、可靠的学习伙伴。"},
+      {id:"dog",species:"小狗",name:"金色小狗",price:120,icon:"🐶",color:"#d89a45",image:"assets/dog-growth.webp",stages:["幼崽","少年","成年","完全成长"],forms:["奶萌小狗","活力小狗","可靠成犬","威风大狗"],description:"从圆滚滚的小狗逐渐长成强壮、友善的陪伴者。"},
+      {id:"turtle",species:"小乌龟",name:"绿色小乌龟",price:100,icon:"🐢",color:"#78a85b",image:"assets/turtle-growth.webp",stages:["幼崽","少年","成年","完全成长"],forms:["破壳幼龟","好奇小龟","沉稳成龟","威严大龟"],description:"从刚破壳的小乌龟，慢慢成长为沉稳强大的长期伙伴。"}
     ].map(item => ({...item, thresholds:[0, 60, 180, 420]}))
   };
 })();
