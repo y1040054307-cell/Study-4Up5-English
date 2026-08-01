@@ -228,4 +228,4 @@ const LESSONS = [
   }
 ];
 
-const ALL_WORDS = LESSONS.flatMap((lesson) => lesson.words);
+let ALL_WORDS = LESSONS.flatMap((lesson) => lesson.words);

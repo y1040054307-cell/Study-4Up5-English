@@ -1,5 +1,5 @@
-const CACHE_NAME = "sunny-english-island-v1";
-const APP_FILES = ["./", "./index.html", "./styles.css", "./data.js", "./app.js", "./manifest.webmanifest"];
+const CACHE_NAME = "sunny-english-island-v2";
+const APP_FILES = ["./", "./index.html", "./styles.css", "./data.js", "./details.js", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_FILES)));

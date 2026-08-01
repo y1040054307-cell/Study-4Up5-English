@@ -127,7 +127,7 @@
         <div class="page-intro">
           <span class="eyebrow">15 DAY JOURNEY</span>
           <h1>暑假学习路线</h1>
-          <p>前7天巩固四年级下册，后8天衔接五年级上册。点击任意一天即可开始。</p>
+          <p>15天覆盖四下8个单元与五上8个单元；第6天连学“天气＋季节”两个关联单元。</p>
         </div>
         <div class="phase-legend">
           <span><i class="dot review"></i>四下复习</span>
@@ -144,12 +144,16 @@
           <h1><small id="lessonDay">DAY 01</small><span id="lessonTitle">Days of the Week</span></h1>
           <p id="lessonFocus"></p>
           <div class="lesson-meta">
-            <span>⏱ 约25分钟</span><span>🪄 5个关键词</span><span>💬 2个实用句</span>
+            <span id="lessonUnit">📘 单元</span><span id="lessonTime">⏱ 约50分钟</span><span id="lessonWordCount">🪄 必备单词</span><span id="lessonSentenceCount">💬 重点句型</span>
           </div>
         </div>
+        <section class="lesson-section objective-panel">
+          <div class="section-title"><span>🎯</span><div><h2>本单元学习目标</h2><p>学完后要能够独立完成这些事情。</p></div></div>
+          <div class="objective-grid" id="lessonObjectives"></div>
+        </section>
         <div class="learn-layout">
           <section>
-            <div class="subheading"><span>01</span><div><h2>听音认词</h2><p>点击卡片听发音，再翻面查看例句。</p></div></div>
+            <div class="subheading"><span>01</span><div><h2>必备单词</h2><p>点击卡片听发音，必须做到会认、会读、知道意思。</p></div></div>
             <div class="word-grid" id="lessonWords"></div>
           </section>
           <aside class="sentence-panel">
@@ -158,8 +162,35 @@
             <button class="light-button" id="speakSentences" type="button">▶ 连续听句子</button>
           </aside>
         </div>
+        <section class="lesson-section">
+          <div class="section-title"><span>➕</span><div><h2>拓展单词</h2><p>先理解和会说，不要求一次全部默写。</p></div></div>
+          <div class="extra-word-grid" id="extraWords"></div>
+        </section>
+        <section class="lesson-section">
+          <div class="section-title"><span>🔑</span><div><h2>重点知识详解</h2><p>读例句，弄懂句子为什么这样说。</p></div></div>
+          <div class="knowledge-grid" id="knowledgeGrid"></div>
+        </section>
+        <section class="lesson-section reading-practice-grid">
+          <article class="reading-card">
+            <span class="eyebrow">ORIGINAL READING</span><h2 id="readingTitle">单元阅读</h2>
+            <p class="reading-en" id="readingEn"></p><p class="reading-zh" id="readingZh"></p>
+            <div id="readingQuestions"></div>
+          </article>
+          <article class="practice-card">
+            <span class="eyebrow">THINK &amp; ANSWER</span><h2>单元练习</h2>
+            <div id="practiceList"></div>
+          </article>
+        </section>
+        <section class="lesson-section tips-grid">
+          <article class="tip-card memory-card"><h2>🧠 更容易记住</h2><ul id="memoryList"></ul></article>
+          <article class="tip-card mistake-card"><h2>⚠️ 常见易错点</h2><ul id="mistakeList"></ul></article>
+        </section>
+        <section class="lesson-section task-panel">
+          <div class="section-title"><span>☀️</span><div><h2>今日完整任务</h2><p>每完成一项可领取1个小太阳；全部完成后再进入闯关。</p></div></div>
+          <div class="study-task-grid" id="studyTaskGrid"></div>
+        </section>
         <div class="lesson-finish">
-          <div><span class="eyebrow">完成学习后</span><h2>用5道题检验自己</h2></div>
+          <div><span class="eyebrow">完成学习后</span><h2>用本单元全部必备词检验自己</h2></div>
           <button class="primary-button" id="lessonQuizButton" type="button">进入今日闯关 →</button>
         </div>
       </section>
@@ -208,7 +239,7 @@
           </div>
           <div class="quiz-play hidden" id="quizPlay">
             <div class="quiz-progress"><span id="quizProgressBar"></span></div>
-            <div class="quiz-count" id="quizCount">第 1 / 5 题</div>
+            <div class="quiz-count" id="quizCount">准备开始</div>
             <span class="quiz-prompt">请选择正确的英文</span>
             <h2 id="quizMeaning">安静的</h2>
             <div class="quiz-options" id="quizOptions"></div>
@@ -216,7 +247,7 @@
           </div>
           <div class="quiz-result hidden" id="quizResult">
             <span class="result-emoji" id="resultEmoji">🌟</span><h2 id="resultTitle">闯关完成！</h2>
-            <p id="resultScore">你答对了 5 / 5 题</p>
+            <p id="resultScore">正在计算成绩</p>
             <div class="stars" id="resultStars">★★★★★</div>
             <div class="result-actions">
               <button class="secondary-button" id="retryQuiz" type="button">再试一次</button>
@@ -262,7 +293,7 @@
           <div class="weak-list" id="weakList"></div>
         </section>
         <section class="parent-panel">
-          <div><span class="parent-icon">👨‍👩‍👧</span><div><h3>家长小提示</h3><p>请让孩子先回忆5秒再看答案；每天25分钟，比一次学习很久更有效。</p></div></div>
+          <div><span class="parent-icon">👨‍👩‍👧</span><div><h3>家长小提示</h3><p>建议每天分成两个25分钟学习段，中间休息5分钟；先回忆再看答案。</p></div></div>
           <button class="text-button danger-text" id="resetProgress" type="button">重置学习记录</button>
         </section>
       </section>
@@ -278,6 +309,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="data.js"></script>
+    <script src="details.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

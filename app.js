@@ -185,6 +185,13 @@
     $("lessonDay").textContent = `DAY ${String(lesson.day).padStart(2, "0")}`;
     $("lessonTitle").textContent = lesson.title;
     $("lessonFocus").textContent = lesson.focus;
+    $("lessonUnit").textContent = `📘 ${lesson.unit || lesson.phase}`;
+    $("lessonTime").textContent = `⏱ 约${lesson.time || 50}分钟`;
+    $("lessonWordCount").textContent = `🪄 ${lesson.words.length}个必备单词`;
+    $("lessonSentenceCount").textContent = `💬 ${lesson.sentences.length}个重点句型`;
+    $("lessonObjectives").innerHTML = (lesson.objectives || []).map(
+      (objective, objectiveIndex) => `<div class="objective-item"><span>${objectiveIndex + 1}</span><p>${escapeHtml(objective)}</p></div>`
+    ).join("");
     $("lessonWords").innerHTML = lesson.words.map((word, wordIndex) => `
       <button class="word-tile" type="button" data-word-index="${wordIndex}">
         <span class="speaker">🔊</span><span class="word-emoji">${word.emoji}</span>
@@ -194,10 +201,49 @@
     $("sentenceList").innerHTML = lesson.sentences.map((sentence) => `
       <div class="sentence-item"><strong>${escapeHtml(sentence.en)}</strong><span>${escapeHtml(sentence.zh)}</span></div>`
     ).join("");
+    $("extraWords").innerHTML = (lesson.extra || []).map((word, wordIndex) => `
+      <button class="extra-word" type="button" data-extra-index="${wordIndex}">
+        <span>🔊</span><strong>${escapeHtml(word.word)}</strong><em>${escapeHtml(word.meaning)}</em>
+        <small>${escapeHtml(word.example)}</small>
+      </button>`).join("");
+    $("knowledgeGrid").innerHTML = (lesson.knowledge || []).map((point, pointIndex) => `
+      <article class="knowledge-card"><span>重点 ${pointIndex + 1}</span><h3>${escapeHtml(point.title)}</h3>
+        <p>${escapeHtml(point.text)}</p><strong>${escapeHtml(point.example)}</strong></article>`).join("");
+    const reading = lesson.reading || { title: "单元阅读", en: "", zh: "", questions: [] };
+    $("readingTitle").textContent = reading.title;
+    $("readingEn").textContent = reading.en;
+    $("readingZh").textContent = reading.zh;
+    $("readingQuestions").innerHTML = reading.questions.map((item, itemIndex) => `
+      <details><summary>${itemIndex + 1}. ${escapeHtml(item.q)}</summary><p>答案：${escapeHtml(item.a)}</p></details>`).join("");
+    $("practiceList").innerHTML = (lesson.practice || []).map((item, itemIndex) => `
+      <details><summary>${itemIndex + 1}. ${escapeHtml(item.q)}</summary><p>答案：${escapeHtml(item.a)}</p></details>`).join("");
+    $("memoryList").innerHTML = (lesson.memory || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+    $("mistakeList").innerHTML = (lesson.mistakes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+    $("studyTaskGrid").innerHTML = (lesson.studyTasks || []).map((task) => {
+      const key = `task:${lesson.day}:${task.id}`;
+      const complete = Boolean(state.rewards[key]);
+      return `<button class="study-task ${complete ? "completed" : ""}" type="button" data-task-id="${escapeHtml(task.id)}">
+        <span class="task-icon">${task.icon}</span><span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.detail)}</small></span>
+        <em>${complete ? "已领取 ✓" : "+1 ☀️"}</em></button>`;
+    }).join("");
     document.querySelectorAll(".word-tile").forEach((tile) => {
       tile.addEventListener("click", () => {
         tile.classList.toggle("revealed");
         speak(lesson.words[Number(tile.dataset.wordIndex)].word);
+      });
+    });
+    document.querySelectorAll(".extra-word").forEach((tile) => {
+      tile.addEventListener("click", () => speak(lesson.extra[Number(tile.dataset.extraIndex)].word));
+    });
+    document.querySelectorAll(".study-task").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = `task:${lesson.day}:${button.dataset.taskId}`;
+        if (state.rewards[key]) {
+          showToast("这项任务的小太阳已经领取过了");
+          return;
+        }
+        claimReward(key, 1, "完成一项今日学习任务");
+        renderLesson(index);
       });
     });
   };
@@ -309,10 +355,13 @@
       state.stars += quizScore - previousBest;
       state.quizBest[lesson.day] = quizScore;
     }
-    $("resultEmoji").textContent = quizScore === 5 ? "🏆" : quizScore >= 3 ? "🌟" : "🌱";
-    $("resultTitle").textContent = quizScore === 5 ? "全对，太棒了！" : "闯关完成！";
-    $("resultScore").textContent = `你答对了 ${quizScore} / 5 题`;
-    $("resultStars").textContent = `${"★".repeat(quizScore)}${"☆".repeat(5 - quizScore)}`;
+    const total = quizQuestions.length;
+    const ratio = total ? quizScore / total : 0;
+    const rating = Math.max(0, Math.min(5, Math.round(ratio * 5)));
+    $("resultEmoji").textContent = ratio === 1 ? "🏆" : ratio >= 0.7 ? "🌟" : "🌱";
+    $("resultTitle").textContent = ratio === 1 ? "全对，太棒了！" : "闯关完成！";
+    $("resultScore").textContent = `你答对了 ${quizScore} / ${total} 题`;
+    $("resultStars").textContent = `${"★".repeat(rating)}${"☆".repeat(5 - rating)}`;
     const rewarded = claimReward(`quiz:${lesson.day}`, 2, `完成第${lesson.day}天闯关`);
     if (!rewarded) saveState();
   };
