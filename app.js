@@ -2,13 +2,18 @@
   "use strict";
 
   const STORE = "sunny-english-longterm-v3";
+  const TEST_MODE = true;
+  const TEST_BALANCE = 99999;
+  let persistedEconomy = {suns:0,foods:0};
   const iso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
   const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
   const load = () => { try {
-    const raw=JSON.parse(localStorage.getItem(STORE)||"{}"),legacyPlant=raw.plant||{},plant={...defaultState.plant,...legacyPlant,owned:[...new Set(["sunflower",...(legacyPlant.owned||[])])],progress:{...defaultState.plant.progress,...(legacyPlant.progress||{})}};
+    const raw=JSON.parse(localStorage.getItem(STORE)||"{}");
+    persistedEconomy={suns:Number(raw.suns||0),foods:Number(raw.foods||0)};
+    const legacyPlant=raw.plant||{},plant={...defaultState.plant,...legacyPlant,owned:[...new Set(["sunflower",...(legacyPlant.owned||[])])],progress:{...defaultState.plant.progress,...(legacyPlant.progress||{})}};
     if(!legacyPlant.progress)plant.progress.sunflower={energy:Number(legacyPlant.energy??70),xp:Number(legacyPlant.xp??0),lastFed:""};
     const pets={...defaultState.pets,...(raw.pets||{}),owned:[...new Set(raw.pets?.owned||[])],progress:{...(raw.pets?.progress||{})}};
-    return {...defaultState,...raw,foods:Number(raw.foods||0),plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})}};
+    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})}};
   } catch { return structuredClone(defaultState); } };
   let state = load();
   let selectedGrade = Number(state.bookId[1]) || 4;
@@ -72,7 +77,7 @@
   };
   const PHONEME_VOICE={"/ɪ/":"ih","/e/":"eh","/æ/":"aah","/ʌ/":"uh","/ɒ/":"aw","/ʊ/":"uuh","/ə/":"uh","/iː/":"eee","/ɑː/":"ahh","/ɔː/":"aw","/uː/":"ooo","/ɜː/":"err","/eɪ/":"ay","/aɪ/":"eye","/ɔɪ/":"oy","/əʊ/":"oh","/aʊ/":"ow","/ɪə/":"ear","/eə/":"air","/ʊə/":"oor","/p/":"puh","/b/":"buh","/t/":"tuh","/d/":"duh","/k/":"kuh","/g/":"guh","/f/":"fff","/v/":"vvv","/θ/":"thh","/ð/":"thuh","/s/":"sss","/z/":"zzz","/ʃ/":"shh","/ʒ/":"zhh","/h/":"hhh","/tʃ/":"ch","/dʒ/":"juh","/m/":"mmm","/n/":"nnn","/ŋ/":"ng","/l/":"lll","/r/":"rrr","/j/":"yuh","/w/":"wuh"};
 
-  const save = () => { localStorage.setItem(STORE, JSON.stringify(state)); renderHeader(); };
+  const save = () => { const snapshot={...state};if(TEST_MODE){snapshot.suns=persistedEconomy.suns;snapshot.foods=persistedEconomy.foods;}localStorage.setItem(STORE, JSON.stringify(snapshot)); renderHeader(); };
   const toast = (msg) => { const el=$("toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2200); };
   const speak = (text,rate=.78) => { if (!("speechSynthesis" in window)) return toast("当前浏览器不支持语音"); speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=rate; speechSynthesis.speak(u); };
   const speakPhoneme = (symbol) => speak(PHONEME_VOICE[symbol]||symbol,.48);
@@ -96,6 +101,7 @@
     $("topSuns").textContent=state.suns;
     $("topFoods").textContent=state.foods;
     $("topStreak").textContent=streakCount();
+    $("testModeBadge").hidden=!TEST_MODE;
   }
   function streakCount(){
     let count=0; const d=new Date();
@@ -449,5 +455,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=9",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=10",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
