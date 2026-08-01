@@ -9,7 +9,7 @@
   <meta property="og:title" content="向阳英语成长岛｜闽教版三至六年级">
   <meta property="og:description" content="每天20分钟，真正听懂、读懂、会说、会用。">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -19,6 +19,9 @@
       <span><strong>向阳英语成长岛</strong><small>闽教版 · 三至六年级长期自学</small></span>
     </button>
       <div class="top-stats">
+        <button class="profile-pill" id="profileButton" type="button" aria-label="切换学习身份">
+          <span id="activeProfileIcon">🚀</span><span><small>当前学习者</small><b id="activeProfileName">小宇航员</b></span><i>⌄</i>
+        </button>
         <span class="test-mode-badge" id="testModeBadge" hidden>测试资源</span>
       <span class="streak-pill">🔥 <b id="topStreak">0</b> 天</span>
       <span class="food-pill">🥣 <b id="topFoods">0</b> 粮食</span>
@@ -33,6 +36,7 @@
       <button data-view="words"><span>🔤</span>单词本</button>
       <button data-view="dictionary"><span>📕</span>词典库</button>
       <button data-view="phonics"><span>👄</span>音标课堂</button>
+      <button data-view="grammar"><span>🧠</span>语法课堂</button>
     <button data-view="market"><span>🛍️</span>成长商城</button>
     <button data-view="garden"><span>🌱</span>成长花园</button>
     <button data-view="pets"><span>🐾</span>动物伙伴</button>
@@ -154,6 +158,19 @@
       <section class="panel phonics-method"><h2>每天5分钟发音训练</h2><div><span><b>第1分钟</b>听5个示例词</span><span><b>第2分钟</b>看口型慢读</span><span><b>第3分钟</b>正常速度跟读</span><span><b>第4分钟</b>对比相近音</span><span><b>第5分钟</b>离开提示读词</span></div></section>
     </section>
 
+    <section class="view" id="view-grammar">
+      <div class="page-title grammar-page-title"><span class="eyebrow">CLEAR GRAMMAR</span><h1>英语语法成长课堂</h1><p>不死背术语：先看懂规则，再比较例句，最后独立选择。8个主题从三年级基础逐步学到六年级衔接。</p></div>
+      <section class="grammar-progress-panel">
+        <div><span>语法学习进度</span><b id="grammarProgressText">0 / 8 个主题</b></div>
+        <div class="grammar-progress-bar"><span id="grammarProgressBar"></span></div>
+        <small>每个主题完成课后检查才计入进度；不同学习身份分别保存。</small>
+      </section>
+      <div class="grammar-layout">
+        <aside class="grammar-topic-nav" id="grammarTopicNav" aria-label="语法主题"></aside>
+        <section class="grammar-classroom" id="grammarClassroom"></section>
+      </div>
+    </section>
+
     <section class="view" id="view-garden">
       <div class="page-title"><span class="eyebrow">LEARNING GARDEN</span><h1>成长花园</h1><p>学习只会获得小太阳，不会自动喂养。请每天回来亲手照顾当前植物。</p></div>
       <div class="garden-layout">
@@ -188,15 +205,23 @@
     </section>
   </main>
 
+  <dialog class="profile-dialog" id="profileDialog" aria-labelledby="profileDialogTitle">
+    <button class="profile-dialog-close" id="closeProfileDialog" aria-label="关闭身份选择">×</button>
+    <div class="profile-dialog-head"><span>👨‍👩‍👧‍👦</span><div><small>FIVE INDEPENDENT LEARNERS</small><h2 id="profileDialogTitle">选择今天的学习身份</h2><p>每个身份拥有独立的课程进度、错词、签到、小太阳、粮食、植物和动物。切换不会覆盖其他人的记录。</p></div></div>
+    <div class="profile-grid" id="profileGrid"></div>
+    <p class="profile-storage-note">🔒 学习记录只保存在当前浏览器中；清除浏览器数据或更换设备不会自动同步。</p>
+  </dialog>
+
   <dialog class="practice-dialog" id="practiceDialog" aria-labelledby="practiceDialogTitle">
     <button class="dialog-close" id="closePracticeDialog" aria-label="关闭独立练习窗口">×</button>
     <div id="practiceDialogContent"></div>
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
-  <script src="curriculum.js?v=12"></script>
-  <script src="dictionary.js?v=12"></script>
-  <script src="growth.js?v=12"></script>
-  <script src="app.js?v=16"></script>
+  <script src="curriculum.js?v=17"></script>
+  <script src="dictionary.js?v=17"></script>
+  <script src="growth.js?v=17"></script>
+  <script src="grammar.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

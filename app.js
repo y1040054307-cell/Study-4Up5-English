@@ -2,13 +2,26 @@
   "use strict";
 
   const STORE = "sunny-english-longterm-v3";
+  const ACTIVE_PROFILE_STORE = `${STORE}:active-profile`;
+  const USER_PROFILES = [
+    {id:"astronaut",name:"å°å®‡èˆªå‘˜",icon:"ğŸš€",color:"#4f78d8",motto:"å‘ç€è‹±è¯­æ˜Ÿçƒå‡ºå‘"},
+    {id:"captain",name:"æ™ºæ…§èˆ¹é•¿",icon:"âš“",color:"#238c86",motto:"æŒå¥½æ–¹å‘ï¼ŒåšæŒå‰è¿›"},
+    {id:"lightning",name:"é—ªç”µåšå£«",icon:"âš¡",color:"#c58216",motto:"å¿«é€Ÿæ€è€ƒï¼Œè®¤çœŸç†è§£"},
+    {id:"alo",name:"é˜¿æ´›æ¢é™©å®¶",icon:"ğŸ§­",color:"#d26745",motto:"æ¯å¤©å‘ç°ä¸€ä¸ªæ–°çŸ¥è¯†"},
+    {id:"mia",name:"ç±³å¨…å°åšå£«",icon:"ğŸ”¬",color:"#8c5bc4",motto:"è§‚å¯Ÿã€ç»ƒä¹ ã€æ‰¾åˆ°è§„å¾‹"}
+  ];
+  const validProfileId = id => USER_PROFILES.some(profile=>profile.id===id) ? id : USER_PROFILES[0].id;
+  const profileStoreKey = id => `${STORE}:profile:${validProfileId(id)}`;
+  let activeUserId = validProfileId(localStorage.getItem(ACTIVE_PROFILE_STORE));
   const TEST_MODE = true;
   const TEST_BALANCE = 99999;
   let persistedEconomy = {suns:0,foods:0};
   const iso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
-  const load = () => { try {
-    const raw=JSON.parse(localStorage.getItem(STORE)||"{}");
+  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, grammar:{completed:[],quizBest:{},attempts:{}}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
+  const load = (profileId=activeUserId) => { try {
+    const key=profileStoreKey(profileId);
+    if(!localStorage.getItem(key)&&profileId===USER_PROFILES[0].id&&localStorage.getItem(STORE))localStorage.setItem(key,localStorage.getItem(STORE));
+    const raw=JSON.parse(localStorage.getItem(key)||"{}");
     persistedEconomy={suns:Number(raw.suns||0),foods:Number(raw.foods||0)};
     const legacyPlant=raw.plant||{},plant={...defaultState.plant,...legacyPlant,owned:[...new Set(["sunflower",...(legacyPlant.owned||[])])],progress:{...defaultState.plant.progress,...(legacyPlant.progress||{})}};
     if(!legacyPlant.progress)plant.progress.sunflower={energy:Number(legacyPlant.energy??70),xp:Number(legacyPlant.xp??0),lastFed:""};
@@ -16,9 +29,10 @@
     Object.entries(legacyPets.progress||{}).forEach(([id,data])=>{const kind=petKind(id);if(!kind)return;const old=petProgressMerged[kind];if(!old||Number(data.xp||0)>Number(old.xp||0))petProgressMerged[kind]={...data};else old.fullness=Math.max(Number(old.fullness||0),Number(data.fullness||0));});
     const petOwned=[...new Set((legacyPets.owned||[]).map(petKind).filter(Boolean))],selectedKind=petKind(legacyPets.selected),petSelected=petOwned.includes(selectedKind)?selectedKind:petOwned[0]||"";
     const pets={...defaultState.pets,...legacyPets,selected:petSelected,owned:petOwned,progress:petProgressMerged};
-    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})}};
-  } catch { return structuredClone(defaultState); } };
-  let state = load();
+    const rawGrammar=raw.grammar||{},grammar={...defaultState.grammar,...rawGrammar,completed:[...(rawGrammar.completed||[])],quizBest:{...(rawGrammar.quizBest||{})},attempts:{...(rawGrammar.attempts||{})}};
+    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})},grammar};
+  } catch { persistedEconomy={suns:0,foods:0};const fresh=structuredClone(defaultState);fresh.suns=TEST_MODE?TEST_BALANCE:0;fresh.foods=TEST_MODE?TEST_BALANCE:0;return fresh; } };
+  let state = load(activeUserId);
   let selectedGrade = Number(state.bookId[1]) || 4;
   let selectedTerm = state.bookId.endsWith("a") ? "ä¸Šå†Œ" : "ä¸‹å†Œ";
   let memoryFilter = "current";
@@ -31,6 +45,9 @@
   let dictionaryQuery = "";
   let marketTab = "plants";
   let quizAnswers = {};
+  let grammarTopicId = (window.GRAMMAR_TOPICS||[])[0]?.id || "articles";
+  let grammarAnswers = {};
+  let grammarResult = null;
   let toastTimer;
   let petActionTimer;
 
@@ -79,536 +96,10 @@
     good:"å¥½çš„",fine:"å¾ˆå¥½",new:"æ–°çš„",little:"å°çš„",big:"å¤§çš„",happy:"å¼€å¿ƒçš„",interesting:"æœ‰è¶£çš„",beautiful:"ç¾ä¸½çš„",true:"çœŸå®çš„",kind:"å‹å–„çš„",again:"å†ä¸€æ¬¡",school:"å­¦æ ¡",classroom:"æ•™å®¤",friend:"æœ‹å‹",name:"åå­—",number:"æ•°å­—ï¼›å·ç ",time:"æ—¶é—´",day:"ä¸€å¤©ï¼›ç™½å¤©",year:"å¹´",people:"äººä»¬"
   };
   const WORD_COMMON_MEANINGS={
-    light:["ç¯ï¼›ç¯å…‰","å…‰çº¿","è½»çš„","æµ…è‰²çš„","ç‚¹ç‡ƒ"],in:["åœ¨â€¦â€¦é‡Œé¢","è¿›å…¥ï¼›åœ¨å†…","åœ¨å®¶ï¼›åœ¨åœº","æµè¡Œçš„"],right:["å³è¾¹","æ­£ç¡®çš„","æƒåˆ©","æ°å¥½"],left:["å·¦è¾¹","ç¦»å¼€äº†","å‰©ä¸‹çš„"],fine:["å¾ˆå¥½","å¥åº·çš„","ç²¾ç»†çš„","ç½šæ¬¾"],kind:["äº²åˆ‡çš„ï¼›å–„è‰¯çš„","ç§ç±»"],well:["å¥½ï¼›å¾ˆå¥½åœ°","å¥åº·çš„","äº•"],watch:["è§‚çœ‹","æ‰‹è¡¨","ç•™æ„ï¼›çœ‹å®ˆ"],play:["ç©ï¼›å‚åŠ è¿åŠ¨","æ¼”å¥","æˆå‰§","æ’­æ”¾"],call:["æ‰“ç”µè¯","å‘¼å«ï¼›ç§°å‘¼","å«å£°"],change:["é›¶é’±","æ”¹å˜ï¼›å˜åŒ–","æ›´æ¢"],fit:["åˆèº«","é€‚åˆ","å¥åº·çš„"],mean:["æ„æ€æ˜¯","æ„å‘³ç€","åå•¬çš„ï¼›åˆ»è–„çš„"],orange:["æ©™è‰²","æ©™å­"],fish:["é±¼ï¼›é±¼è‚‰","æ•é±¼"],water:["æ°´","ç»™â€¦â€¦æµ‡æ°´"],work:["å·¥ä½œ","èµ·ä½œç”¨","ä½œå“"],rest:["ä¼‘æ¯","å…¶ä½™éƒ¨åˆ†"],plan:["è®¡åˆ’","å¹³é¢å›¾"],trip:["æ—…è¡Œ","ç»Šå€’"],train:["ç«è½¦","è®­ç»ƒ"],book:["ä¹¦","é¢„è®¢"],class:["ç­çº§","è¯¾ç¨‹","ç­‰çº§ï¼›ç§ç±»"],school:["å­¦æ ¡","å­¦æ´¾ï¼›å­¦æ ¡å…¨ä½“å¸ˆç”Ÿ"],read:["é˜…è¯»","è¯»æ‡‚ï¼›æ˜¾ç¤º"],run:["è·‘æ­¥","ç»è¥","è¿è¡Œ"],draw:["ç”»ç”»","æ‹‰ï¼›æ‹–","å¹³å±€"],wear:["ç©¿ï¼›æˆ´","ç£¨æŸ"],meet:["é‡è§ï¼›ä¼šé¢","æ»¡è¶³ï¼›ç¬¦åˆ"],please:["è¯·","ä½¿é«˜å…´ï¼›ä½¿æ»¡æ„"],name:["åå­—","å‘½å"],friend:["æœ‹å‹","æ”¯æŒè€…"],family:["å®¶åº­ï¼›å®¶äºº","å®¶æ—"],love:["çˆ±ï¼›å–œçˆ±","çƒ­çˆ±çš„äººæˆ–äº‹"],like:["å–œæ¬¢","åƒï¼›å¦‚åŒ"],day:["ä¸€å¤©","ç™½å¤©","æ—¶æœŸ"],color:["é¢œè‰²","ç»™â€¦â€¦æ¶‚è‰²"],cold:["å¯’å†·çš„","æ„Ÿå†’","å†·æ·¡çš„"],warm:["æ¸©æš–çš„","çƒ­æƒ…çš„","ä½¿æš–å’Œ"],party:["èšä¼š","æ”¿å…š","ä¸€æ–¹ï¼›å›¢ä½“"],gift:["ç¤¼ç‰©","å¤©èµ‹"],time:["æ—¶é—´","æ¬¡æ•°","ä¸ºâ€¦â€¦è®¡æ—¶"],homework:["å®¶åº­ä½œä¸š","å‡†å¤‡å·¥ä½œ"],clean:["å¹²å‡€çš„","æ‰“æ‰«","å®Œå…¨åœ°"],flower:["èŠ±","å¼€èŠ±"],visit:["æ‹œè®¿ï¼›å‚è§‚","è®¿é—®ï¼›é€—ç•™"],stay:["åœç•™","ä¿æŒ","ä½å®¿"],message:["ç•™è¨€ï¼›æ¶ˆæ¯","è¦æ—¨"],busy:["å¿™ç¢Œçš„","å çº¿çš„","çƒ­é—¹çš„"],number:["æ•°å­—ï¼›å·ç ","æ•°é‡","ç¼–å·"],short:["çŸ®çš„ï¼›çŸ­çš„","ç¼ºå°‘çš„","çŸ­è£¤ï¼ˆshortsï¼‰"],strong:["å¼ºå£®çš„","å¼ºçƒˆçš„","æ“…é•¿çš„"],hard:["åŠªåŠ›åœ°","å›°éš¾çš„","åšç¡¬çš„"],star:["æ˜Ÿæ˜Ÿ","æ˜æ˜Ÿ","ä¸»æ¼”"],present:["ç¤¼ç‰©","ç°åœ¨","å‡ºå¸­çš„","å±•ç¤º"],card:["å¡ç‰‡","çº¸ç‰Œ","è¯ä»¶"],spring:["æ˜¥å¤©","æ³‰æ°´","å¼¹ç°§","è·³èµ·"],season:["å­£èŠ‚","ç»™é£Ÿç‰©è°ƒå‘³"],park:["å…¬å›­","åœè½¦"],show:["å±•ç¤º","æ¼”å‡º","è¡¨æ˜"],matter:["é—®é¢˜ï¼›äº‹æƒ…","è¦ç´§ï¼›æœ‰å…³ç³»"],dream:["æ¢¦æƒ³","åšæ¢¦"],future:["æœªæ¥","å°†æ¥çš„"],memory:["è®°å¿†ï¼›å›å¿†","å­˜å‚¨å™¨"],miss:["æƒ³å¿µ","é”™è¿‡","æœªå‡»ä¸­"],wish:["ç¥æ„¿ï¼›æ„¿æœ›","å¸Œæœ›"],help:["å¸®åŠ©","æœ‰å¸®åŠ©çš„äººæˆ–äº‹"],carry:["æ¬è¿ï¼›æºå¸¦","ä¼ æ’­ï¼›å»¶ä¼¸"],cook:["å¨å¸ˆ","åšé¥­"],dance:["è·³èˆ","èˆè¹ˆ"],smile:["å¾®ç¬‘","ç¬‘å®¹"],exercise:["é”»ç‚¼","ç»ƒä¹ ï¼›ä¹ é¢˜"],race:["èµ›è·‘ï¼›æ¯”èµ›","ç§æ—"],game:["æ¸¸æˆï¼›æ¯”èµ›","çŒç‰©"],team:["é˜Ÿ","åˆä½œ"],floor:["åœ°æ¿","æ¥¼å±‚"],view:["æ™¯è‰²","è§‚ç‚¹","è§‚çœ‹"],date:["æ—¥æœŸ","çº¦ä¼š","æ£"],space:["å¤ªç©º","ç©ºé—´ï¼›ç©ºç™½"],earth:["åœ°çƒ","æ³¥åœŸ"],moon:["æœˆçƒï¼›æœˆäº®","ä¸€ä¸ªæœˆçš„æ—¶é—´ï¼ˆæ–‡å­¦ç”¨æ³•ï¼‰"],sun:["å¤ªé˜³","æ™’å¤ªé˜³"],rock:["å²©çŸ³","æ‘‡åŠ¨","æ‘‡æ»šä¹"]
-  };
-  const WORD_PROFILE_OVERRIDES={
-    light:{pos:"åè¯ / å½¢å®¹è¯ / åŠ¨è¯",forms:"åè¯å•æ•° lightï¼›å¤æ•° lightsï¼›å½¢å®¹è¯æ— å•å¤æ•°"},in:{pos:"ä»‹è¯ / å‰¯è¯ / å½¢å®¹è¯",forms:"æ— å•å¤æ•°å˜åŒ–"},right:{pos:"åè¯ / å½¢å®¹è¯ / å‰¯è¯",forms:"åè¯å•æ•° rightï¼›å¤æ•° rights"},left:{pos:"åè¯ / å½¢å®¹è¯ / å‰¯è¯ / leaveçš„è¿‡å»å¼",forms:"åè¯å•æ•° leftï¼›å¤æ•° leftsï¼ˆå°‘ç”¨ï¼‰"},kind:{pos:"å½¢å®¹è¯ / åè¯",forms:"åè¯å•æ•° kindï¼›å¤æ•° kinds"},watch:{pos:"åŠ¨è¯ / åè¯",forms:"åè¯å•æ•° watchï¼›å¤æ•° watchesï¼›åŠ¨è¯ä¸‰å• watches"},play:{pos:"åŠ¨è¯ / åè¯",forms:"åè¯å•æ•° playï¼›å¤æ•° playsï¼›åŠ¨è¯ä¸‰å• plays"},call:{pos:"åŠ¨è¯ / åè¯",forms:"åè¯å•æ•° callï¼›å¤æ•° callsï¼›åŠ¨è¯ä¸‰å• calls"},change:{pos:"åŠ¨è¯ / åè¯",forms:"åè¯å•æ•° changeï¼›å¤æ•° changesï¼›åŠ¨è¯ä¸‰å• changes"},fit:{pos:"åŠ¨è¯ / å½¢å®¹è¯",forms:"æ— åè¯å•å¤æ•°ï¼›åŠ¨è¯ä¸‰å• fits"},orange:{pos:"åè¯ / å½¢å®¹è¯",forms:"åè¯å•æ•° orangeï¼›å¤æ•° oranges"},fish:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° fishï¼›å¤æ•° fishï¼ˆå¸¸ç”¨ï¼‰/ fishesï¼ˆç§ç±»ï¼‰"},water:{pos:"ä¸å¯æ•°åè¯ / åŠ¨è¯",forms:"é€šå¸¸æ— å¤æ•°ï¼›åŠ¨è¯ä¸‰å• waters"},work:{pos:"ä¸å¯æ•°åè¯ / åŠ¨è¯",forms:"è¡¨ç¤ºå·¥ä½œæ—¶é€šå¸¸æ— å¤æ•°ï¼›åŠ¨è¯ä¸‰å• works"},rest:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° restï¼›å¤æ•° restsï¼›åŠ¨è¯ä¸‰å• rests"},plan:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° planï¼›å¤æ•° plansï¼›åŠ¨è¯ä¸‰å• plans"},train:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° trainï¼›å¤æ•° trainsï¼›åŠ¨è¯ä¸‰å• trains"},book:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° bookï¼›å¤æ•° booksï¼›åŠ¨è¯ä¸‰å• books"},class:{pos:"åè¯",forms:"å•æ•° classï¼›å¤æ•° classes"},present:{pos:"åè¯ / å½¢å®¹è¯ / åŠ¨è¯",forms:"åè¯å•æ•° presentï¼›å¤æ•° presents"},spring:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° springï¼›å¤æ•° springs"},park:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° parkï¼›å¤æ•° parksï¼›åŠ¨è¯ä¸‰å• parks"},show:{pos:"åŠ¨è¯ / åè¯",forms:"åè¯å•æ•° showï¼›å¤æ•° showsï¼›åŠ¨è¯ä¸‰å• shows"},matter:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° matterï¼›å¤æ•° mattersï¼›åŠ¨è¯ä¸‰å• matters"},dream:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° dreamï¼›å¤æ•° dreamsï¼›åŠ¨è¯ä¸‰å• dreams"},miss:{pos:"åŠ¨è¯ / åè¯",forms:"åŠ¨è¯ä¸‰å• missesï¼›åè¯ Miss ç”¨äºæœªå©šå¥³æ€§ç§°è°“"},wish:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° wishï¼›å¤æ•° wishesï¼›åŠ¨è¯ä¸‰å• wishes"},help:{pos:"åè¯ / åŠ¨è¯",forms:"ä½œâ€œå¸®åŠ©â€æ—¶é€šå¸¸ä¸å¯æ•°ï¼›åŠ¨è¯ä¸‰å• helps"},cook:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° cookï¼›å¤æ•° cooksï¼›åŠ¨è¯ä¸‰å• cooks"},dance:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° danceï¼›å¤æ•° dancesï¼›åŠ¨è¯ä¸‰å• dances"},exercise:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° exerciseï¼›å¤æ•° exercisesï¼›åŠ¨è¯ä¸‰å• exercises"},race:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° raceï¼›å¤æ•° racesï¼›åŠ¨è¯ä¸‰å• races"},floor:{pos:"åè¯",forms:"å•æ•° floorï¼›å¤æ•° floors"},date:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° dateï¼›å¤æ•° datesï¼›åŠ¨è¯ä¸‰å• dates"},view:{pos:"åè¯ / åŠ¨è¯",forms:"åè¯å•æ•° viewï¼›å¤æ•° viewsï¼›åŠ¨è¯ä¸‰å• views"},space:{pos:"åè¯",forms:"è¡¨ç¤ºç©ºé—´æ—¶å¯æ•°æˆ–ä¸å¯æ•°ï¼›å¤æ•° spaces"}
-  };
-  const PHONEME_VOICE={"/Éª/":"ih","/e/":"eh","/Ã¦/":"aah","/ÊŒ/":"uh","/É’/":"aw","/ÊŠ/":"uuh","/É™/":"uh","/iË/":"eee","/É‘Ë/":"ahh","/É”Ë/":"aw","/uË/":"ooo","/ÉœË/":"err","/eÉª/":"ay","/aÉª/":"eye","/É”Éª/":"oy","/É™ÊŠ/":"oh","/aÊŠ/":"ow","/ÉªÉ™/":"ear","/eÉ™/":"air","/ÊŠÉ™/":"oor","/p/":"puh","/b/":"buh","/t/":"tuh","/d/":"duh","/k/":"kuh","/g/":"guh","/f/":"fff","/v/":"vvv","/Î¸/":"thh","/Ã°/":"thuh","/s/":"sss","/z/":"zzz","/Êƒ/":"shh","/Ê’/":"zhh","/h/":"hhh","/tÊƒ/":"ch","/dÊ’/":"juh","/m/":"mmm","/n/":"nnn","/Å‹/":"ng","/l/":"lll","/r/":"rrr","/j/":"yuh","/w/":"wuh"};
-
-  const save = () => { const snapshot={...state};if(TEST_MODE){snapshot.suns=persistedEconomy.suns;snapshot.foods=persistedEconomy.foods;}localStorage.setItem(STORE, JSON.stringify(snapshot)); renderHeader(); };
-  const toast = (msg) => { const el=$("toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2200); };
-  const speak = (text,rate=.78) => { if (!("speechSynthesis" in window)) return toast("å½“å‰æµè§ˆå™¨ä¸æ”¯æŒè¯­éŸ³"); speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=rate; speechSynthesis.speak(u); };
-  const speakPhoneme = (symbol) => speak(PHONEME_VOICE[symbol]||symbol,.48);
-  const daysBetween = (a,b) => Math.floor((new Date(`${b}T00:00:00`)-new Date(`${a}T00:00:00`))/86400000);
-  const plantProgress = (id=state.plant.selected) => {if(!state.plant.progress[id])state.plant.progress[id]={energy:70,xp:0,lastFed:""};return state.plant.progress[id];};
-  const petProgress = (id=state.pets.selected) => {if(!state.pets.progress[id])state.pets.progress[id]={fullness:60,xp:0,lastFed:""};return state.pets.progress[id];};
-  const carePlant = () => { const n=daysBetween(state.plant.lastDate,iso()); if(n>0){ const progress=plantProgress();progress.energy=Math.max(0,progress.energy-n*5);state.plant.lastDate=iso();save(); } };
-  const activity = (amount=1) => { state.activity[iso()] = (state.activity[iso()]||0)+amount; };
-  const reward = (amount,msg,food=0) => { state.suns += amount;state.foods+=food;activity();save();toast(`â˜€ï¸ ${msg}ï¼Œè·å¾— ${amount} ä¸ªå°å¤ªé˜³${food?`å’Œ ${food} ä»½ç²®é£Ÿ`:""}`); };
-  const activeTasks = () => tasks.filter(task=>task.id!=="review"||pastLearnedWords().length>0);
-  const dailyComplete = () => activeTasks().filter(t=>state.dailyDone.includes(todayKey(t.id))).length;
-  const completedUnits = () => COURSE_BOOKS.flatMap(b=>b.units).filter(u=>stages.every(s=>state.stageDone.includes(`${u.id}:${s.id}`))).length;
-  const allWords = () => COURSE_BOOKS.flatMap(b=>b.units.flatMap(u=>u.core.map(w=>({...w,unitId:u.id,unitTitle:u.title}))));
-  const pastLearnedWords = () => {
-    const learned=allWords().filter(item=>{const key=`${item.unitId}:${item.word}`;return state.stageDone.includes(`${item.unitId}:words`)||state.mastered.includes(key)||state.weak.includes(key);}),unique=new Map();
-    learned.forEach(item=>{const key=item.word.toLowerCase();if(!unique.has(key))unique.set(key,item);});
-    return [...unique.values()];
-  };
-
-  function renderHeader(){
-    $("topSuns").textContent=state.suns;
-    $("topFoods").textContent=state.foods;
-    $("topStreak").textContent=streakCount();
-    $("testModeBadge").hidden=!TEST_MODE;
-  }
-  function streakCount(){
-    let count=0; const d=new Date();
-    for(let i=0;i<365;i+=1){ const key=iso(d); if((state.activity[key]||0)>0 || state.signIns.includes(key)) count+=1; else if(i>0) break; d.setDate(d.getDate()-1); }
-    return count;
-  }
-  function route(view){
-    document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===`view-${view}`));
-    document.querySelectorAll(".main-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===view || (view==="unit"&&b.dataset.view==="courses")));
-    if(view==="home") renderHome();
-    if(view==="courses") renderCourses();
-    if(view==="unit") renderUnit();
-    if(view==="today") renderToday();
-    if(view==="words") renderWords();
-    if(view==="dictionary") renderDictionary();
-    if(view==="phonics") renderPhonics();
-    if(view==="market") renderMarket();
-    if(view==="garden") renderGarden();
-    if(view==="pets") renderPets();
-    if(view==="report") renderReport();
-    window.scrollTo({top:0,behavior:"smooth"});
-  }
-
-  function renderHome(){
-    const book=bookNow(), unit=unitNow(), done=dailyComplete(),todayTasks=activeTasks();
-    $("welcomeText").textContent=`å½“å‰ï¼š${book.label} Â· Unit ${unit.number} ${unit.title}ã€‚ä»Šå¤©ç”¨20â€”30åˆ†é’Ÿå®Œæˆä¸€ä¸ªå°é—­ç¯ã€‚`;
-    $("todayBar").style.width=`${done/todayTasks.length*100}%`; $("todayProgressText").textContent=`ä»Šæ—¥ ${done} / ${todayTasks.length} é¡¹`;
-    $("statLessons").textContent=state.stageDone.length; $("statWords").textContent=state.mastered.length;
-    $("statAccuracy").textContent=state.quiz.total?`${Math.round(state.quiz.correct/state.quiz.total*100)}%`:"â€”"; $("statSuns").textContent=state.suns;
-    const plant=plantState(),progress=plantProgress(); $("homePlant").textContent=plant.icon; $("plantName").textContent=plant.name; $("plantHint").textContent=`æ´»åŠ› ${progress.energy}/100 Â· å¿…é¡»äº²æ‰‹æµ‡çŒæ‰ä¼šæˆé•¿`;
-    $("homeTasks").innerHTML=todayTasks.slice(0,3).map(t=>{const done=state.dailyDone.includes(todayKey(t.id));return `<button class="preview-task ${done?"done":""}" data-open-stage="${t.stage}"><span>${done?"âœ“":t.icon}</span><div><b>${t.title}</b><small>${t.detail}</small></div><em>${done?"å·²å®Œæˆ":"å»å­¦ä¹  â†’"}</em></button>`}).join("");
-    const unitDone=stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length;
-    $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} Â· Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/stages.length*100}%"></span></div><small>${unitDone}/${stages.length} ä¸ªå­¦ä¹ ç¯èŠ‚å·²å®Œæˆ</small></div><button class="primary" data-open-stage="${nextStage().id}">ç»§ç»­</button></div>`;
-    renderHomePet();
-  }
-
-  function nextStage(){ return stages.find(s=>!state.stageDone.includes(stageKey(s.id))) || stages.at(-1); }
-
-  function renderCourses(){
-    $("gradeSwitch").innerHTML=[3,4,5,6].map(g=>`<button class="${selectedGrade===g?"active":""}" data-grade="${g}">${g}å¹´çº§</button>`).join("");
-    $("termSwitch").innerHTML=["ä¸Šå†Œ","ä¸‹å†Œ"].map(t=>`<button class="${selectedTerm===t?"active":""}" data-term="${t}">${t}</button>`).join("");
-    const book=COURSE_BOOKS.find(b=>b.grade===selectedGrade&&b.term===selectedTerm);
-    const done=book.units.filter(u=>stages.every(s=>state.stageDone.includes(`${u.id}:${s.id}`))).length;
-    $("bookSummary").innerHTML=`<div><span>${book.edition}</span><h2>${book.label}</h2><p>${book.units.length}ä¸ªä¸»é¢˜å•å…ƒ Â· æ¯å•å…ƒ${stages.length}æ­¥ Â· åŸåˆ›è®²è§£ä¸ç»ƒä¹ </p></div><div><b>${done}/${book.units.length}</b><small>å®Œæˆå•å…ƒ</small></div>`;
-    $("unitGrid").innerHTML=book.units.map(u=>{
-      const stepDone=stages.filter(s=>state.stageDone.includes(`${u.id}:${s.id}`)).length;
-      const current=state.bookId===book.id&&state.unitIndex===u.number-1;
-      return `<button class="unit-card ${current?"current":""}" data-unit-book="${book.id}" data-unit-index="${u.number-1}"><span class="unit-icon">${u.icon}</span><span class="unit-no">UNIT ${String(u.number).padStart(2,"0")}</span><h3>${u.title}</h3><p>${u.zh} Â· ${u.goal}</p><div class="unit-materials"><span>3è¯¾æ—¶</span><span>${u.core.length}è¯</span><span>${u.patterns.length}å¥å‹</span><span>å¥å¼å¡«è¯</span></div><div class="thin-bar"><span style="width:${stepDone/stages.length*100}%"></span></div><small>${stepDone}/${stages.length}æ­¥å®Œæˆ ${current?"Â· æ­£åœ¨å­¦ä¹ ":""}</small><strong class="unit-cta">${stepDone?"ç»§ç»­å•å…ƒæ•™æ":"è¿›å…¥å•å…ƒæ•™æ"} â†’</strong></button>`;
-    }).join("");
-  }
-
-  function lessonPlan(u){
-    return [
-      {number:1,title:"è¯æ±‡å¯è’™è¯¾",time:"çº¦20åˆ†é’Ÿ",icon:"ğŸ”¤",detail:`ç†è§£ä¸»é¢˜ï¼Œç‚¹è¯»å¹¶æŒæ¡å‰${Math.min(8,u.core.length)}ä¸ªå¿…å¤‡è¯`,stage:"words"},
-      {number:2,title:"å¥å‹äº¤æµè¯¾",time:"çº¦25åˆ†é’Ÿ",icon:"ğŸ—£ï¸",detail:`å­¦ä¼š${u.patterns.length}ä¸ªé‡ç‚¹å¥å‹ï¼Œå®Œæˆä¾‹å¥å­¦ä¹ å’Œå¥å¼å¡«è¯`,stage:"patterns"},
-      {number:3,title:"é˜…è¯»è¿ç”¨è¯¾",time:"çº¦25åˆ†é’Ÿ",icon:"ğŸ“–",detail:"æœ—è¯»åŸåˆ›çŸ­æ–‡ï¼Œå®Œæˆç†è§£é¢˜ã€å•å…ƒå°æµ‹ä¸è¡¨è¾¾ä»»åŠ¡",stage:"reading"}
-    ];
-  }
-
-  function renderUnit(){
-    const book=bookNow(), u=unitNow();
-    $("unitHero").innerHTML=`<div class="unit-hero-icon">${u.icon}</div><div><span>å®Œæ•´å•å…ƒæ•™æ Â· ${book.label} Â· UNIT ${String(u.number).padStart(2,"0")}</span><h1>${u.title}</h1><h2>${u.zh}</h2><p>${u.goal}</p><div class="unit-hero-actions"><button data-open-stage="${nextStage().id}">â–¶ ${stages.find(s=>s.id===nextStage().id).name}</button><button data-action="print">ğŸ–¨ï¸ æ‰“å°å­¦ä¹ å•</button></div></div><div class="hero-count"><b>${stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length}/${stages.length}</b><small>å­¦ä¹ æ­¥éª¤</small></div>`;
-    $("lessonTabs").innerHTML=stages.map(s=>`<button class="${state.stage===s.id?"active":""} ${state.stageDone.includes(stageKey(s.id))?"done":""}" data-stage="${s.id}"><span>${state.stageDone.includes(stageKey(s.id))?"âœ“":s.icon}</span>${s.name}</button>`).join("");
-    renderStage();
-  }
-
-  function completeStage(stage=state.stage){
-    const key=stageKey(stage); if(state.stageDone.includes(key)) return toast("è¿™ä¸ªå­¦ä¹ æ­¥éª¤å·²ç»å®Œæˆ");
-    state.stageDone.push(key); if(!state.dailyDone.includes(todayKey(stageTask(stage)))) state.dailyDone.push(todayKey(stageTask(stage)));
-    reward(1,"å®Œæˆä¸€ä¸ªå­¦ä¹ æ­¥éª¤",1); renderUnit();
-  }
-  function stageTask(stage){ return ({overview:"understand",words:"vocab",patterns:"speak",dialogue:"read",reading:"read",practice:"quiz"})[stage]; }
-  function doneButton(label="å®Œæˆè¿™ä¸€æ­¥"){ return `<div class="stage-finish"><p>åšå®Œåç‚¹ä¸€ä¸‹ï¼Œè®°å½•å­¦ä¹ è¿›åº¦å¹¶é¢†å–å°å¤ªé˜³ã€‚</p><button class="primary" id="completeStageBtn">${state.stageDone.includes(stageKey(state.stage))?"âœ“ å·²å®Œæˆ":label+" +1 â˜€ï¸"}</button></div>`; }
-
-  function renderStage(){
-    const u=unitNow(), box=$("lessonContent");
-    if(state.stage==="overview") box.innerHTML=`<div class="content-head"><span>å•å…ƒæ•™æå¯¼å­¦</span><h2>è¿™å¥—æ•™ææ€æ ·å­¦ä¹ ï¼Ÿ</h2><p>æœ¬å•å…ƒåˆ†æˆ3è¯¾æ—¶ï¼Œä¸éœ€è¦ä¸€æ¬¡å­¦å®Œã€‚æ¯å®Œæˆä¸€è¯¾ï¼Œç¬¬äºŒå¤©å…ˆå¤ä¹ 5åˆ†é’Ÿã€‚</p></div><div class="material-summary"><article><b>${u.core.length}</b><span>å¿…å¤‡ä¸æ‹“å±•è¯</span></article><article><b>${u.patterns.length}</b><span>é‡ç‚¹å¥å‹</span></article><article><b>3â€“5</b><span>å®Œæ•´ä¾‹å¥ä¸å¡«è¯</span></article><article><b>1+5</b><span>é˜…è¯»ä¸å°æµ‹</span></article></div><div class="textbook-plan">${lessonPlan(u).map(item=>`<button data-open-stage="${item.stage}"><span>${item.icon}</span><div><small>LESSON ${item.number} Â· ${item.time}</small><h3>${item.title}</h3><p>${item.detail}</p></div><em>å¼€å§‹å­¦ä¹  â†’</em></button>`).join("")}</div><h3 class="goal-title">å­¦å®Œæœ¬å•å…ƒï¼Œæˆ‘å¯ä»¥åšåˆ°</h3><div class="objective-list"><article><b>æˆ‘èƒ½å¬æ‡‚</b><p>åœ¨â€œ${u.zh}â€æƒ…å¢ƒä¸­å¬å‡ºå…³é”®è¯ï¼Œåˆ¤æ–­äººç‰©åœ¨è°ˆè®ºä»€ä¹ˆã€‚</p></article><article><b>æˆ‘èƒ½å¼€å£</b><p>${u.goal}</p></article><article><b>æˆ‘èƒ½è¯»æ‡‚</b><p>è¯»ä¸€æ®µ3â€”5å¥çš„åŸåˆ›çŸ­æ–‡ï¼Œæ‰¾åˆ°äººç‰©ã€åœ°ç‚¹æˆ–ä¸»è¦ä¿¡æ¯ã€‚</p></article><article><b>æˆ‘èƒ½å†™å‡º</b><p>ä»¿ç…§é‡ç‚¹å¥å‹æ›¿æ¢å…³é”®è¯ï¼Œç‹¬ç«‹å†™2â€”3ä¸ªå¥å­ã€‚</p></article></div><div class="explain-card"><span>${u.icon}</span><div><h3>ç”Ÿæ´»æƒ…å¢ƒ</h3><p>æƒ³ä¸€æƒ³ï¼šä½ åœ¨çœŸå®ç”Ÿæ´»ä¸­ä»€ä¹ˆæ—¶å€™ä¼šç”¨åˆ°â€œ${u.zh}â€è‹±è¯­ï¼Ÿå…ˆç”¨ä¸­æ–‡è¯´æ¸…æ¥šï¼Œå†å°è¯•è¯´å‡ºä¸€ä¸ªè‹±æ–‡å…³é”®è¯ã€‚</p><strong>å­¦ä¹ ç§˜è¯€ï¼šç†è§£æ„æ€ â†’ çœ‹ä¾‹å­ â†’ è‡ªå·±æ¢è¯ â†’ ç¦»å¼€æç¤ºå†è¯´ä¸€éã€‚</strong></div></div>${doneButton("æˆ‘å·²ç»çœ‹æ‡‚å­¦ä¹ è·¯çº¿")}`;
-    if(state.stage==="words") renderWordStage(box,u);
-    if(state.stage==="patterns") renderPatternStage(box,u);
-    if(state.stage==="dialogue") renderDialogueStage(box,u);
-    if(state.stage==="reading") renderReadingStage(box,u);
-    if(state.stage==="practice") renderPracticeStage(box,u);
-    const complete=$("completeStageBtn"); if(complete) complete.onclick=()=>completeStage();
-  }
-
-  function wordExample(w,index,u){
-    const custom={hello:"Hello, I'm Ben.",friend:"She is my good friend.",family:"I love my family.",school:"Our school is beautiful.",teacher:"My teacher is kind.",healthy:"Fruit is healthy.",winter:"It is cold in winter.",doctor:"The doctor helps me.",future:"I will work hard in the future."};
-    if(custom[w.word]) return custom[w.word];
-    const source=[u.story,...u.patterns.map(p=>p.en)].find(line=>line.toLowerCase().includes(w.word.toLowerCase()));
-    if(source){ const sentence=source.split(/(?<=[.!?])/).find(line=>line.toLowerCase().includes(w.word.toLowerCase())); if(sentence) return sentence.trim(); }
-    const adjectives=["big","small","cute","warm","cold","hot","happy","sad","angry","tired","afraid","worried","proud","tall","short","strong","thin","quiet","clever","helpful","kind","healthy","unhealthy","cheap","expensive","comfortable","colorful","sunny","rainy","cloudy","windy","snowy"];
-    if(adjectives.includes(w.word)) return `It is ${w.word}.`;
-    const numbers=["one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","twenty","thirty","forty","fifty"];
-    if(numbers.includes(w.word))return `I can count to ${w.word}.`;
-    const weekdays=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-    if(weekdays.includes(w.word))return `We have English on ${w.word}.`;
-    const months=["January","February","March","April","May","June","July","August","September","October","November","December"];
-    if(months.includes(w.word))return `My birthday is in ${w.word}.`;
-    if(["spring","summer","autumn","winter"].includes(w.word))return `I like ${w.word}.`;
-    if(["in","on","under","behind","near","beside"].includes(w.word))return `The book is ${w.word} the desk.`;
-    if(["left","right"].includes(w.word))return `Turn ${w.word}, please.`;
-    if(w.word==="straight")return "Go straight, please.";
-    const past={played:"I played football yesterday.",watched:"I watched TV yesterday.",went:"I went there yesterday.",took:"I took a photo.",saw:"I saw a panda.",made:"I made a card.",happened:"Something happened yesterday.",woke:"I woke up early.",missed:"I missed the bus.",found:"I found my book.",cleaned:"We cleaned the room together."};
-    if(past[w.word])return past[w.word];
-    const verbs=["meet","wear","want","sing","dance","read","play","draw","swim","play chess","take photos","collect","visit","celebrate","get up","go to school","go to bed","walk","ride","run","exercise","watch TV","clean","buy","thank","teach","plan","call","speak","wait","stay","watch","turn","hide","find","paint","leave","enjoy","win","try","feel","jog","skip","stretch","fit","try on","sweep","mop","wash","cook","tidy","help","hear","rest","make","give","become","graduate","miss","remember","wish","keep in touch","carry"];
-    if(verbs.includes(w.word))return `I can ${w.word}.`;
-    return `We are learning about ${w.word}.`;
-  }
-  function seedNumber(text){let value=2166136261;for(const ch of text){value^=ch.charCodeAt(0);value=Math.imul(value,16777619);}return value>>>0;}
-  function seededShuffle(items,seed){const result=[...items];let value=seedNumber(seed);for(let i=result.length-1;i>0;i--){value=(Math.imul(value,1664525)+1013904223)>>>0;const j=value%(i+1);[result[i],result[j]]=[result[j],result[i]];}return result;}
-  function wordMeaning(word,u){
-    const clean=word.toLowerCase().replace(/[â€™]/g,"'");
-    const glossary=new Map(u.core.map(item=>[item.word.toLowerCase(),item.meaning]));
-    if(glossary.has(clean))return glossary.get(clean);
-    if(BASIC_MEANINGS[clean])return BASIC_MEANINGS[clean];
-    const candidates=[];
-    if(clean.endsWith("ies"))candidates.push(clean.slice(0,-3)+"y");
-    if(clean.endsWith("es"))candidates.push(clean.slice(0,-2),clean.slice(0,-1));
-    if(clean.endsWith("s"))candidates.push(clean.slice(0,-1));
-    if(clean.endsWith("ied"))candidates.push(clean.slice(0,-3)+"y");
-    if(clean.endsWith("ed"))candidates.push(clean.slice(0,-2),clean.slice(0,-1));
-    if(clean.endsWith("ing"))candidates.push(clean.slice(0,-3),clean.slice(0,-3)+"e");
-    for(const item of candidates){if(glossary.has(item))return `${glossary.get(item)}ï¼ˆè¯å½¢å˜åŒ–ï¼‰`;if(BASIC_MEANINGS[item])return `${BASIC_MEANINGS[item]}ï¼ˆè¯å½¢å˜åŒ–ï¼‰`;}
-    return "ç»“åˆæ•´å¥ç†è§£ï¼›å¯å…ˆå¬å‘éŸ³ï¼Œå†æŸ¥çœ‹æœ¬å¥ä¸­æ–‡";
-  }
-  function interactiveSentence(text,u){
-    const tokens=text.match(/[A-Za-z]+(?:['â€™][A-Za-z]+)?|[^A-Za-z]+/g)||[];
-    return `<div class="sentence-study"><div class="interactive-sentence">${tokens.map(token=>/^[A-Za-z]/.test(token)?`<button data-word-say="${esc(token)}" data-word-meaning="${esc(wordMeaning(token,u))}">${esc(token)}</button>`:esc(token)).join("")}</div><div class="word-help"><span>ğŸ‘†</span><p>ç‚¹å‡»å¥ä¸­ä»»æ„å•è¯ï¼Œå¯å•ç‹¬å¬å‘éŸ³å¹¶æŸ¥çœ‹ä¸­æ–‡æ„æ€ã€‚</p></div></div>`;
-  }
-  function bindSentenceWords(box){box.querySelectorAll("[data-word-say]").forEach(button=>button.onclick=()=>{speak(button.dataset.wordSay,.68);const help=button.closest(".sentence-study").querySelector(".word-help");help.innerHTML=`<span>ğŸ”Š</span><p><b>${esc(button.dataset.wordSay)}</b><em>${esc(button.dataset.wordMeaning)}</em></p>`;button.closest(".interactive-sentence").querySelectorAll("button").forEach(item=>item.classList.toggle("active",item===button));});}
-  function renderWordStage(box,u){
-    const core=seededShuffle(u.core.slice(0,Math.min(8,u.core.length)),`${iso()}:${u.id}:core`),extra=seededShuffle(u.core.slice(8),`${iso()}:${u.id}:extra`),testPool=core.flatMap((word,index)=>wordSentenceStudies(word,index,u)),testItems=seededShuffle(testPool,`${iso()}:${u.id}:sentence-test`).slice(0,Math.min(20,testPool.length)),done=state.stageDone.includes(stageKey("words"));
-    let testRecorded=done;
-    box.innerHTML=`<div class="content-head"><span>ç¬¬2æ­¥ Â· å•è¯æœ¬</span><h2>å¿…å¤‡å•è¯ï¼šåœ¨å®Œæ•´å¥å¼ä¸­ç†è§£å’Œä½¿ç”¨</h2><p>æ¯ä¸ªé‡è¦å•è¯æä¾›3ä¸ªä¸åŒä¾‹å¥ï¼Œå¹¶è§£é‡Šæ•´å¥æ„æ€å’Œå•è¯ä½œç”¨ã€‚å…¨éƒ¨å­¦å®Œåå†è¿›å…¥20é¢˜å¡«è¯æµ‹è¯•ã€‚</p></div><section id="wordLearningBlock"><div class="word-section-title"><h3>â­ æœ¬å•å…ƒé‡è¦å•è¯</h3><small>æ¯è¯3å¥ + å¥å­æ„æ€ + å•è¯ä½œç”¨ + é€è¯ç‚¹è¯»</small></div><div class="vocab-grid sentence-vocab-grid">${core.map((w,i)=>wordCard(w,i,u,"core")).join("")}</div>${extra.length?`<div class="word-section-title"><h3>ğŸš€ æ‹“å±•å•è¯</h3><small>æ¯ä¸ªæ‹“å±•è¯åŒæ ·æä¾›3ä¸ªä¾‹å¥ï¼Œå…ˆç†è§£ä½¿ç”¨ï¼Œä¸è¦æ±‚ä¸€æ¬¡é»˜å†™</small></div><div class="vocab-grid extra sentence-vocab-grid">${extra.map((w,i)=>wordCard(w,i+8,u,"extra")).join("")}</div>`:""}<div class="memory-method"><h3>å››æ¬¡å›å¿†æ³•</h3><ol><li>å¬å•è¯ï¼Œè·Ÿè¯»2é</li><li>è¯»å®Œæ—è¾¹3ä¸ªä¾‹å¥</li><li>ç†è§£æ•´å¥æ„æ€å’Œå•è¯ä½œç”¨</li><li>é®ä½å•è¯ï¼Œå£å¤´è¡¥å…¨å¥å­</li></ol></div><button class="primary word-test-start" id="startWordTest">æˆ‘å·²å­¦å®Œæœ¬å•å…ƒå•è¯ï¼Œè¿›å…¥20é¢˜å¡«è¯ â†’</button></section><section class="cloze-practice word-cloze-zone" id="wordClozeTest" hidden><div class="cloze-section-head"><div><h3>æœ¬å•å…ƒå•è¯å¡«è¯æµ‹è¯•</h3><p>å•è¯å’Œä¾‹å¥å·²ç»éšè—ã€‚è¯·æ ¹æ®å¥æ„å’Œä¸­æ–‡æç¤ºï¼ŒæŠŠå­¦è¿‡çš„é‡è¦å•è¯å¡«å›å®Œæ•´å¥å­ã€‚</p></div><span>${testItems.length} é¢˜</span></div><div class="cloze-question-list">${testItems.map((item,index)=>`<article class="cloze-question" data-word-cloze="${index}"><span>${index+1}</span><div><b>${esc(blankSentence(item.en,item.answer))}</b><p>${esc(item.zh)}</p><small>æç¤ºï¼š${esc(item.word.meaning)} Â· ${esc(item.answer.charAt(0))}${"ï¼¿".repeat(Math.max(1,item.answer.length-1))}</small><input type="text" autocomplete="off" spellcheck="false" data-word-cloze-answer data-word="${esc(item.word.word)}" data-expected="${esc(item.answer)}" placeholder="å¡«å…¥æœ¬å•å…ƒå•è¯"><em></em></div><button type="button" data-say="${esc(blankSentence(item.en,item.answer).replace("________","blank"))}" aria-label="æœ—è¯»å¡«ç©ºå¥">ğŸ”Š</button></article>`).join("")}</div><div class="cloze-actions"><button class="soft" id="backToWordLearning">è¿”å›å¤ä¹ å•è¯ä¸å¥å¼</button><button class="primary" id="checkWordCloze">æäº¤å¹¶æ£€æŸ¥</button></div><div id="wordClozeResult"></div><div id="wordStageFinish" ${done?"":"hidden"}>${doneButton("æˆ‘å·²å®Œæˆå•è¯ä¸å¥å¼å­¦ä¹ ")}</div></section>`;
-    box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
-    box.querySelectorAll("[data-toggle-word]").forEach(b=>b.onclick=()=>b.closest(".vocab-card").classList.toggle("revealed"));
-    bindSentenceWords(box);
-    $("startWordTest").onclick=()=>{$("wordLearningBlock").hidden=true;$("wordClozeTest").hidden=false;$("wordClozeTest").scrollIntoView({behavior:"smooth",block:"start"});setTimeout(()=>box.querySelector("[data-word-cloze-answer]")?.focus(),350);};
-    $("backToWordLearning").onclick=()=>{$("wordClozeTest").hidden=true;$("wordLearningBlock").hidden=false;$("wordLearningBlock").scrollIntoView({behavior:"smooth",block:"start"});};
-    $("checkWordCloze").onclick=()=>{let correct=0;box.querySelectorAll("[data-word-cloze-answer]").forEach(input=>{const row=input.closest(".cloze-question"),expected=input.dataset.expected,word=input.dataset.word,ok=answerNorm(input.value)===answerNorm(expected),key=`${u.id}:${word}`;row.classList.remove("correct","wrong");row.classList.add(ok?"correct":"wrong");row.querySelector("em").textContent=ok?"âœ“ æ­£ç¡®":input.value.trim()?`æ­£ç¡®ç­”æ¡ˆï¼š${expected}`:`è¿˜æ²¡æœ‰å¡«å†™ï¼Œæ­£ç¡®ç­”æ¡ˆï¼š${expected}`;if(ok){correct+=1;if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(item=>item!==key);}else if(!state.weak.includes(key))state.weak.push(key);});if(!testRecorded){state.quiz.correct+=correct;state.quiz.total+=testItems.length;testRecorded=true;}save();$("wordClozeResult").innerHTML=`<div class="quiz-result"><b>${correct}/${testItems.length}</b><p>${correct===testItems.length?"å…¨éƒ¨æ­£ç¡®ï¼ä½ å·²ç»ç†è§£è¿™äº›å•è¯åœ¨å¥å­ä¸­çš„ç”¨æ³•ã€‚":"è¯·è¯»ä¸€éæ­£ç¡®å¥å­ï¼Œå†ä¿®æ”¹é”™é¢˜å¹¶é‡æ–°æ£€æŸ¥ã€‚"}</p></div>`;$("wordStageFinish").hidden=false;$("checkWordCloze").textContent="å†æ¬¡æ£€æŸ¥";const complete=$("completeStageBtn");if(complete)complete.onclick=()=>completeStage("words");};
-  }
-  function wordPracticeFrames(w,u){
-    const word=w.word,lower=word.toLowerCase(),cap=word.charAt(0).toUpperCase()+word.slice(1),article=/^[aeiou]/i.test(word)?"an":"a";
-    const weather=["sunny","rainy","cloudy","windy","snowy","hot","cold","warm","cool"],feelings=["happy","sad","angry","tired","afraid","worried","proud"],adjectives=["big","small","cute","colorful","tall","short","strong","thin","quiet","clever","helpful","kind","healthy","unhealthy","cheap","expensive","comfortable","beautiful","different","larger","higher","highest","late","busy","lucky","unusual","wonderful","funny","delicious","new","far","excited","thankful"],numbers=["one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","twenty","thirty","forty","fifty"],weekdays=["monday","tuesday","wednesday","thursday","friday","saturday","sunday"],months=["january","february","march","april","may","june","july","august","september","october","november","december"],seasons=["spring","summer","autumn","winter"],positions=["in","on","under","behind","near","beside"],verbs=["meet","wear","want","sing","dance","read","play","draw","swim","collect","visit","celebrate","walk","ride","run","exercise","clean","buy","thank","teach","plan","call","speak","wait","stay","watch","turn","hide","find","paint","leave","enjoy","win","try","jog","skip","stretch","fit","sweep","mop","wash","cook","tidy","help","hear","rest","make","give","graduate","miss","remember","wish","carry","count","decorate","begin","share","invite","travel"],uncountable=["rice","bread","milk","fish","water","sugar","salt","fruit","chicken","porridge","homework","weather","snow","rain","grass","space","peace","housework","laundry","medicine","love","friendship","energy"],abstract=["family","birthday","festival","time","hobby","week","price","size","change","trip","plan","weekend","vacation","outing","race","team","view","date","olympics","exercise","health","habit","future","dream","job","memory","farewell","tradition","universe"];
-    if(weather.includes(lower))return[`It is ${word} today.`,`The weather is ${word}.`,`Tomorrow may be ${word}.`];
-    if(feelings.includes(lower))return[`I feel ${word}.`,`She looks ${word} today.`,`Why are you ${word}?`];
-    if(adjectives.includes(lower))return[`It is ${word}.`,`This looks ${word}.`,`The picture is ${word}.`];
-    if(numbers.includes(lower))return[`I can count to ${word}.`,`The answer is ${word}.`,`Number ${word} is on the card.`];
-    if(weekdays.includes(lower))return[`We have English on ${word}.`,`${cap} is a school day.`,`I play sports on ${word}.`];
-    if(months.includes(lower))return[`My birthday is in ${word}.`,`${cap} is a month of the year.`,`We have a school activity in ${word}.`];
-    if(seasons.includes(lower))return[`I like ${word}.`,`We have fun in ${word}.`,`${cap} is my favorite season.`];
-    if(positions.includes(lower))return[`The book is ${word} the desk.`,`Put the bag ${word} the chair.`,`I found it ${word} the box.`];
-    if(["left","right"].includes(lower))return[`Turn ${word}, please.`,`The shop is on the ${word}.`,`Look to your ${word}.`];
-    if(lower==="straight")return["Go straight, please.","Walk straight to the gate.","The road goes straight ahead."];
-    const past={played:["I played football yesterday.","We played together after school.","She played a fun game."],watched:["I watched TV yesterday.","We watched a film together.","She watched the game at home."],went:["I went there yesterday.","We went to the park.","She went home early."],took:["I took a photo.","We took a train yesterday.","She took her bag to school."],saw:["I saw a panda.","We saw two birds.","She saw her friend at school."],made:["I made a card.","We made a snowman.","She made breakfast for Mum."],happened:["Something happened yesterday.","What happened at school?","It happened in the morning."],woke:["I woke up early.","She woke at seven.","We woke to a sunny day."],missed:["I missed the bus.","She missed her friend.","We missed the first lesson."],found:["I found my book.","She found a small gift.","We found the right way."],cleaned:["We cleaned the room together.","I cleaned my desk.","She cleaned the window."],began:["The class began at eight.","It began to rain.","We began our lesson."]};
-    if(past[lower])return past[lower];
-    if(lower==="feel")return["I feel happy.","How do you feel?","We feel better today."];
-    if(lower==="become")return["I want to become a teacher.","She will become a doctor.","Dreams can become real."];
-    if(lower.includes(" ")&&/^(get|go|play|take|watch|fly|try|keep)/.test(lower))return[`I can ${word}.`,`We ${word} together.`,`Let's ${word}.`];
-    if(verbs.includes(lower))return[`I can ${word}.`,`We ${word} together.`,`Please ${word} with me.`];
-    if(uncountable.includes(lower))return[`I like ${word}.`,`We need some ${word}.`,`${cap} is useful in our life.`];
-    if(abstract.includes(lower)||lower.includes(" "))return[`We are learning about ${word}.`,`${cap} is important in this unit.`,`I can talk about ${word}.`];
-    if(lower.endsWith("s"))return[`I can see ${word}.`,`These ${word} are here.`,`We are learning about ${word}.`];
-    return[`This is ${article} ${word}.`,`I can see ${article} ${word}.`,`The ${word} is here.`];
-  }
-  function sentenceChineseHint(en,w,u){
-    const word=w.word,meaning=w.meaning;
-    if(en===`It is ${word} today.`)return`ä»Šå¤©æ˜¯â€œ${meaning}â€çš„çŠ¶æ€ã€‚`;
-    if(en===`The weather is ${word}.`)return`å¤©æ°”æ˜¯â€œ${meaning}â€çš„ã€‚`;
-    if(en===`Tomorrow may be ${word}.`)return`æ˜å¤©å¯èƒ½ä¼šæ˜¯â€œ${meaning}â€çš„å¤©æ°”ã€‚`;
-    if(en===`I feel ${word}.`)return`æˆ‘æ„Ÿè§‰â€œ${meaning}â€ã€‚`;
-    if(en===`She looks ${word} today.`)return`å¥¹ä»Šå¤©çœ‹èµ·æ¥å¾ˆâ€œ${meaning}â€ã€‚`;
-    if(en===`Why are you ${word}?`)return`ä½ ä¸ºä»€ä¹ˆæ„Ÿåˆ°â€œ${meaning}â€ï¼Ÿ`;
-    if(en===`It is ${word}.`)return`å®ƒæ˜¯â€œ${meaning}â€çš„çŠ¶æ€æˆ–ç‰¹ç‚¹ã€‚`;
-    if(en===`This looks ${word}.`)return`è¿™ä¸ªçœ‹èµ·æ¥å¾ˆâ€œ${meaning}â€ã€‚`;
-    if(en===`The picture is ${word}.`)return`è¿™å¹…å›¾æ˜¯â€œ${meaning}â€çš„ã€‚`;
-    if(en===`I can count to ${word}.`)return`æˆ‘èƒ½æ•°åˆ°â€œ${meaning}â€ã€‚`;
-    if(en===`The answer is ${word}.`)return`ç­”æ¡ˆæ˜¯â€œ${meaning}â€ã€‚`;
-    if(en===`Number ${word} is on the card.`)return`å¡ç‰‡ä¸Šæœ‰æ•°å­—â€œ${meaning}â€ã€‚`;
-    if(en.includes(` on ${word}.`))return`è¿™å¥è¯è¡¨ç¤ºæŸä»¶äº‹å®‰æ’åœ¨â€œ${meaning}â€ã€‚`;
-    if(en.includes(` in ${word}.`))return`è¿™å¥è¯è¡¨ç¤ºæŸä»¶äº‹å‘ç”Ÿåœ¨â€œ${meaning}â€ã€‚`;
-    if(en===`I like ${word}.`)return`æˆ‘å–œæ¬¢â€œ${meaning}â€ã€‚`;
-    if(en===`We have fun in ${word}.`)return`æˆ‘ä»¬åœ¨â€œ${meaning}â€è¿‡å¾—å¾ˆå¼€å¿ƒã€‚`;
-    if(en.includes(`${word} is my favorite season`))return`â€œ${meaning}â€æ˜¯æˆ‘æœ€å–œæ¬¢çš„å­£èŠ‚ã€‚`;
-    if(en===`The book is ${word} the desk.`)return`ä¹¦åœ¨è¯¾æ¡Œçš„â€œ${meaning}â€ä½ç½®ã€‚`;
-    if(en===`Put the bag ${word} the chair.`)return`æŠŠä¹¦åŒ…æ”¾åœ¨æ¤…å­çš„â€œ${meaning}â€ä½ç½®ã€‚`;
-    if(en===`I found it ${word} the box.`)return`æˆ‘åœ¨ç›’å­çš„â€œ${meaning}â€ä½ç½®æ‰¾åˆ°äº†å®ƒã€‚`;
-    if(en===`Turn ${word}, please.`)return`è¯·å‘â€œ${meaning}â€è½¬ã€‚`;
-    if(en===`I can ${word}.`)return`æˆ‘ä¼šâ€œ${meaning}â€ã€‚`;
-    if(en===`We ${word} together.`)return`æˆ‘ä»¬ä¸€èµ·â€œ${meaning}â€ã€‚`;
-    if(en===`Please ${word} with me.`)return`è¯·å’Œæˆ‘ä¸€èµ·â€œ${meaning}â€ã€‚`;
-    if(en===`Let's ${word}.`)return`è®©æˆ‘ä»¬ä¸€èµ·â€œ${meaning}â€ã€‚`;
-    if(en===`We need some ${word}.`)return`æˆ‘ä»¬éœ€è¦ä¸€äº›â€œ${meaning}â€ã€‚`;
-    if(en===`${word.charAt(0).toUpperCase()+word.slice(1)} is useful in our life.`)return`â€œ${meaning}â€åœ¨ç”Ÿæ´»ä¸­å¾ˆæœ‰ç”¨ã€‚`;
-    if(en===`We are learning about ${word}.`)return`æˆ‘ä»¬æ­£åœ¨å­¦ä¹ å…³äºâ€œ${meaning}â€çš„å†…å®¹ã€‚`;
-    if(en===`I can talk about ${word}.`)return`æˆ‘èƒ½è°ˆè®ºâ€œ${meaning}â€ã€‚`;
-    if(en.startsWith("This is "))return`è¿™æ˜¯ä¸€ä¸ªï¼ˆæˆ–ä¸€ä»¶ï¼‰â€œ${meaning}â€ã€‚`;
-    if(en.startsWith("I can see "))return`æˆ‘èƒ½çœ‹åˆ°â€œ${meaning}â€ã€‚`;
-    if(en===`The ${word} is here.`)return`è¿™ä¸ªâ€œ${meaning}â€å°±åœ¨è¿™é‡Œã€‚`;
-    if(en.startsWith("Please read the word"))return`è¯·å¤§å£°è¯»å‡ºâ€œ${word}â€è¿™ä¸ªè¯ï¼Œå®ƒçš„æ„æ€æ˜¯â€œ${meaning}â€ã€‚`;
-    if(en.startsWith("Can you spell the word"))return`ä½ èƒ½æ‹¼å†™â€œ${word}â€è¿™ä¸ªè¯å—ï¼Ÿ`;
-    if(en.startsWith("I can use the word"))return`æˆ‘èƒ½åœ¨æœ¬å•å…ƒä¸­ä½¿ç”¨â€œ${word}ï¼ˆ${meaning}ï¼‰â€ã€‚`;
-    return`è¿™å¥è¯è¡¨è¾¾â€œ${u.zh}â€æƒ…å¢ƒä¸­çš„ä¸€ä¸ªå®Œæ•´ä¿¡æ¯ï¼Œå…¶ä¸­â€œ${word}â€è¡¨ç¤ºâ€œ${meaning}â€ã€‚`;
-  }
-  function wordRoleInfo(w,answer){
-    const word=w.word.toLowerCase(),adjectives=["sunny","rainy","cloudy","windy","snowy","hot","cold","warm","cool","happy","sad","angry","tired","afraid","worried","proud","big","small","cute","colorful","tall","short","strong","thin","quiet","clever","helpful","kind","healthy","unhealthy","cheap","expensive","comfortable","beautiful","different","larger","higher","highest","late","busy","lucky","unusual","wonderful","funny","delicious","new","far","excited","thankful"],prepositions=["in","on","under","behind","near","beside"],numbers=["one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","twenty","thirty","forty","fifty","first","second","third","fourth","fifth","eighth","ninth","twelfth"],pronouns=["he","she","they","this","that","these","those"],timeWords=["monday","tuesday","wednesday","thursday","friday","saturday","sunday","january","february","march","april","may","june","july","august","september","october","november","december","today","tomorrow","yesterday","now","every day","after school","every"],adverbs=["finally","suddenly","then","often","usually","sometimes","early","together","later","outside","fast"],questions=["why","when","where","who","what","which","how many","how much","what time"],verbs=["meet","wear","want","sing","dance","read","play","draw","swim","collect","visit","celebrate","walk","ride","run","exercise","clean","buy","thank","teach","plan","call","speak","wait","stay","watch","turn","hide","find","paint","leave","enjoy","win","try","jog","skip","stretch","fit","sweep","mop","wash","cook","tidy","help","hear","rest","make","give","graduate","miss","remember","wish","carry","count","decorate","begin","share","invite","travel","feel","become","like","love","get","go","put","eat","drink","do","have","know","write","look","see","learn","use","need","show","give","take","work","live","say","tell","talk","played","watched","went","took","saw","made","happened","woke","missed","found","cleaned"];
-    if(prepositions.includes(word))return{label:"ä»‹è¯ä½œç”¨",detail:"è¿æ¥åœ°ç‚¹ä¸äº‹ç‰©ï¼Œè¯´æ˜å®ƒä»¬ä¹‹é—´çš„ä½ç½®å…³ç³»ã€‚"};
-    if(["left","right","straight"].includes(word))return{label:"æ–¹ä½è¯ä½œç”¨",detail:"è¯´æ˜ç§»åŠ¨æ–¹å‘æˆ–æ‰€åœ¨ä½ç½®ã€‚"};
-    if(numbers.includes(word))return{label:"æ•°è¯ä½œç”¨",detail:"åœ¨å¥ä¸­è¡¨è¾¾æ•°é‡ã€é¡ºåºæˆ–æ•°å­—ä¿¡æ¯ã€‚"};
-    if(pronouns.includes(word))return{label:"ä»£è¯ä½œç”¨",detail:"ä»£æ›¿äººç‰©åç§°ï¼Œé¿å…åœ¨å¥ä¸­é‡å¤è¯´åŒä¸€ä¸ªäººã€‚"};
-    if(timeWords.includes(word))return{label:"æ—¶é—´è¯ä½œç”¨",detail:"è¯´æ˜åŠ¨ä½œå‘ç”Ÿçš„æ—¥æœŸã€æ—¶é—´æˆ–é¢‘ç‡ã€‚"};
-    if(adverbs.includes(word))return{label:"å‰¯è¯ä½œç”¨",detail:"è¡¥å……è¯´æ˜åŠ¨ä½œå‘ç”Ÿçš„æ—¶é—´ã€é¢‘ç‡ã€æ–¹å¼æˆ–ç¨‹åº¦ã€‚"};
-    if(questions.includes(word))return{label:"ç–‘é—®è¯ä½œç”¨",detail:"æ”¾åœ¨é—®å¥ä¸­ï¼Œç”¨æ¥è¯¢é—®äººç‰©ã€æ—¶é—´ã€åŸå› ã€æ•°é‡æˆ–å…¶ä»–ä¿¡æ¯ã€‚"};
-    if(adjectives.includes(word))return{label:"å½¢å®¹è¯ä½œç”¨",detail:"æè¿°äººç‰©ã€äº‹ç‰©æˆ–å¤©æ°”çš„çŠ¶æ€å’Œç‰¹ç‚¹ã€‚"};
-    if(verbs.includes(word)||/ed$/.test(answer.toLowerCase()))return{label:word.includes(" ")?"åŠ¨è¯çŸ­è¯­ä½œç”¨":"åŠ¨è¯ä½œç”¨",detail:`è¡¨è¾¾å¥å­ä¸­çš„åŠ¨ä½œæˆ–çŠ¶æ€ï¼›æœ¬å¥å®é™…ä½¿ç”¨çš„è¯å½¢æ˜¯â€œ${answer}â€ã€‚`};
-    if(word.includes(" "))return{label:"å›ºå®šçŸ­è¯­ä½œç”¨",detail:"ä½œä¸ºä¸€ä¸ªæ•´ä½“è¡¨è¾¾ç‰¹å®šçš„æ—¶é—´ã€äº‹ç‰©æˆ–æ´»åŠ¨ï¼Œä½¿ç”¨æ—¶ä¸è¦éšæ„æ‹†å¼€ã€‚"};
-    return{label:"åè¯ä½œç”¨",detail:"è¡¨ç¤ºå¥å­ä¸­è°ˆåˆ°çš„äººã€äº‹ç‰©ã€åœ°ç‚¹æˆ–æ¦‚å¿µã€‚"};
-  }
-  function wordSentenceStudies(w,index,u){
-    const items=[],seen=new Set(),add=(en,zh)=>{const answer=findWordForm(en,w.word);if(!answer||seen.has(en.toLowerCase()))return;seen.add(en.toLowerCase());items.push({word:w,en,zh:zh||sentenceChineseHint(en,w,u),answer,role:wordRoleInfo(w,answer)});};
-    u.patterns.forEach(pattern=>add(pattern.en,pattern.zh));
-    (u.story.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[]).forEach(sentence=>add(sentence.trim(),`æƒ…å¢ƒç†è§£ï¼š${u.zh}ï¼›å¥ä¸­â€œ${w.word}â€è¡¨ç¤ºâ€œ${w.meaning}â€ã€‚`));
-    add(wordExample(w,index,u),`å¥ä¸­â€œ${w.word}â€è¡¨ç¤ºâ€œ${w.meaning}â€ã€‚è¯·ç»“åˆå®Œæ•´å¥å­ç†è§£ã€‚`);
-    wordPracticeFrames(w,u).forEach(en=>add(en,sentenceChineseHint(en,w,u)));
-    [`Please read the word ${w.word} aloud.`,`Can you spell the word ${w.word}?`,`I can use the word ${w.word} in this unit.`].forEach(en=>add(en,sentenceChineseHint(en,w,u)));
-    return items.slice(0,3);
-  }
-  function pluralizeWord(word){const irregular={child:"children",person:"people",man:"men",woman:"women",foot:"feet",tooth:"teeth",mouse:"mice",sheep:"sheep",fish:"fish"};if(irregular[word.toLowerCase()])return irregular[word.toLowerCase()];if(/[^aeiou]y$/i.test(word))return word.slice(0,-1)+"ies";if(/(s|x|z|ch|sh)$/i.test(word))return word+"es";if(/fe$/i.test(word))return word.slice(0,-2)+"ves";if(/f$/i.test(word))return word.slice(0,-1)+"ves";return word+"s";}
-  function pluralizePhrase(phrase){const parts=phrase.split(" "),last=parts.pop();return[...parts,pluralizeWord(last)].join(" ");}
-  function verbThirdPerson(phrase){const irregular={have:"has",go:"goes",do:"does",be:"is"},parts=phrase.split(" "),first=parts.shift(),third=irregular[first.toLowerCase()]||pluralizeWord(first);return[third,...parts].join(" ");}
-  function wordProfile(w){
-    const lower=w.word.toLowerCase(),override=WORD_PROFILE_OVERRIDES[lower],role=wordRoleInfo(w,w.word),uncountable=["rice","bread","milk","water","sugar","salt","homework","weather","snow","rain","grass","peace","housework","laundry","medicine","love","friendship","energy","porridge","chicken"],pluralOnly={shoes:"å•æ•° shoeï¼›å¤æ•° shoes",glasses:"é€šå¸¸è¯´ a pair of glassesï¼ˆä¸€å‰¯çœ¼é•œï¼‰",trousers:"é€šå¸¸è¯´ a pair of trousersï¼ˆä¸€æ¡è£¤å­ï¼‰",clothes:"é€šå¸¸æ— å•æ•° clothesï¼›å•ä»¶è¡£ç‰©ç”¨ an item of clothing",stairs:"å•æ•° stairï¼›å¤æ•° stairs",dishes:"å•æ•° dishï¼›å¤æ•° dishes",grandparents:"å•æ•° grandparentï¼›å¤æ•° grandparents"},properTime=["monday","tuesday","wednesday","thursday","friday","saturday","sunday","january","february","march","april","may","june","july","august","september","october","november","december","christmas","easter","thanksgiving"];
-    let pos=override?.pos,forms=override?.forms;
-    if(!pos){if(role.label.includes("å½¢å®¹è¯"))pos="å½¢å®¹è¯";else if(role.label.includes("ä»‹è¯"))pos="ä»‹è¯";else if(role.label.includes("æ•°è¯"))pos="æ•°è¯";else if(role.label.includes("ä»£è¯"))pos="ä»£è¯";else if(role.label.includes("æ—¶é—´è¯"))pos="æ—¶é—´åè¯ / å‰¯è¯";else if(role.label.includes("å‰¯è¯"))pos="å‰¯è¯";else if(role.label.includes("ç–‘é—®è¯"))pos="ç–‘é—®è¯ / ç–‘é—®çŸ­è¯­";else if(role.label.includes("åŠ¨è¯çŸ­è¯­"))pos="åŠ¨è¯çŸ­è¯­";else if(role.label.includes("åŠ¨è¯"))pos="åŠ¨è¯";else if(role.label.includes("å›ºå®šçŸ­è¯­"))pos="å›ºå®šçŸ­è¯­";else pos="åè¯";}
-    if(!forms){if(pluralOnly[lower])forms=pluralOnly[lower];else if(properTime.includes(lower))forms="ä¸“æœ‰æ—¶é—´åç§°ï¼Œé€šå¸¸ä¸ç”¨å¤æ•°";else if(pos.includes("æ—¶é—´åè¯")||pos.includes("å‰¯è¯")||pos.includes("ç–‘é—®è¯")||pos.includes("ä»£è¯")||pos.includes("ä»‹è¯")||pos.includes("æ•°è¯")||pos.includes("å›ºå®šçŸ­è¯­"))forms="æ²¡æœ‰å•å¤æ•°å˜åŒ–";else if(uncountable.includes(lower))forms=`ä¸å¯æ•°åè¯ï¼Œé€šå¸¸ä¸ç”¨å¤æ•°ï¼›ç”¨ some ${w.word} è¡¨ç¤ºä¸€äº›`;else if(pos.includes("åè¯")){forms=`å•æ•° ${w.word}ï¼›å¤æ•° ${pluralizePhrase(w.word)}`;}else if(pos.includes("åŠ¨è¯")){forms=`æ— åè¯å•å¤æ•°ï¼›åŠ¨è¯åŸå½¢ ${w.word}ï¼›ç¬¬ä¸‰äººç§°å•æ•° ${verbThirdPerson(w.word)}`;}else if(pos.includes("å½¢å®¹è¯"))forms="å½¢å®¹è¯æ²¡æœ‰å•å¤æ•°å˜åŒ–";else forms="æ²¡æœ‰å•å¤æ•°å˜åŒ–";}
-    const meanings=[w.meaning,...(WORD_COMMON_MEANINGS[lower]||[])].flatMap(value=>String(value).split(/[ï¼›;]/)).map(value=>value.trim()).filter(Boolean),unique=[];meanings.forEach(value=>{if(!unique.includes(value))unique.push(value);});
-    return{pos,forms,meanings:unique.slice(0,6)};
-  }
-  function wordCard(w,i,u,type){const known=state.mastered.includes(`${u.id}:${w.word}`),sentences=wordSentenceStudies(w,i,u),profile=wordProfile(w);return `<article class="vocab-card sentence-word-card ${known?"known":""}"><button class="sound" data-say="${esc(w.word)}">ğŸ”Š å•è¯</button><small>${type==="core"?"å¿…å¤‡":"æ‹“å±•"} ${i+1}</small><h3>${esc(w.word)}</h3><button class="meaning-cover" data-toggle-word>ç‚¹å‡»æŸ¥çœ‹æ„æ€</button><p class="word-meaning">${esc(w.meaning)}</p><div class="word-profile"><div><b>è¯æ€§</b><span>${esc(profile.pos)}</span></div><div><b>å•å¤æ•° / è¯å½¢</b><span>${esc(profile.forms)}</span></div><div class="word-profile-meanings"><b>å¸¸è§è¯æ„</b><span>${profile.meanings.map(meaning=>`<em>${esc(meaning)}</em>`).join("")}</span></div></div><div class="word-sentence-module"><div class="word-sentence-title"><em>å¥å¼å­¦ä¹ </em><b>3ä¸ªä¾‹å¥</b></div><div class="word-sentence-list">${sentences.map((sentence,index)=>`<section><div><span>ä¾‹å¥ ${index+1}</span><button data-say="${esc(sentence.en)}">ğŸ”Š æ•´å¥</button></div>${interactiveSentence(sentence.en,u)}<div class="sentence-explanation"><p><b>å¥å­æ„æ€</b>${esc(sentence.zh)}</p><p><b>${esc(sentence.role.label)}</b><strong>${esc(w.word)}</strong>ï¼š${esc(sentence.role.detail)}</p></div></section>`).join("")}</div></div></article>`;}
-
-  function renderPatternStage(box,u){
-    box.innerHTML=`<div class="content-head"><span>ç¬¬3æ­¥</span><h2>é‡ç‚¹å¥å‹ï¼šçŸ¥é“ä¸ºä»€ä¹ˆï¼Œå†å­¦ä¼šæ›¿æ¢</h2><p>å…ˆå¬å®Œæ•´å¥å­ï¼›é‡åˆ°ä¸ä¼šçš„è¯ï¼Œç›´æ¥ç‚¹å‡»è¯¥å•è¯å¬å‘éŸ³ã€çœ‹æ„æ€ã€‚</p></div><div class="pattern-list">${u.patterns.map((p,i)=>`<article class="pattern-card"><div class="pattern-number">${i+1}</div><div><button class="line-sound" data-say="${esc(p.en)}">ğŸ”Š å¬å®Œæ•´å¥å­</button>${interactiveSentence(p.en,u)}<p class="sentence-translation">${esc(p.zh)}</p><div class="rule"><b>ä¸ºä»€ä¹ˆè¿™æ ·è¯´ï¼Ÿ</b>${esc(p.rule)}</div><div class="try"><b>æ›¿æ¢ç»ƒä¹ </b><span>å…ˆè¯»åŸå¥3éï¼Œå†æŠŠå…³é”®è¯æ¢æˆæœ¬å•å…ƒå¦ä¸€ä¸ªè¯ã€‚æœ€ååˆä¸Šæç¤ºè¯´ä¸€éã€‚</span></div></div></article>`).join("")}</div><div class="mistake-box"><h3>âš ï¸ æœ¬å•å…ƒæ£€æŸ¥æ¸…å•</h3><ul><li>å¥å­å¼€å¤´æ˜¯å¦å¤§å†™ï¼Ÿç»“å°¾æ˜¯å¦æœ‰é—®å·æˆ–å¥å·ï¼Ÿ</li><li>he / she ä½œä¸»è¯­æ—¶ï¼ŒåŠ¨è¯æ˜¯å¦éœ€è¦å˜åŒ–ï¼Ÿ</li><li>æ—¶é—´ã€æ—¥æœŸã€æ˜ŸæœŸå‰çš„ä»‹è¯æ˜¯å¦ç”¨å¯¹ï¼Ÿåªæ£€æŸ¥æœ¬å¥çœŸæ­£å‡ºç°çš„è§„åˆ™ã€‚</li></ul></div>${doneButton("æˆ‘å·²ä¼šè¯»å¹¶æ›¿æ¢")}`;
-    box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
-    bindSentenceWords(box);
-  }
-
-  function regexSafe(text){return String(text).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}
-  function wordVariants(word){
-    const value=word.toLowerCase(),forms=[value];if(value.includes(" "))return forms;
-    forms.push(value+"s",value+"es",value+"ed",value+"ing");
-    if(value.endsWith("e"))forms.push(value.slice(0,-1)+"ing",value+"d");
-    if(value.endsWith("y")){forms.push(value.slice(0,-1)+"ies",value.slice(0,-1)+"ied");}
-    return [...new Set(forms)].sort((a,b)=>b.length-a.length);
-  }
-  function findWordForm(text,word){for(const form of wordVariants(word)){const match=text.match(new RegExp(`(^|[^A-Za-z])(${regexSafe(form)})(?=$|[^A-Za-z])`,"i"));if(match)return match[2];}return"";}
-  function blankSentence(sentence,answer){return sentence.replace(new RegExp(regexSafe(answer),"i"),"________");}
-  function answerNorm(text){return String(text||"").trim().replace(/\s+/g," ").toLowerCase();}
-
-  function dialogueLines(u){ const p=u.patterns; return [
-    ["A",`Hi! Let's talk about ${u.title}.`],["B",p[0].en],["A",p[1]?.en||"That's interesting."],["B",p[2]?.en||"Let's learn together."],["A","Great! Can you say it again?"],["B","Sure. Let's practise together!"]
-  ]; }
-  function renderDialogueStage(box,u){
-    const lines=dialogueLines(u);
-    box.innerHTML=`<div class="content-head"><span>ç¬¬4æ­¥</span><h2>åŸåˆ›æƒ…å¢ƒå¯¹è¯ï¼šæŠŠå¥å‹çœŸæ­£è¯´å‡ºæ¥</h2><p>ç¬¬ä¸€éå¬å®Œæ•´å¥ï¼Œç¬¬äºŒéé€è¯ç‚¹è¯»ï¼Œç¬¬ä¸‰éåˆ†åˆ«æ‰®æ¼”Aå’ŒBã€‚</p></div><div class="dialogue-card"><div class="scene-label">æƒ…å¢ƒï¼šä¸¤ä½åŒå­¦åœ¨ç»ƒä¹ â€œ${u.zh}â€</div>${lines.map(([role,text])=>`<article class="dialogue-line role-${role.toLowerCase()}"><span>${role}</span><div>${interactiveSentence(text,u)}</div><button class="dialogue-sound" data-say="${esc(text)}" aria-label="æ’­æ”¾å®Œæ•´å¥å­">ğŸ”Š æ•´å¥</button></article>`).join("")}</div><div class="speaking-challenge"><h3>ğŸ¤ å¼€å£æŒ‘æˆ˜</h3><p>æŠŠå¯¹è¯ä¸­çš„ä¸€ä¸ªå…³é”®è¯æ¢æˆè‡ªå·±çš„çœŸå®ä¿¡æ¯ï¼Œå†å®Œæ•´è¯´ä¸€éã€‚èƒ½è®©å®¶é•¿å¬æ‡‚æ„æ€ï¼Œå°±ç®—è¿‡å…³ã€‚</p></div>${doneButton("æˆ‘å·²å®Œæˆè§’è‰²æœ—è¯»")}`;
-    box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
-    bindSentenceWords(box);
-  }
-
-  function renderReadingStage(box,u){
-    const q1=`What is the passage mainly about?`, q2=`Find one word about â€œ${u.zh}â€.`, q3="Can you say one true sentence about yourself?";
-    box.innerHTML=`<div class="content-head"><span>ç¬¬5æ­¥</span><h2>åŸåˆ›é˜…è¯»ï¼šå…ˆçŒœï¼Œå†æ‰¾è¯æ®</h2><p>ä¸è¦é€å­—ç¿»è¯‘ã€‚å…ˆæ‰¾äººç‰©ã€åœ°ç‚¹ã€æ—¶é—´å’Œé‡å¤å‡ºç°çš„è¯ã€‚</p></div><article class="reading-sheet"><span>READING Â· ${u.title.toUpperCase()}</span><button data-say="${esc(u.story)}">ğŸ”Š å¬å…¨æ–‡</button><h3>${u.zh}å°æ•…äº‹</h3><p class="english-reading">${esc(u.story)}</p><details><summary>éœ€è¦å¸®åŠ©ï¼ŸæŸ¥çœ‹ä¸­æ–‡ç†è§£çº¿ç´¢</summary><p>è¿™ç¯‡çŸ­æ–‡å›´ç»•â€œ${u.zh}â€å±•å¼€ã€‚å…ˆåœˆå‡ºç†Ÿæ‚‰çš„å•è¯ï¼Œå†åˆ¤æ–­äººç‰©åšäº†ä»€ä¹ˆã€‚ä¸­æ–‡åªç”¨äºæ£€æŸ¥ç†è§£ï¼Œä¸è¦æ±‚é€å­—å¯¹åº”ã€‚</p></details></article><div class="reading-questions"><h3>è¯»åæ€è€ƒ</h3>${[[q1,`It is mainly about ${u.title}.`],[q2,`å‚è€ƒç­”æ¡ˆï¼š${u.core[0].word}ã€‚å…¶ä»–ç¬¦åˆä¸»é¢˜çš„è¯ä¹Ÿå¯ä»¥ã€‚`],[q3,"å¼€æ”¾é¢˜ï¼šç”¨æœ¬å•å…ƒä»»ä¸€é‡ç‚¹å¥å‹è¯´ä¸€ä¸ªçœŸå®å¥å­ã€‚"]].map((q,i)=>`<details><summary>${i+1}. ${esc(q[0])}</summary><p>${esc(q[1])}</p></details>`).join("")}</div><div class="reading-method"><b>é˜…è¯»ä¸‰éæ³•</b><span>ç¬¬ä¸€éçœ‹å¤§æ„ï¼›ç¬¬äºŒéåœˆè¯æ®ï¼›ç¬¬ä¸‰éå¤§å£°æœ—è¯»ã€‚é‡åˆ°ç”Ÿè¯å…ˆçŒœï¼Œä¸è¦ç«‹åˆ»æŸ¥ã€‚</span></div>${doneButton("æˆ‘å·²å®Œæˆé˜…è¯»")}`;
-    box.querySelector("[data-say]").onclick=()=>speak(u.story);
-  }
-
-  function quizItems(u){
-    const words=seededShuffle(u.core,`${iso()}:${u.id}:quiz`).slice(0,5);
-    return words.map((w,i)=>{
-      const wrong=seededShuffle(u.core.filter(x=>x.word!==w.word),`${iso()}:${u.id}:${w.word}:wrong`).slice(0,2).map(x=>x.meaning);
-      return {q:`â€œ${w.word}â€ çš„æ„æ€æ˜¯ï¼Ÿ`,opts:shuffle([w.meaning,...wrong]),answer:w.meaning,word:w.word};
-    });
-  }
-  function shuffle(a){const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
-  function renderPracticeStage(box,u){
-    const items=quizItems(u);
-    box.innerHTML=`<div class="content-head"><span>ç¬¬6æ­¥</span><h2>åˆ†å±‚ç»ƒä¹ ï¼šä»è®°å•è¯åˆ°çœŸæ­£ä¼šè¿ç”¨</h2><p>å…ˆå®ŒæˆåŸºç¡€å°æµ‹ï¼Œå†åšå¥å‹ã€é˜…è¯»å’Œè¡¨è¾¾ä»»åŠ¡ã€‚é”™è¯ä¼šè‡ªåŠ¨è¿›å…¥å¤ä¹ æ¸…å•ã€‚</p></div><h3 class="practice-level">ç¬¬ä¸€å…³ Â· åŸºç¡€è¯æ±‡</h3><div class="quiz-list">${items.map((item,i)=>`<article class="quiz-item" data-question="${i}"><b>${i+1}. ${esc(item.q)}</b><div>${item.opts.map(o=>`<button data-answer="${esc(o)}">${esc(o)}</button>`).join("")}</div><p></p></article>`).join("")}</div><button class="primary submit-quiz" id="submitQuiz">æäº¤å¹¶æŸ¥çœ‹ç»“æœ</button><div id="quizResult"></div><h3 class="practice-level">ç¬¬äºŒå…³ Â· ç†è§£ä¸è¡¨è¾¾</h3><div class="ability-practice"><details><summary>1. å¥å‹ç†è§£ï¼šç¿»è¯‘å¹¶æœ—è¯»</summary><p><b>${esc(u.patterns[0].en)}</b><br>${esc(u.patterns[0].zh)}<br><small>æœ—è¯»3éï¼Œå†æ›¿æ¢ä¸€ä¸ªå…³é”®è¯ã€‚</small></p></details><details><summary>2. é˜…è¯»ç†è§£ï¼šçŸ­æ–‡ä¸»è¦è®²ä»€ä¹ˆï¼Ÿ</summary><p>ä¸»è¦å›´ç»•â€œ${esc(u.zh)}â€å±•å¼€ã€‚è¯·ä»çŸ­æ–‡ä¸­åœˆå‡ºä¸¤ä¸ªèƒ½è¯æ˜ç­”æ¡ˆçš„è¯ã€‚</p></details><details><summary>3. ç‹¬ç«‹è¡¨è¾¾ï¼šè¯´æˆ–å†™3å¥è¯</summary><p>ç¬¬1å¥ä½¿ç”¨æœ¬å•å…ƒå¿…å¤‡è¯ï¼Œç¬¬2å¥ä½¿ç”¨é‡ç‚¹å¥å‹ï¼Œç¬¬3å¥è¯´è‡ªå·±çš„çœŸå®æƒ…å†µã€‚å®Œæˆåè¯»ç»™å®¶é•¿å¬ã€‚</p></details></div>${doneButton("æˆ‘å·²å®Œæˆæœ¬å•å…ƒ")}`;
-    box.querySelectorAll(".quiz-item button").forEach(b=>b.onclick=()=>{const item=b.closest(".quiz-item");item.querySelectorAll("button").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");quizAnswers[item.dataset.question]=b.dataset.answer;});
-    $("submitQuiz").onclick=()=>{
-      let correct=0; items.forEach((item,i)=>{const el=box.querySelector(`[data-question="${i}"]`), chosen=quizAnswers[i]; const ok=chosen===item.answer; if(ok)correct++; el.classList.add(chosen?(ok?"correct":"wrong"):"wrong"); el.querySelector("p").textContent=chosen?(ok?"å›ç­”æ­£ç¡®ï¼":"æ­£ç¡®ç­”æ¡ˆï¼š"+item.answer):"è¿˜æ²¡æœ‰ä½œç­”ï¼Œæ­£ç¡®ç­”æ¡ˆï¼š"+item.answer; const key=`${u.id}:${item.word}`; if(ok){if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(x=>x!==key);}else if(!state.weak.includes(key))state.weak.push(key);});
-      state.quiz.correct+=correct;state.quiz.total+=items.length; if(!state.dailyDone.includes(todayKey("quiz")))state.dailyDone.push(todayKey("quiz")); reward(Math.max(1,correct),`ç­”å¯¹ ${correct}/${items.length} é¢˜`,1); $("quizResult").innerHTML=`<div class="quiz-result"><b>${correct}/${items.length}</b><p>${correct===items.length?"å…¨éƒ¨æ­£ç¡®ï¼æ˜å¤©è¿˜è¦å†å›å¿†ä¸€æ¬¡ã€‚":correct>=3?"åŸºæœ¬æŒæ¡ï¼Œå»å•è¯æœ¬å¤ä¹ é”™è¯ã€‚":"å…ˆåˆ«æ€¥ï¼Œå›åˆ°å¿…å¤‡å•è¯å†å¬è¯»ä¸€éã€‚"}</p></div>`;
-    };
-  }
-
-  function renderToday(){
-    const u=unitNow(),done=dailyComplete(),todayTasks=activeTasks(); $("todayDate").textContent=new Intl.DateTimeFormat("zh-CN",{month:"long",day:"numeric",weekday:"long"}).format(new Date()); $("todayCourse").textContent=`${bookNow().label} Â· ${u.title}`; $("circleProgress").textContent=`${done}/${todayTasks.length}`; $("circleProgress").style.background=`conic-gradient(var(--green) 0 ${done/todayTasks.length*100}%,#e8efeb ${done/todayTasks.length*100}% 100%)`;
-    $("dailyTasks").innerHTML=todayTasks.map((t,i)=>{const yes=state.dailyDone.includes(todayKey(t.id));const link=t.id==="zh2en"||t.id==="en2zh"?`data-open-dictation="${t.id}"`:t.id==="review"?"data-open-review":`data-daily-stage="${t.stage}"`;return `<button class="daily-task ${yes?"done":""}" ${link}><span>${yes?"âœ“":i+1}</span><i>${t.icon}</i><div><b>${t.title}</b><small>${t.detail}</small></div><em>${yes?"å·²å®Œæˆ":t.id==="review"?"+1â˜€ï¸ +2ğŸ¥£":"+1â˜€ï¸ +1ğŸ¥£"}</em></button>`}).join("");
-    const claimed=state.bonuses.includes(`${iso()}:${unitKey()}`); $("claimDailyBonus").disabled=done<todayTasks.length||claimed; $("claimDailyBonus").textContent=claimed?"âœ“ ä»Šæ—¥å·²é¢†å–":"é¢†å–å…¨å‹¤å¥–åŠ±"; $("bonusHint").textContent=done<todayTasks.length?`å†å®Œæˆ ${todayTasks.length-done} é¡¹å³å¯é¢†å–`:claimed?"æ˜å¤©ç»§ç»­ä¿æŒ":"ç°åœ¨å¯ä»¥é¢†å– 3â˜€ï¸ + 2ğŸ¥£";
-    renderDailyPractice();
-  }
-
-  function dailyPracticeWords(mode){return seededShuffle(unitNow().core,`${iso()}:${unitKey()}:${mode}:independent`).slice(0,Math.min(5,unitNow().core.length));}
-  function renderDailyPractice(){
-    const zhDone=state.dailyDone.includes(todayKey("zh2en")),enDone=state.dailyDone.includes(todayKey("en2zh")),reviewDone=state.dailyDone.includes(todayKey("review")),learned=pastLearnedWords();
-    $("dailyPracticeZone").innerHTML=`<article class="practice-launch ${zhDone?"done":""}"><span>âœï¸</span><small>ç‹¬ç«‹çª—å£ A</small><h2>çœ‹ä¸­æ–‡ï¼Œå†™è‹±æ–‡</h2><p>çª—å£å†…åªæ˜¾ç¤ºä¸­æ–‡é¢˜ç›®ï¼Œä¸å‡ºç°è‹±æ–‡å•è¯è¡¨ï¼Œé¿å…ä»æ—è¾¹æŠ„å†™ã€‚</p><button class="primary" data-open-dictation="zh2en">${zhDone?"å†æ¬¡ç»ƒä¹ ":"å¼€å§‹è‹±æ–‡é»˜å†™"}</button></article><article class="practice-launch ${enDone?"done":""}"><span>ğŸ€„</span><small>ç‹¬ç«‹çª—å£ B</small><h2>çœ‹è‹±æ–‡ï¼Œå†™ä¸­æ–‡</h2><p>çª—å£å†…åªæ˜¾ç¤ºè‹±æ–‡é¢˜ç›®ï¼Œä¸å‡ºç°ä¸­æ–‡å•è¯è¡¨ï¼Œä¸¤ç§ç»ƒä¹ äº’ä¸å±•ç¤ºç­”æ¡ˆã€‚</p><button class="primary" data-open-dictation="en2zh">${enDone?"å†æ¬¡ç»ƒä¹ ":"å¼€å§‹ä¸­æ–‡é‡Šä¹‰"}</button></article><article class="practice-launch review-launch ${reviewDone?"done":""} ${learned.length?"":"locked"}"><span>ğŸ”</span><small>å†å²å·©å›º Â· ${learned.length}ä¸ªå·²å­¦è¯å¯å¤ä¹ </small><h2>éšæœºå¤ä¹ è¿‡å¾€å•è¯</h2><p>${learned.length?"åªä»å·²ç»å®Œæˆè¿‡å•è¯å­¦ä¹ çš„å•å…ƒæŠ½é¢˜ï¼Œç»ä¸ä¼šæå‰å‡ºç°æœªæ¥è¯¾ç¨‹å•è¯ã€‚":"å®Œæˆä»»æ„å•å…ƒçš„â€œå¿…å¤‡å•è¯â€å­¦ä¹ åè‡ªåŠ¨è§£é”ã€‚"}</p><button class="primary" data-open-review ${learned.length?"":"disabled"}>${reviewDone?"å†æ¬¡å·©å›º":learned.length?"å¼€å§‹å†å²å¤ä¹ ":"å°šæœªè§£é”"}</button></article>`;
-  }
-  function openReview(){
-    const words=seededShuffle(pastLearnedWords(),`${iso()}:past-review`).slice(0,5),dialog=$("practiceDialog");
-    if(!words.length)return toast("å…ˆå®Œæˆä¸€ä¸ªå•å…ƒçš„å¿…å¤‡å•è¯å­¦ä¹ ï¼Œå†æ¥å¤ä¹ è¿‡å¾€å†…å®¹");
-    $("practiceDialogContent").innerHTML=`<div class="dictation-window"><div class="dictation-head"><span>ğŸ”</span><div><small>å†å²å·©å›º Â· åªæŠ½å–å·²å­¦ä¹ è¯æ±‡</small><h2 id="practiceDialogTitle">éšæœºå¤ä¹ è¿‡å¾€å•è¯</h2><p>é¢˜ç›®æ¥è‡ªä½ çœŸæ­£æ‰“å¼€å¹¶å®Œæˆè¿‡çš„å•è¯è¯¾ï¼Œä¸åŒ…å«æœªæ¥å•å…ƒã€‚</p></div></div><div class="privacy-note">ğŸ§  ä»Šæ—¥éšæœºæŠ½å– ${words.length} ä¸ªå†å²è¯ï¼Œä¸­è‹±æ–¹å‘äº¤æ›¿ç»ƒä¹ ã€‚</div><div class="dictation-list">${words.map((word,index)=>{const mode=index%2===0?"zh2en":"en2zh";return `<label><b>${index+1}. ${esc(mode==="zh2en"?word.meaning:word.word)}</b>${mode==="en2zh"?`<button type="button" data-say="${esc(word.word)}">ğŸ”Š</button>`:""}<input type="text" autocomplete="off" spellcheck="false" data-review-answer data-mode="${mode}" data-unit-id="${esc(word.unitId)}" data-word="${esc(word.word)}" data-expected="${esc(mode==="zh2en"?word.word:word.meaning)}" placeholder="${mode==="zh2en"?"å†™è‹±æ–‡":"å†™ä¸­æ–‡"}"><small></small></label>`;}).join("")}</div><button class="primary dictation-submit" id="checkPastReview">æ£€æŸ¥å†å²å¤ä¹ </button></div>`;
-    $("practiceDialogContent").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
-    $("checkPastReview").onclick=checkPastReview;
-    if(dialog.showModal)dialog.showModal();else dialog.classList.add("open");
-  }
-  function checkPastReview(){
-    const inputs=[...$("practiceDialogContent").querySelectorAll("[data-review-answer]")],clean=value=>String(value).trim().toLowerCase().replace(/[ï¼Œã€‚ï¼›ã€,.;]/g,"").replace(/\s+/g," ");let correct=0;
-    inputs.forEach(input=>{const answer=clean(input.value),expected=clean(input.dataset.expected),choices=expected.split(/æˆ–|\/|ï¼›/).map(clean),ok=input.dataset.mode==="zh2en"?answer===expected:choices.some(item=>item===answer||item.includes(answer)&&answer.length>=2),label=input.closest("label");label.classList.toggle("correct",ok);label.classList.toggle("wrong",!ok);input.nextElementSibling.textContent=ok?"âœ“ æ­£ç¡®":`ç­”æ¡ˆï¼š${input.dataset.expected}`;if(ok)correct+=1;else{const key=`${input.dataset.unitId}:${input.dataset.word}`;if(!state.weak.includes(key))state.weak.push(key);}});
-    if(correct===inputs.length){const key=todayKey("review"),first=!state.dailyDone.includes(key);if(first){state.dailyDone.push(key);reward(1,"å®Œæˆå†å²è¯æ±‡å·©å›º",2);renderToday();}else toast("å†å²å¤ä¹ å…¨éƒ¨æ­£ç¡®ï¼Œä»Šå¤©å·²ç»é¢†å–è¿‡å¥–åŠ±");const button=$("checkPastReview");button.disabled=true;button.textContent="âœ“ å†å²å¤ä¹ å…¨éƒ¨æ­£ç¡®";}else{save();toast(`å†å²å¤ä¹ ç­”å¯¹ ${correct}/${inputs.length}ï¼Œè®¢æ­£åå†æ£€æŸ¥`);}
-  }
-  function openDictation(mode){
-    const words=dailyPracticeWords(mode),isEnglish=mode==="zh2en",dialog=$("practiceDialog");
-    $("practiceDialogContent").innerHTML=`<div class="dictation-window"><div class="dictation-head"><span>${isEnglish?"âœï¸":"ğŸ€„"}</span><div><small>ç‹¬ç«‹ç»ƒä¹ çª—å£ Â· å¦ä¸€æ¨¡å—å·²å®Œå…¨éšè—</small><h2 id="practiceDialogTitle">${isEnglish?"çœ‹ä¸­æ–‡æ„æ€ï¼Œå†™è‹±æ–‡å•è¯":"çœ‹è‹±æ–‡å•è¯ï¼Œå†™ä¸­æ–‡æ„æ€"}</h2><p>${isEnglish?"é¢˜ç›®é¡ºåºå·²ç»æ‰“ä¹±ï¼›ä¸çœ‹å•è¯è¡¨ç‹¬ç«‹æ‹¼å†™ã€‚":"å…ˆè¯»å‡ºè‹±æ–‡ï¼Œå†å†™å‡ºå‡†ç¡®çš„ä¸­æ–‡æ„æ€ã€‚"}</p></div></div><div class="privacy-note">ğŸ”’ å½“å‰åªæ˜¾ç¤ºè¿™ä¸€ç§ç»ƒä¹ ï¼Œå…³é—­çª—å£åæ‰èƒ½è¿›å…¥å¦ä¸€æ¨¡å—ã€‚</div><div class="dictation-list">${words.map((w,i)=>`<label><b>${i+1}. ${esc(isEnglish?w.meaning:w.word)}</b>${isEnglish?"":`<button type="button" data-say="${esc(w.word)}" aria-label="æ’­æ”¾ ${esc(w.word)}">ğŸ”Š</button>`}<input type="text" autocomplete="off" spellcheck="false" data-dictation="${mode}" data-word="${esc(w.word)}" data-expected="${esc(isEnglish?w.word:w.meaning)}" placeholder="${isEnglish?"è¯·è¾“å…¥è‹±æ–‡":"è¯·è¾“å…¥ä¸­æ–‡"}"><small></small></label>`).join("")}</div><button class="primary dictation-submit" data-check-dictation="${mode}">${isEnglish?"æ£€æŸ¥è‹±æ–‡æ‹¼å†™":"æ£€æŸ¥ä¸­æ–‡æ„æ€"}</button></div>`;
-    $("practiceDialogContent").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
-    $("practiceDialogContent").querySelector("[data-check-dictation]").onclick=button=>checkDictation(button.currentTarget.dataset.checkDictation);
-    if(dialog.showModal)dialog.showModal();else dialog.classList.add("open");
-    setTimeout(()=>$("practiceDialogContent").querySelector("input")?.focus(),80);
-  }
-  function checkDictation(mode){
-    const inputs=[...$("practiceDialogContent").querySelectorAll(`[data-dictation="${mode}"]`)]; let correct=0;
-    const clean=value=>String(value).trim().toLowerCase().replace(/[ï¼Œã€‚ï¼›ã€,.;]/g,"").replace(/\s+/g," ");
-    inputs.forEach(input=>{const answer=clean(input.value),expected=clean(input.dataset.expected);const choices=expected.split(/æˆ–|\/|ï¼›/).map(clean);const ok=mode==="zh2en"?answer===expected:choices.some(item=>item===answer||item.includes(answer)&&answer.length>=2);input.closest("label").classList.toggle("correct",ok);input.closest("label").classList.toggle("wrong",!ok);input.nextElementSibling.textContent=ok?"âœ“ æ­£ç¡®":`ç­”æ¡ˆï¼š${input.dataset.expected}`;if(ok)correct+=1;else{const key=`${unitKey()}:${input.dataset.word}`;if(!state.weak.includes(key))state.weak.push(key);}});
-    if(correct===inputs.length){const key=todayKey(mode),first=!state.dailyDone.includes(key);if(first){state.dailyDone.push(key);reward(1,mode==="zh2en"?"å®Œæˆè‹±æ–‡é»˜å†™":"å®Œæˆä¸­æ–‡é‡Šä¹‰",1);renderToday();}else toast("å…¨éƒ¨æ­£ç¡®ï¼Œè¿™ä¸€é¡¹ä»Šå¤©å·²ç»å®Œæˆè¿‡äº†");const submit=$("practiceDialogContent").querySelector("[data-check-dictation]");submit.disabled=true;submit.textContent="âœ“ å…¨éƒ¨æ­£ç¡®";}else{save();toast(`ç­”å¯¹ ${correct}/${inputs.length}ï¼Œè¯·è®¢æ­£åå†æ£€æŸ¥`);}
-  }
-
-  function wordPool(){
-    const current=seededShuffle(unitNow().core,`${iso()}:${unitKey()}:wordbook`).map(w=>({...w,key:`${unitKey()}:${w.word}`}));
-    if(memoryFilter==="weak") return allWords().filter(w=>state.weak.includes(`${w.unitId}:${w.word}`)).map(w=>({...w,key:`${w.unitId}:${w.word}`}));
-    if(memoryFilter==="mastered") return allWords().filter(w=>state.mastered.includes(`${w.unitId}:${w.word}`)).map(w=>({...w,key:`${w.unitId}:${w.word}`}));
-    return current;
-  }
-  function renderWords(){
-    document.querySelectorAll("[data-word-filter]").forEach(b=>b.classList.toggle("active",b.dataset.wordFilter===memoryFilter)); const pool=wordPool(); memoryIndex=Math.min(memoryIndex,Math.max(0,pool.length-1));
-    if(!pool.length){$("memoryCard").innerHTML=`<div class="empty"><span>ğŸ‰</span><h2>è¿™é‡Œæš‚æ—¶æ²¡æœ‰å•è¯</h2><p>${memoryFilter==="weak"?"å®Œæˆå°æµ‹åï¼Œç­”é”™çš„è¯ä¼šè‡ªåŠ¨æ¥åˆ°è¿™é‡Œã€‚":"å…ˆè¿›å…¥è¯¾ç¨‹å­¦ä¹ å•è¯å§ã€‚"}</p></div>`;$("wordDots").innerHTML="";return;}
-    const w=pool[memoryIndex]; $("memoryCard").className=`memory-card ${memoryFlipped?"flipped":""}`; $("memoryCard").innerHTML=`<div class="memory-inner" id="flipWord" role="button" tabindex="0"><div class="memory-front"><small>${memoryIndex+1} / ${pool.length}</small><button class="word-audio" data-memory-say aria-label="æ’­æ”¾å•è¯å‘éŸ³">ğŸ”Š</button><h2>${esc(w.word)}</h2><p>å…ˆè¯´å‡ºä¸­æ–‡æ„æ€ï¼Œå†ç‚¹å‡»ç¿»é¢</p></div><div class="memory-back"><small>ç­”æ¡ˆä¸è®°å¿†é’©å­</small><h2>${esc(w.meaning)}</h2><p>${esc(w.exampleZh||"æŠŠè¿™ä¸ªè¯æ”¾è¿›æœ¬å•å…ƒæƒ…å¢ƒä¸­è¯´ä¸€æ¬¡ã€‚")}</p><b>å†å¤§å£°è¯»ï¼š${esc(w.word)}</b></div></div>`; $("wordDots").innerHTML=pool.map((_,i)=>`<button class="${i===memoryIndex?"active":""}" data-word-index="${i}" aria-label="ç¬¬${i+1}ä¸ªå•è¯"></button>`).join("");
-    $("flipWord").onclick=(e)=>{if(e.target.closest("[data-memory-say]")){speak(w.word);return;}memoryFlipped=!memoryFlipped;renderWords();};
-  }
-  function uniqueDictionaryWords(items){
-    const seen=new Map();
-    items.forEach(item=>{const key=item.word.toLowerCase();if(!seen.has(key))seen.set(key,{word:item.word,meaning:item.meaning,level:item.level||"å°å­¦å¿…å¤‡",key:item.key||""});});
-    return [...seen.values()].sort((a,b)=>a.word.localeCompare(b.word,"en"));
-  }
-  function dictionaryWords(){
-    if(dictionarySection==="gaokao")return uniqueDictionaryWords(window.GAOKAO_WORDS||[]);
-    if(dictionarySection==="mine"){
-      const selected=allWords().filter(item=>item.unitId===unitKey()||state.weak.includes(`${item.unitId}:${item.word}`)||state.mastered.includes(`${item.unitId}:${item.word}`)).map(item=>({...item,key:`${item.unitId}:${item.word}`,level:state.weak.includes(`${item.unitId}:${item.word}`)?"éœ€è¦å¤ä¹ ":state.mastered.includes(`${item.unitId}:${item.word}`)?"å·²ç»æŒæ¡":"æœ¬å•å…ƒ"}));
-      return uniqueDictionaryWords(selected);
-    }
-    return uniqueDictionaryWords(allWords().map(item=>({...item,level:`${COURSE_BOOKS.find(book=>book.units.some(unit=>unit.id===item.unitId))?.grade||3}å¹´çº§`})));
-  }
-  function renderDictionary(){
-    const names={primary:"å°å­¦å¿…å¤‡å•è¯åº“",gaokao:"é«˜è€ƒå¿…å¤‡å•è¯åº“",mine:"æˆ‘çš„å­¦ä¹ è¯åº“"},all=dictionaryWords(),letters=[...new Set(all.map(item=>item.word[0]?.toUpperCase()).filter(letter=>/[A-Z]/.test(letter)))];
-    document.querySelectorAll("[data-dictionary-section]").forEach(button=>button.classList.toggle("active",button.dataset.dictionarySection===dictionarySection));
-    $("dictionaryTitle").textContent=names[dictionarySection];
-    $("dictionaryCount").textContent=`å…± ${all.length} ä¸ªè¯`;
-    $("dictionarySearch").value=dictionaryQuery;
-    $("dictionaryLetters").innerHTML=`<button class="${dictionaryLetter==="all"?"active":""}" data-dictionary-letter="all">å…¨éƒ¨</button>${letters.map(letter=>`<button class="${dictionaryLetter===letter?"active":""}" data-dictionary-letter="${letter}">${letter}</button>`).join("")}`;
-    const query=dictionaryQuery.trim().toLowerCase();
-    const filtered=all.filter(item=>(dictionaryLetter==="all"||item.word[0].toUpperCase()===dictionaryLetter)&&(!query||item.word.toLowerCase().includes(query)||item.meaning.includes(dictionaryQuery.trim())));
-    $("dictionaryGrid").innerHTML=filtered.length?filtered.slice(0,dictionaryLimit).map(item=>`<article class="dictionary-card"><button data-say="${esc(item.word)}" aria-label="æ’­æ”¾ ${esc(item.word)}">ğŸ”Š</button><div><h3>${esc(item.word)}</h3><p>${esc(item.meaning)}</p><small>${esc(item.level)}</small></div></article>`).join(""):`<div class="dictionary-empty"><span>ğŸ”</span><h2>æ²¡æœ‰æ‰¾åˆ°è¿™ä¸ªè¯</h2><p>è¯·æ£€æŸ¥æ‹¼å†™ï¼Œæˆ–åˆ‡æ¢åˆ°å¦ä¸€è¯åº“æœç´¢ã€‚</p></div>`;
-    $("dictionaryMore").hidden=filtered.length<=dictionaryLimit;
-    $("dictionaryMore").textContent=`å†æ˜¾ç¤º ${Math.max(0,Math.min(48,filtered.length-dictionaryLimit))} ä¸ªå•è¯`;
-    $("dictionaryGrid").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
-  }
-  function moveWord(known){ const pool=wordPool(); if(!pool.length)return; const w=pool[memoryIndex]; if(known){if(!state.mastered.includes(w.key))state.mastered.push(w.key);state.weak=state.weak.filter(x=>x!==w.key);toast("å·²è®°ä½ï¼šæ˜å¤©å†å›å¿†ä¸€æ¬¡");}else{if(!state.weak.includes(w.key))state.weak.push(w.key);state.mastered=state.mastered.filter(x=>x!==w.key);toast("å·²åŠ å…¥å¤ä¹ æ¸…å•ï¼Œæ…¢æ…¢æ¥");} activity();save();memoryIndex=(memoryIndex+1)%Math.max(1,pool.length);memoryFlipped=false;renderWords(); }
-
-  function renderPhonics(){
-    const icons={short:"ğŸŸ¡",long:"ğŸŸ¢",diph:"ğŸŒˆ",stops:"ğŸ’¨",consonants:"ğŸ‘„"},groups=Object.entries(PHONICS_GROUPS),total=groups.reduce((sum,[,item])=>sum+item.items.length,0),done=state.phonicsDone.length,group=PHONICS_GROUPS[phonicsGroup];
-    $("phonicsGroups").innerHTML=`<div class="phonics-progress"><div><b>éŸ³æ ‡å­¦ä¹ è¿›åº¦</b><span>${done} / ${total} ä¸ªéŸ³</span></div><i><em style="width:${Math.min(100,done/total*100)}%"></em></i></div><div class="phonics-group-buttons">${groups.map(([id,item])=>`<button class="${id===phonicsGroup?"active":""}" data-phonics-group="${id}">${icons[id]} ${item.name}<small>${item.items.length}ä¸ª</small></button>`).join("")}</div>`;
-    $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>æœ¬ç»„å­¦ä¹ ç›®æ ‡</small><h2>${group.name}</h2><p>${group.tip}</p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="å•ç‹¬æ’­æ”¾éŸ³æ ‡ ${esc(symbol)}">ğŸ”Š å•ç‹¬å¬éŸ³</button><button data-say="${esc(word)}" aria-label="æ’­æ”¾ç¤ºä¾‹è¯ ${esc(word)}">ğŸ§ å¬ç¤ºèŒƒè¯</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>ğŸ‘„ å‘éŸ³æ–¹æ³•ï¼š</b>${esc(tip)}</p><p><b>ğŸ”¤ å¸¸è§å­—æ¯ï¼š</b>${esc(spelling)}</p><ol><li>å•ç‹¬å¬éŸ³</li><li>å¬ç¤ºèŒƒè¯</li><li>æ…¢é€Ÿè·Ÿè¯»3é</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"âœ“ å·²å­¦ä¼š":"æˆ‘å·²å¬ã€çœ‹ã€è¯»3é +1 â˜€ï¸"}</button></article>`}).join("")}`;
-    $("minimalGrid").innerHTML=MINIMAL_PAIRS.map(([a,aIpa,b,bIpa])=>`<article><div><button data-say="${esc(a)}">ğŸ”Š ${esc(a)}</button><span>${esc(aIpa)}</span></div><b>VS</b><div><button data-say="${esc(b)}">ğŸ”Š ${esc(b)}</button><span>${esc(bIpa)}</span></div><p>å…ˆå¬ä¸¤éï¼Œå†æ³¨æ„ä¸¤ä¸ªè¯ä¸­ä¸åŒçš„éŸ³ã€‚</p></article>`).join("");
-    document.querySelectorAll("[data-phonics-group]").forEach(button=>button.onclick=()=>{phonicsGroup=button.dataset.phonicsGroup;renderPhonics();});
-    document.querySelectorAll("#view-phonics [data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
-    document.querySelectorAll("#view-phonics [data-say-phoneme]").forEach(button=>button.onclick=()=>speakPhoneme(button.dataset.sayPhoneme));
-    document.querySelectorAll("[data-finish-phoneme]").forEach(button=>button.onclick=()=>{const key=button.dataset.finishPhoneme;if(state.phonicsDone.includes(key)){toast("è¿™ä¸ªéŸ³æ ‡å·²ç»å­¦è¿‡äº†ï¼Œç»§ç»­å·©å›ºå§");return;}state.phonicsDone.push(key);reward(1,"å®Œæˆä¸€ä¸ªéŸ³æ ‡è·Ÿè¯»");renderPhonics();});
-  }
-
-  function catalogPlant(id=state.plant.selected){return GROWTH_CATALOG.plants.find(item=>item.id===id)||GROWTH_CATALOG.plants[0];}
-  function catalogPet(id=state.pets.selected){return GROWTH_CATALOG.pets.find(item=>item.id===id)||null;}
-  function growthLevel(xp,thresholds){let level=0;thresholds.forEach((value,index)=>{if(xp>=value)level=index;});return level;}
-  function animatedPetMarkup(pet,size="large",stage=0){
-    const level=Math.max(0,Math.min(3,Number(stage)||0));
-    return `<div class="animated-pet pet-${pet.id} size-${size} sprite-stage-${level}" data-animated-pet aria-label="ä¼šåŠ¨çš„${esc(pet.name)}ï¼Œ${esc(pet.forms[level])}"><i class="pet-ground-shadow"></i><i class="pet-sprite" style="background-image:url('${esc(pet.image)}')"></i></div>`;
-  }
-  function renderHomePet(){
-    const host=$("homePetFloat"),pet=catalogPet();
-    if(!host)return;
-    if(!pet||!state.pets.owned.includes(pet.id)){host.hidden=true;host.innerHTML="";return;}
-    const progress=petProgress(),stage=growthLevel(progress.xp,pet.thresholds);
-    host.hidden=false;
-    host.innerHTML=`<div class="home-pet-title"><div><small>æˆ‘çš„å­¦ä¹ ä¼™ä¼´</small><b>${esc(pet.name)} Â· ${esc(pet.forms[stage])}</b></div><button data-view="pets" aria-label="æ‰“å¼€åŠ¨ç‰©ä¼™ä¼´é¡µé¢">è¯¦æƒ…</button></div><div class="home-pet-playground">${animatedPetMarkup(pet,"home",stage)}<span class="pet-speech">${progress.fullness<25?"æˆ‘æœ‰ç‚¹é¥¿å•¦ï¼":"ä¸€èµ·å­¦ä¹ å§ï¼"}</span></div><div class="pet-actions"><button data-pet-action="pat">ğŸ–ï¸ æ‘¸æ‘¸</button><button data-pet-action="jump">â¬†ï¸ è·³è·ƒ</button><button data-pet-action="walk">ğŸ¾ æ•£æ­¥</button><button data-pet-feed ${state.foods<2?"disabled":""}>ğŸ¥£ å–‚é£Ÿ</button></div>`;
-  }
-  function playPetAction(action){
-    const pets=document.querySelectorAll(".home-pet-float [data-animated-pet], .pet-stage [data-animated-pet]");
-    if(!pets.length)return;
-    clearTimeout(petActionTimer);
-    pets.forEach(node=>{node.classList.remove("action-pat","action-jump","action-walk","action-happy");void node.offsetWidth;node.classList.add(`action-${action}`);});
-    const messages={pat:"å®ƒå¼€å¿ƒåœ°è¹­äº†è¹­ä½ çš„æ‰‹",jump:"å®ƒè½»å¿«åœ°è·³äº†èµ·æ¥",walk:"å®ƒåœ¨å­¦ä¹ å²›ä¸Šæ•£äº†ä¸€å°åœˆæ­¥",happy:"åƒé¥±å•¦ï¼å®ƒé«˜å…´åœ°å‘ä½ æ‰“æ‹›å‘¼"};
-    if(messages[action])toast(messages[action]);
-    petActionTimer=setTimeout(()=>pets.forEach(node=>node.classList.remove(`action-${action}`)),action==="walk"?2100:1400);
-  }
-  function plantState(){const plant=catalogPlant(),progress=plantProgress(),level=growthLevel(progress.xp,plant.thresholds);return{...plant,level:level+1,stage:level,icon:progress.energy<=0?"ğŸ¥€":plant.stages[level],name:progress.energy<=0?`${plant.name}ï¼ˆä¼‘çœ ï¼‰`:plant.forms[level]};}
-  function plantUpgradeState(id=state.plant.selected){
-    const item=catalogPlant(id),data=plantProgress(id),level=growthLevel(data.xp,item.thresholds),current=item.thresholds[level],next=item.thresholds[level+1];
-    const percent=next?Math.min(100,Math.max(0,(data.xp-current)/(next-current)*100)):100;
-    return{item,data,level,current,next,percent,remain:next?Math.max(0,next-data.xp):0};
-  }
-  function renderGardenPlots(){
-    const host=$("gardenPlots");if(!host)return;
-    const ids=[state.plant.selected,...state.plant.owned.filter(id=>id!==state.plant.selected)].slice(0,6),slots=[];
-    ids.forEach(id=>{const upgrade=plantUpgradeState(id),selected=id===state.plant.selected;slots.push(`<button class="garden-plot ${selected?"active":""}" data-select-plant="${id}" style="--plot-color:${upgrade.item.color}"><span class="plot-plant">${upgrade.data.energy<=0?"ğŸ¥€":upgrade.item.stages[upgrade.level]}</span><b>${esc(upgrade.item.name)}</b><small>${esc(upgrade.item.forms[upgrade.level])}</small><div class="plot-progress"><i style="width:${upgrade.percent}%"></i></div><em>${upgrade.next?`è·ç¦»å‡çº§ ${upgrade.remain}`:"ç»ˆæå½¢æ€"}</em></button>`);});
-    while(slots.length<6)slots.push(`<button class="garden-plot empty" data-open-market="plants"><span>ï¼‹</span><b>ç©ºç§æ¤ä½</b><small>å»å›¾é‰´è§£é”æ–°ä¼™ä¼´</small></button>`);
-    host.innerHTML=slots.join("");
-  }
-  function renderPlantAtlas(){
-    const host=$("plantAtlas"),stats=$("plantAtlasStats");if(!host||!stats)return;
-    const rarityOrder=["æ™®é€š","è¿›é˜¶","ç¨€æœ‰","å²è¯—","ä¼ è¯´","ç¥è¯"],ownedCount=state.plant.owned.length,matureCount=state.plant.owned.filter(id=>{const item=catalogPlant(id);return plantProgress(id).xp>=item.thresholds.at(-1);}).length;
-    stats.innerHTML=`<div><b>${ownedCount}/${GROWTH_CATALOG.plants.length}</b><small>å·²è§£é”</small></div><div><b>${matureCount}</b><small>ç»ˆæå½¢æ€</small></div><div><b>${state.suns}</b><small>å°å¤ªé˜³</small></div>`;
-    host.innerHTML=rarityOrder.map((rarity,rarityIndex)=>{const items=GROWTH_CATALOG.plants.filter(item=>item.rarity===rarity);if(!items.length)return"";const unlocked=items.filter(item=>state.plant.owned.includes(item.id)).length;return `<section class="atlas-group rarity-${rarityIndex}"><div class="atlas-group-title"><div><span>${rarityIndex+1}</span><h3>${esc(rarity)}å“è´¨</h3></div><small>${unlocked}/${items.length} å·²è§£é”</small></div><div class="atlas-grid">${items.map(item=>{const owned=state.plant.owned.includes(item.id),selected=state.plant.selected===item.id,upgrade=owned?plantUpgradeState(item.id):null,mature=owned&&!upgrade.next;return `<article class="atlas-card ${owned?"unlocked":"locked"} ${selected?"selected":""} ${mature?"mature":""}" style="--atlas-color:${item.color}"><div class="atlas-plant"><span>${owned?item.stages[upgrade.level]:item.stages.at(-1)}</span>${owned?"":"<i>ğŸ”’</i>"}</div><div class="atlas-card-copy"><div><em>${esc(item.rarity)}</em><small>${esc(item.role||"å­¦ä¹ å‹")}</small></div><h3>${esc(item.name)}</h3><p>${esc(item.description)}</p>${owned?`<div class="atlas-progress"><span style="width:${upgrade.percent}%"></span></div><small class="atlas-progress-copy">${upgrade.next?`${upgrade.data.xp}/${upgrade.next} Â· è¿˜éœ€ ${upgrade.remain} æˆé•¿å€¼`:`${upgrade.data.xp} Â· å·²è¾¾ç»ˆæå½¢æ€`}</small>`:`<small class="atlas-price">â˜€ï¸ ${item.price||"åˆå§‹èµ é€"}</small>`}</div><button class="${owned?"soft":"primary"}" ${owned?`data-select-plant="${item.id}"`:`data-buy-plant="${item.id}"`} ${selected||(!owned&&state.suns<item.price)?"disabled":""}>${selected?"âœ“ æ­£åœ¨ç…§é¡¾":owned?"æ”¾å…¥ä¸»èŠ±å›­":item.price?`${item.price} â˜€ï¸ è§£é”`:"åˆå§‹èµ é€"}</button></article>`;}).join("")}</div></section>`;}).join("");
-  }
-  function renderGarden(){
-    const plant=plantState(),progress=plantProgress(),signed=state.signIns.includes(iso()),upgrade=plantUpgradeState();
-    $("gardenPlant").textContent=plant.icon;$("gardenPlant").style.setProperty("--plant-color",plant.color);$("gardenPlant").classList.toggle("ultimate",plant.stage===plant.stages.length-1&&progress.energy>0);$("gardenLevel").textContent=`Lv.${plant.level}`;$("gardenRarity").textContent=`${plant.rarity}æ¤ç‰© Â· ${catalogPlant().name}`;$("gardenPlantName").textContent=plant.name;$("energyText").textContent=`${progress.energy} / 100`;$("energyBar").style.width=`${progress.energy}%`;
-    $("gardenMessage").textContent=progress.energy<=0?"æ¤ç‰©å·²ç»ä¼‘çœ ã€‚å­¦ä¹ ä¸ä¼šè‡ªåŠ¨å”¤é†’å®ƒï¼Œè¯·äº²æ‰‹æµ‡çŒæ¢å¤æ´»åŠ›ã€‚":progress.energy<30?"æ¤ç‰©æœ‰ç‚¹æ²¡ç²¾ç¥ï¼Œéœ€è¦ä½ äº²æ‰‹æµ‡çŒï¼›æœ‰è¶³å¤Ÿå°å¤ªé˜³å°±å¯ä»¥è¿ç»­ç…§é¡¾ã€‚":"å­¦ä¹ è·å¾—å°å¤ªé˜³åï¼Œç”±ä½ å†³å®šæµ‡çŒå¤šå°‘æ¬¡ï¼Œæ²¡æœ‰æ¯æ—¥æ¬¡æ•°ä¸Šé™ã€‚";
-    $("checkInBtn").disabled=signed;$("checkInBtn").textContent=signed?"âœ“ ä»Šæ—¥å·²ç­¾åˆ°":"ä»Šæ—¥ç­¾åˆ° +2 â˜€ï¸";$("feedBtn").disabled=state.suns<2;$("feedBtn").textContent="äº²æ‰‹æµ‡çŒ âˆ’2 â˜€ï¸";
-    $("plantUpgradeText").textContent=upgrade.next?`${progress.xp} / ${upgrade.next}`:`${progress.xp} Â· å·²æ»¡çº§`;$("plantUpgradeBar").style.width=`${upgrade.percent}%`;$("plantUpgradeHint").textContent=upgrade.next?`è·ç¦»è¿›åŒ–ä¸ºâ€œ${upgrade.item.forms[upgrade.level+1]}â€è¿˜éœ€ ${upgrade.remain} æˆé•¿å€¼ã€‚æ¯æ¬¡äº²æ‰‹æµ‡çŒå¢åŠ  5 ç‚¹ã€‚`:"å·²ç»è¾¾åˆ°ç»ˆæå½¢æ€ï¼Œä»å¯ç»§ç»­æµ‡çŒä¿æŒæ´»åŠ›ã€‚";
-    $("growthRoad").innerHTML=catalogPlant().stages.map((icon,index)=>`<article class="${progress.xp>=catalogPlant().thresholds[index]?"unlocked":""}"><span>${icon}</span><b>${esc(catalogPlant().forms[index])}</b><small>${catalogPlant().thresholds[index]}æˆé•¿å€¼</small></article>`).join("");
-    $("ownedPlantGrid").innerHTML=state.plant.owned.map(id=>{const item=catalogPlant(id),data=plantProgress(id),level=growthLevel(data.xp,item.thresholds),info=plantUpgradeState(id);return `<button class="owned-plant ${id===state.plant.selected?"active":""}" data-select-plant="${id}"><span>${data.energy<=0?"ğŸ¥€":item.stages[level]}</span><div><b>${esc(item.name)}</b><small>${esc(item.forms[level])} Â· ${data.xp}æˆé•¿å€¼</small><i class="owned-progress"><u style="width:${info.percent}%"></u></i></div><em>${id===state.plant.selected?"æ­£åœ¨ç…§é¡¾":"é€‰æ‹©"}</em></button>`;}).join("");
-    renderGardenPlots();renderPlantAtlas();
-  }
-
-  function renderMarket(){
-    $("marketSuns").textContent=state.suns;$("marketFoods").textContent=state.foods;document.querySelectorAll("[data-market-tab]").forEach(button=>button.classList.toggle("active",button.dataset.marketTab===marketTab));
-    if(marketTab==="plants"){$("marketNote").innerHTML=`<b>10ç§æ¤ç‰© Â· è¶Šç¨€æœ‰è¶Šéš¾å…‘æ¢</b><span>å…‘æ¢åªæ˜¯å¼€å§‹ï¼›æœ‰å¤šå°‘å°å¤ªé˜³å°±èƒ½æµ‡çŒå¤šå°‘æ¬¡ï¼Œæœ€é«˜å½¢æ€éœ€è¦500æˆé•¿å€¼ã€‚</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.plants.map((item,index)=>{const owned=state.plant.owned.includes(item.id),selected=state.plant.selected===item.id;return `<article class="market-card rarity-${index}"><div class="market-preview" style="--accent:${item.color}"><span>${item.stages.at(-1)}</span><small>ç»ˆæå½¢æ€</small></div><div class="market-copy"><em>${esc(item.rarity)}</em><h2>${esc(item.name)}</h2><p>${esc(item.description)}</p><div class="form-road">${item.stages.map(icon=>`<span>${icon}</span>`).join("â†’")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-plant="${item.id}"`:`data-buy-plant="${item.id}"`} ${selected?"disabled":""}>${selected?"âœ“ æ­£åœ¨ç…§é¡¾":owned?"é€‰æ‹©è¿™æ ªæ¤ç‰©":item.price?`${item.price} â˜€ï¸ å…‘æ¢`:"åˆå§‹èµ é€"}</button></article>`;}).join("");}
-    else{$("marketNote").innerHTML=`<b>3ç§åŠ¨ç‰© Â· å°çŒ«ã€å°ç‹—ã€å°ä¹Œé¾Ÿ</b><span>æ¯ç§åŠ¨ç‰©éƒ½æœ‰å¹¼å´½ã€å°‘å¹´ã€æˆå¹´å’Œå®Œå…¨æˆé•¿4ä¸ªçœŸå®æˆé•¿å½¢æ€ã€‚</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.pets.map((item,index)=>{const owned=state.pets.owned.includes(item.id),selected=state.pets.selected===item.id;return `<article class="market-card pet-product rarity-${index+1}"><div class="market-preview pet-market-preview" style="--accent:${item.color}">${animatedPetMarkup(item,"shop",3)}<small>${esc(item.species)} Â· å®Œå…¨æˆé•¿</small></div><div class="market-copy"><em>${esc(item.species)}</em><h2>${esc(item.name)}</h2><p>${esc(item.description)}</p><div class="pet-growth-preview">${item.forms.map((form,stage)=>`<div>${animatedPetMarkup(item,"road",stage)}<small>${esc(form)}</small></div>`).join("")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-pet="${item.id}"`:`data-buy-pet="${item.id}"`} ${selected?"disabled":""}>${selected?"âœ“ å½“å‰ä¼™ä¼´":owned?"é€‰æ‹©è¿™åªåŠ¨ç‰©":`${item.price} â˜€ï¸ é¢†å…»`}</button></article>`;}).join("");}
-  }
-
-  function carePets(){let changed=false;state.pets.owned.forEach(id=>{const progress=petProgress(id),last=progress.lastUpdate||iso(),days=daysBetween(last,iso());if(days>0){progress.fullness=Math.max(0,progress.fullness-days*4);progress.lastUpdate=iso();changed=true;}});if(changed)save();}
-  function renderPets(){
-    carePets();const pet=catalogPet();
-    if(!pet){$("petCare").innerHTML=`<section class="panel pet-empty"><span>ğŸ¾</span><h2>è¿˜æ²¡æœ‰åŠ¨ç‰©ä¼™ä¼´</h2><p>å»æˆé•¿å•†åŸé€‰æ‹©å°çŒ«ã€å°ç‹—æˆ–å°ä¹Œé¾Ÿã€‚é¢†å…»åï¼Œä»»åŠ¡è·å¾—çš„ç²®é£Ÿå°±èƒ½æ´¾ä¸Šç”¨åœºã€‚</p><button class="primary" data-open-market="animals">å»åŠ¨ç‰©é¢†å…»åŒº</button></section>`;$("ownedPetGrid").innerHTML="";return;}
-    const progress=petProgress(),stage=growthLevel(progress.xp,pet.thresholds),next=pet.thresholds[stage+1];
-    $("petCare").innerHTML=`<section class="pet-stage" style="--pet-color:${pet.color}">${animatedPetMarkup(pet,"large",stage)}<small>${esc(pet.species)} Â· ç¬¬${stage+1}æˆé•¿é˜¶æ®µ</small><h2>${esc(pet.forms[stage])}</h2><p>${progress.fullness<=0?"ä¼™ä¼´é¥¿å¾—æ²¡æœ‰ç²¾ç¥äº†ï¼Œè¯·äº²æ‰‹æŠ•å–‚ã€‚":"å®ƒä¼šå‘¼å¸ã€æ‘‡æ‘†å’Œè·³è·ƒï¼Œç‚¹ä¸‹é¢çš„æŒ‰é’®ä¸å®ƒäº’åŠ¨å§ã€‚"}</p><div class="pet-actions care-actions"><button data-pet-action="pat">ğŸ–ï¸ æ‘¸æ‘¸</button><button data-pet-action="jump">â¬†ï¸ è·³è·ƒ</button><button data-pet-action="walk">ğŸ¾ æ•£æ­¥</button></div></section><section class="panel pet-stats"><div class="pet-wallet">ğŸ¥£ ç²®é£Ÿ <b>${state.foods}</b></div><div class="energy-row"><span>é¥±é£Ÿåº¦</span><b>${progress.fullness}/100</b></div><div class="energy-bar"><span style="width:${progress.fullness}%"></span></div><div class="energy-row"><span>æˆé•¿å€¼</span><b>${progress.xp}${next?` / ${next}`:" Â· å·²è¾¾ç»ˆæ"}</b></div><div class="energy-bar pet-xp"><span style="width:${next?Math.min(100,progress.xp/next*100):100}%"></span></div><button class="primary" id="feedPetBtn" ${state.foods<2?"disabled":""}>äº²æ‰‹æŠ•å–‚ âˆ’2 ğŸ¥£</button><small>æ¯æ¬¡ +6 æˆé•¿å€¼ï¼›æ²¡æœ‰æ¯æ—¥æ¬¡æ•°ä¸Šé™ï¼Œæœ‰å¤šå°‘ç²®é£Ÿå°±èƒ½æŠ•å–‚å¤šå°‘æ¬¡ã€‚ç»ˆæå½¢æ€éœ€è¦420æˆé•¿å€¼ã€‚</small></section>`;
-    $("feedPetBtn").onclick=feedPet;
-    $("ownedPetGrid").innerHTML=state.pets.owned.map(id=>{const item=catalogPet(id),data=petProgress(id),level=growthLevel(data.xp,item.thresholds);return `<button class="owned-pet ${id===state.pets.selected?"active":""}" data-select-pet="${id}">${animatedPetMarkup(item,"mini",level)}<div><b>${esc(item.name)}</b><small>${esc(item.forms[level])} Â· ${data.xp}/420</small></div><em>${id===state.pets.selected?"å½“å‰ä¼™ä¼´":"é€‰æ‹©"}</em></button>`;}).join("");
-  }
-  function feedPet(){const pet=catalogPet();if(!pet)return;if(state.foods<2)return toast("ç²®é£Ÿä¸è¶³ï¼Œå®Œæˆå­¦ä¹ ä»»åŠ¡å¯ä»¥è·å¾—ç²®é£Ÿ");const progress=petProgress();state.foods-=2;progress.fullness=Math.min(100,progress.fullness+20);progress.xp+=6;progress.lastFed=iso();progress.lastUpdate=iso();save();renderHomePet();if($("view-pets").classList.contains("active"))renderPets();if($("view-market").classList.contains("active"))renderMarket();playPetAction("happy");}
-  function buyPlant(id){const item=catalogPlant(id);if(state.plant.owned.includes(id))return selectPlant(id);if(state.suns<item.price)return toast(`è¿˜éœ€è¦ ${item.price-state.suns} ä¸ªå°å¤ªé˜³ï¼ŒåšæŒå®Œæˆä»»åŠ¡å§`);state.suns-=item.price;state.plant.owned.push(id);state.plant.selected=id;plantProgress(id);state.plant.lastDate=iso();save();toast(`æˆåŠŸè§£é” ${item.name}ï¼Œå®ƒå·²ç»è¿›å…¥å­¦ä¹ å®ˆæŠ¤èŠ±å›­`);if($("view-market").classList.contains("active"))renderMarket();if($("view-garden").classList.contains("active"))renderGarden();}
-  function selectPlant(id){if(!state.plant.owned.includes(id))return;state.plant.selected=id;state.plant.lastDate=iso();plantProgress(id);save();toast(`å·²é€‰æ‹© ${catalogPlant(id).name}`);renderGarden();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
-  function buyPet(id){const item=GROWTH_CATALOG.pets.find(pet=>pet.id===id);if(!item)return;if(state.pets.owned.includes(id))return selectPet(id);if(state.suns<item.price)return toast(`è¿˜éœ€è¦ ${item.price-state.suns} ä¸ªå°å¤ªé˜³æ‰èƒ½é¢†å…»`);state.suns-=item.price;state.pets.owned.push(id);state.pets.selected=id;state.pets.progress[id]={fullness:70,xp:0,lastFed:"",lastUpdate:iso()};save();toast(`æˆåŠŸé¢†å…» ${item.name}ï¼Œè®°å¾—ç”¨ä»»åŠ¡ç²®é£Ÿäº²æ‰‹æŠ•å–‚`);renderMarket();}
-  function selectPet(id){if(!state.pets.owned.includes(id))return;state.pets.selected=id;petProgress(id);save();toast(`å·²é€‰æ‹© ${catalogPet(id).name} ä½œä¸ºå½“å‰ä¼™ä¼´`);renderPets();renderHomePet();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
-
-  function renderReport(){
-    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0; $("reportCards").innerHTML=`<article><span>ğŸ“š</span><b>${completedUnits()}</b><small>å®Œæˆå•å…ƒ</small></article><article><span>ğŸ§©</span><b>${state.stageDone.length}</b><small>å®Œæˆå­¦ä¹ æ­¥éª¤</small></article><article><span>ğŸ”¤</span><b>${state.mastered.length}</b><small>æŒæ¡å•è¯</small></article><article><span>ğŸ¯</span><b>${accuracy||"â€”"}${accuracy?"%":""}</b><small>å°æµ‹æ­£ç¡®ç‡</small></article><article><span>ğŸ¥£</span><b>${state.foods}</b><small>ç²®é£Ÿåº“å­˜</small></article><article><span>ğŸ¾</span><b>${state.pets.owned.length}</b><small>åŠ¨ç‰©ä¼™ä¼´</small></article>`;
-    const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const key=iso(d);days.push({name:["æ—¥","ä¸€","äºŒ","ä¸‰","å››","äº”","å…­"][d.getDay()],count:state.activity[key]||0,today:i===0});} const max=Math.max(4,...days.map(d=>d.count)); $("weekChart").innerHTML=days.map(d=>`<div class="chart-day"><b>${d.count}</b><span style="height:${Math.max(8,d.count/max*120)}px"></span><small>${d.today?"ä»Šå¤©":"å‘¨"+d.name}</small></div>`).join("");
-    const advice=[]; if(state.weak.length)advice.push(`æœ¬å‘¨æœ‰ ${state.weak.length} ä¸ªè¯éœ€è¦å¤ä¹ ã€‚æ¯å¤©åªæŒ‘5ä¸ªåšâ€œçœ‹ä¸­æ–‡è¯´è‹±æ–‡â€ï¼Œä¸è¦ç½šæŠ„ã€‚`); else advice.push("ç›®å‰æ²¡æœ‰ç§¯ç´¯é”™è¯ã€‚å®Œæˆä¸€æ¬¡å•å…ƒå°æµ‹åï¼Œç³»ç»Ÿä¼šç»™å‡ºæ›´å‡†ç¡®çš„å¤ä¹ å»ºè®®ã€‚"); if(streakCount()<3)advice.push("å…ˆæŠŠç›®æ ‡å®šä¸ºè¿ç»­3å¤©ï¼Œæ¯å¤©20åˆ†é’Ÿï¼›å½¢æˆèŠ‚å¥æ¯”ä¸€æ¬¡å­¦ä¸€å°æ—¶æ›´é‡è¦ã€‚"); else advice.push(`å·²ç»è¿ç»­å­¦ä¹  ${streakCount()} å¤©ã€‚è¯·å¤šè‚¯å®šå­©å­çš„åšæŒï¼Œä¸åªçœ‹åˆ†æ•°ã€‚`); advice.push("å®¶é•¿å¯ä»¥åšå¬ä¼—ï¼šè¯·å­©å­ç”¨æœ¬å•å…ƒå¥å‹ä»‹ç»ä¸€ä»¶çœŸå®çš„äº‹ï¼Œå¬æ‡‚åè¿½é—®ä¸€ä¸ªç®€å•é—®é¢˜ã€‚"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
-  }
-
-  document.addEventListener("click",e=>{
-    const view=e.target.closest("[data-view]"); if(view){route(view.dataset.view);return;}
-    const action=e.target.closest("[data-action]"); if(action?.dataset.action==="print"){window.print();return;}
-    const grade=e.target.closest("[data-grade]"); if(grade){selectedGrade=Number(grade.dataset.grade);renderCourses();return;}
-    const term=e.target.closest("[data-term]"); if(term){selectedTerm=term.dataset.term;renderCourses();return;}
-    const unit=e.target.closest("[data-unit-book]"); if(unit){state.bookId=unit.dataset.unitBook;state.unitIndex=Number(unit.dataset.unitIndex);state.stage="overview";selectedGrade=bookNow().grade;selectedTerm=bookNow().term;save();quizAnswers={};route("unit");return;}
-    const stage=e.target.closest("[data-stage]"); if(stage){state.stage=stage.dataset.stage;save();quizAnswers={};renderUnit();return;}
-    const open=e.target.closest("[data-open-stage],[data-daily-stage]"); if(open){state.stage=open.dataset.openStage||open.dataset.dailyStage;save();route("unit");return;}
-    const dictation=e.target.closest("[data-open-dictation]"); if(dictation){openDictation(dictation.dataset.openDictation);return;}
-    const review=e.target.closest("[data-open-review]"); if(review){openReview();return;}
-    const openMarket=e.target.closest("[data-open-market]"); if(openMarket){marketTab=openMarket.dataset.openMarket;route("market");return;}
-    const market=e.target.closest("[data-market-tab]"); if(market){marketTab=market.dataset.marketTab;renderMarket();return;}
-    const buyPlantButton=e.target.closest("[data-buy-plant]"); if(buyPlantButton){buyPlant(buyPlantButton.dataset.buyPlant);return;}
-    const selectPlantButton=e.target.closest("[data-select-plant]"); if(selectPlantButton){selectPlant(selectPlantButton.dataset.selectPlant);return;}
-    const buyPetButton=e.target.closest("[data-buy-pet]"); if(buyPetButton){buyPet(buyPetButton.dataset.buyPet);return;}
-    const selectPetButton=e.target.closest("[data-select-pet]"); if(selectPetButton){selectPet(selectPetButton.dataset.selectPet);return;}
-    const petAction=e.target.closest("[data-pet-action]"); if(petAction){playPetAction(petAction.dataset.petAction);return;}
-    const petFeed=e.target.closest("[data-pet-feed]"); if(petFeed){feedPet();return;}
-    const dictionaryTab=e.target.closest("[data-dictionary-section]"); if(dictionaryTab){dictionarySection=dictionaryTab.dataset.dictionarySection;dictionaryLetter="all";dictionaryQuery="";dictionaryLimit=48;renderDictionary();return;}
-    const dictionaryLetterButton=e.target.closest("[data-dictionary-letter]"); if(dictionaryLetterButton){dictionaryLetter=dictionaryLetterButton.dataset.dictionaryLetter;dictionaryLimit=48;renderDictionary();return;}
-    const filter=e.target.closest("[data-word-filter]"); if(filter){memoryFilter=filter.dataset.wordFilter;memoryIndex=0;memoryFlipped=false;renderWords();return;}
-    const dot=e.target.closest("[data-word-index]"); if(dot){memoryIndex=Number(dot.dataset.wordIndex);memoryFlipped=false;renderWords();}
-  });
-  $("continueBtn").onclick=()=>{state.stage=nextStage().id;save();route("unit");};
-  $("dictionarySearch").addEventListener("input",event=>{dictionaryQuery=event.target.value;dictionaryLetter="all";dictionaryLimit=48;renderDictionary();$("dictionarySearch").focus();});
-  $("dictionaryMore").onclick=()=>{dictionaryLimit+=48;renderDictionary();};
-  $("closePracticeDialog").onclick=()=>{$("practiceDialog").close?.();$("practiceDialog").classList.remove("open");};
-  $("practiceDialog").addEventListener("click",event=>{if(event.target===$("practiceDialog"))$("closePracticeDialog").click();});
-  $("wordKnow").onclick=()=>moveWord(true); $("wordAgain").onclick=()=>moveWord(false);
-  $("claimDailyBonus").onclick=()=>{const key=`${iso()}:${unitKey()}`,todayTasks=activeTasks();if(dailyComplete()<todayTasks.length||state.bonuses.includes(key))return;state.bonuses.push(key);reward(3,"å®Œæˆä»Šæ—¥å…¨éƒ¨ä»»åŠ¡",2);renderToday();};
-  $("checkInBtn").onclick=()=>{if(state.signIns.includes(iso()))return;state.signIns.push(iso());reward(2,"ä»Šæ—¥ç­¾åˆ°æˆåŠŸ");renderGarden();};
-  $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("å°å¤ªé˜³ä¸è¶³ï¼Œå…ˆå®Œæˆå­¦ä¹ ä»»åŠ¡å§");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("ğŸ’§ æµ‡çŒæˆåŠŸï¼Œæ¤ç‰©æˆé•¿å€¼ +5ï¼›å°å¤ªé˜³å……è¶³æ—¶å¯ä»¥ç»§ç»­æµ‡çŒ");renderGarden();};
-
-  carePlant();carePets();renderHeader();renderHome();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=16",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
-})();
+    light:["ç¯ï¼›ç¯å…‰","å…‰çº¿","è½»çš„","æµ…è‰²çš„","ç‚¹ç‡ƒ"],in:["åœ¨â€¦â€¦é‡Œé¢","è¿›å…¥ï¼›åœ¨å†…","åœ¨å®¶ï¼›åœ¨åœº","æµè¡Œçš„"],right:["å³è¾¹","æ­£ç¡®çš„","æƒåˆ©","æ°å¥½"],left:["å·¦è¾¹","ç¦»å¼€äº†","å‰©ä¸‹çš„"],fine:["å¾ˆå¥½","å¥åº·çš„","ç²¾ç»†çš„","ç½šæ¬¾"],kind:["äº²åˆ‡çš„ï¼›å–„è‰¯çš„","ç§ç±»"],well:["å¥½ï¼›å¾ˆå¥½åœ°","å¥åº·çš„","äº•"],watch:["è§‚çœ‹","æ‰‹è¡¨","ç•™æ„ï¼›çœ‹å®ˆ"],play:["ç©ï¼›å‚åŠ è¿åŠ¨","æ¼”å¥","æˆå‰§","æ’­æ”¾"],call:["æ‰“ç”µè¯","å‘¼å«ï¼›ç§°å‘¼","å«å£°"],change:["é›¶é’±","æ”¹å˜ï¼›å˜åŒ–","æ›´æ¢"],fit:["åˆèº«","é€‚åˆ","å¥åº·çš„"],mean:["æ„æ€æ˜¯","æ„å‘³ç€","åå•¬çš„ï¼›åˆ»è–„çš„"],orange:["æ©™è‰²","æ©™å­"],fish:["é±¼ï¼›é±¼è‚‰","æ•é±¼"],water:["æ°´","ç»™â€¦â€¦æµ‡æ°´"],work:["å·¥ä½œ","èµ·ä½œç”¨","ä½œå“"],rest:["ä¼‘æ¯","å…¶ä½™éƒ¨åˆ†"],plan:["è®¡åˆ’","å¹³é¢å›¾"],trip:["æ—…è¡Œ","ç»Šå€’"],train:["ç«è½¦","è®­ç»ƒ"],book:["ä¹¦","é¢„è®¢"],class:["ç­çº§","è¯¾ç¨‹","ç­‰çº§ï¼›ç§ç±»"],school:["å­¦æ ¡","å­¦æ´¾ï¼›å­¦æ ¡å…¨ä½“å¸ˆç”Ÿ"],read:["é˜…è¯»","è¯»æ‡‚ï¼›æ˜¾ç¤º"],run:["è·‘æ­¥","ç»è¥","è¿è¡Œ"],draw:["ç”»ç”»","æ‹‰ï¼›æ‹–","å¹³å±€"],wear:["ç©¿ï¼›æˆ´","ç£¨æŸ"],meet:["é‡è§ï¼›ä¼šé¢","æ»¡è¶³ï¼›ç¬¦åˆ"],please:["è¯·","ä½¿é«˜å…´ï¼›ä½¿æ»¡æ„"],name:["åå­—","å‘½å"],friend:["æœ‹å‹","æ”¯æŒè€…"],family:["å®¶åº­ï¼›å®¶äºº","å®¶æ—"],love:["çˆ±ï¼›å–œçˆ±","çƒ­çˆ±çš„äººæˆ–äº‹"],like:["å–œæ¬¢","åƒï¼›å¦‚åŒ"],day:["ä¸€å¤©","ç™½å¤©","æ—¶æœŸ"],color:["é¢œè‰²","ç»™â€¦â€¦æ¶‚è‰²"],cold:["å¯’å†·çš„","æ„Ÿå†’","å†·æ·¡çš„"],warm:["æ¸©æš–çš„","çƒ­æƒ…çš„","ä½¿æš–å’Œ"],party:["èšä¼š","æ”¿å…š","ä¸€æ–¹ï¼›å›¢ä½“"],gift:["ç¤¼ç‰©","å¤©èµ‹"],time:["æ—¶é—´","æ¬¡æ•°","ä¸ºâ€¦â€¦è®¡æ—¶"],homework:["å®¶åº­ä½œä¸š","å‡†å¤‡å·¥ä½œ"],clean:["å¹²å‡€çš„","æ‰“æ‰«","å®Œå…¨åœ°"],flower:["èŠ±","å¼€èŠ±"],visit:["æ‹œè®¿ï¼›å‚è§‚","è®¿é—®ï¼›é€—ç•™"],stay:["åœç•™","ä¿æŒ","ä½å®¿"],message:["ç•™è¨€ï¼›æ¶ˆæ¯","è¦æ—¨"],busy:["å¿™ç¢Œçš„","å çº¿çš„","çƒ­é—¹çš„"],number:["æ•°å­—ï¼›å·ç ","æ•°é‡","ç¼–å·"],short:["çŸ®çš„ï¼›çŸ­çš„","ç¼ºå°‘çš„","çŸ­è£¤ï¼ˆshortsï¼‰"],strong:["å¼ºå£®çš„","å¼ºçƒˆçš„","æ“…é•¿çš„"],hard:["åŠªåŠ›åœ°","å›°éš¾çš„","åšç¡¬çš„"],star:["æ˜Ÿæ˜Ÿ","æ˜æ˜Ÿ","ä¸»æ¼”"],present:["ç¤¼ç‰©","ç°åœ¨","å‡ºå¸­çš„","å±•ç¤º"],card:["å¡ç‰‡","çº¸ç‰Œ","è¯ä»¶"],spring:["æ˜¥å¤©","æ³‰æ°´","å¼¹ç°§","è·³èµ·"],season:]½ÓMí¢G§²ÚîÆ­yÒG¶W62†—FVÒæf÷&×5¶ÆWfVÅÒ—Ò+rG¶FFç‡Şh‰™[şXÃÂ÷6ÖÆÃãÆ’6Æ73Ò&÷væVB×&öw&W72#ãÇR7G–ÆSÒ'v–GFƒ¢G¶–æfòçW&6VçGÒR#ãÂ÷SãÂö“ãÂöF—cãÆVÓâG¶–CÓÓ×7FFRçÆçBç6VÆV7FVCò.jÚ>YÊxZ~šâ#¢.˜hº’'ÓÂöVÓãÂö'WGFöãæ·Ò’æ¦ö–â‚""“°¢&VæFW$v&FVåÆ÷G2‚“·&VæFW%ÆçDFÆ2‚“°¢Ğ ¢gVæ7F–öâ&VæFW$Ö&¶WB‚—°¢B‚&Ö&¶WE7Vç2"’çFW‡D6öçFVçC×7FFRç7Vç3²B‚&Ö&¶WDfööG2"’çFW‡D6öçFVçC×7FFRæfööG3¶Fö7VÖVçBçVW'•6VÆV7F÷$ÆÂ‚%¶FFÖÖ&¶WB×F%Ò"’æf÷$V6‚†'WGFöãÓæ'WGFöâæ6Æ74Æ—7BçFövvÆR‚&7F—fR"Æ'WGFöâæFF6WBæÖ&¶WEF#ÓÓÖÖ&¶WEF"’“°¢–b†Ö&¶WEF#ÓÓÒ'ÆçG2"—²B‚&Ö&¶WDæ÷FR"’æ–ææW$…DÔÃÖÆ#ãzxŞjHŞxš’+r‹h®zˆiÈ‹h®™«îXYhÚ#Âö#ãÇ7ãîXYhÚ.Xú®iŠş[ÈZx¾ûÉ¾iÈZI®[	[şZJ®™‹>[ˆ;ŞkX~xÎZI®[	jÊûÈÎiÈš¹[Ú.h™ÈŠhSh‰™[şXÎ8#Â÷7ãæ²B‚&Ö&¶WDw&–B"’æ–ææW$…DÔÃÔu$õuD…ô4DÄôrçÆçG2æÖ‚†—FVÒÆ–æFW‚“Óç¶6öç7B÷væVC×7FFRçÆçBæ÷væVBæ–æ6ÇVFW2†—FVÒæ–B’Ç6VÆV7FVC×7FFRçÆçBç6VÆV7FVCÓÓÖ—FVÒæ–C·&WGW&âÆ'F–6ÆR6Æ73Ò&Ö&¶WBÖ6&B&&—G’ÒG¶–æFW‡Ò#ãÆF—b6Æ73Ò&Ö&¶WB×&Wf–Wr"7G–ÆSÒ"ÒÖ66VçC¢G¶—FVÒæ6öÆ÷'Ò#ãÇ7ãâG¶—FVÒç7FvW2æB‚Ó—ÓÂ÷7ããÇ6ÖÆÃî{¸iè[Ú.hÂ÷6ÖÆÃãÂöF—cãÆF—b6Æ73Ò&Ö&¶WBÖ6÷’#ãÆVÓâG¶W62†—FVÒç&&—G’—ÓÂöVÓãÆƒ#âG¶W62†—FVÒææÖR—ÓÂöƒ#ãÇâG¶W62†—FVÒæFW67&—F–öâ—ÓÂ÷ãÆF—b6Æ73Ò&f÷&Ò×&öB#âG¶—FVÒç7FvW2æÖ†–6öãÓæÇ7ãâG¶–6öçÓÂ÷7ãæ’æ¦ö–â‚.(i""—ÓÂöF—cãÂöF—cãÆ'WGFöâ6Æ73Ò"G¶÷væVCò'6ögB#¢'&–Ö'’'Ò"G¶÷væVCöFF×6VÆV7B×ÆçCÒ"G¶—FVÒæ–GÒ&¦FFÖ'W’×ÆçCÒ"G¶—FVÒæ–GÒ&ÒG·6VÆV7FVCò&F—6&ÆVB#¢"'ÓâG·6VÆV7FVCò.)É2jÚ>YÊxZ~šâ#¦÷væVCò.˜hº‹ùj
+®jHŞxš’#¦—FVÒç&–6SöG¶—FVÒç&–6WÒ)ˆûˆòXYhÚ&¢.X‰ŞZx¾‹Z˜'ÓÂö'WGFöããÂö'F–6ÆSæ·Ò’æ¦ö–â‚""“·Ğ¢VÇ6W²B‚&Ö&¶WDæ÷FR"’æ–ææW$…DÔÃÖÆ#ã>zxŞXªxš’+r[şxÊ¾8[şx¹~8[şK˜Î›éóÂö#ãÇ7ãîjøşzxŞXªxš˜;ŞiÈ[›Î[KŞ8[	[›N8h‰[›NY(ÎZèÎXZh‰™[óNKŠ®yÉşZéîh‰™[ş[Ú.h8#Â÷7ãæ²B‚&Ö&¶WDw&–B"’æ–ææW$…DÔÃÔu$õuD…ô4DÄôrçWG2æÖ‚†—FVÒÆ–æFW‚“Óç¶6öç7B÷væVC×7FFRçWG2æ÷væVBæ–æ6ÇVFW2†—FVÒæ–B’Ç6VÆV7FVC×7FFRçWG2ç6VÆV7FVCÓÓÖ—FVÒæ–C·&WGW&âÆ'F–6ÆR6Æ73Ò&Ö&¶WBÖ6&BWB×&öGV7B&&—G’ÒG¶–æFW‚³Ò#ãÆF—b6Æ73Ò&Ö&¶WB×&Wf–WrWBÖÖ&¶WB×&Wf–Wr"7G–ÆSÒ"ÒÖ66VçC¢G¶—FVÒæ6öÆ÷'Ò#âG¶æ–ÖFVEWDÖ&·W†—FVÒÂ'6†÷"Ã2—ÓÇ6ÖÆÃâG¶W62†—FVÒç7V6–W2—Ò+rZèÎXZh‰™[óÂ÷6ÖÆÃãÂöF—cãÆF—b6Æ73Ò&Ö&¶WBÖ6÷’#ãÆVÓâG¶W62†—FVÒç7V6–W2—ÓÂöVÓãÆƒ#âG¶W62†—FVÒææÖR—ÓÂöƒ#ãÇâG¶W62†—FVÒæFW67&—F–öâ—ÓÂ÷ãÆF—b6Æ73Ò'WBÖw&÷wF‚×&Wf–Wr#âG¶—FVÒæf÷&×2æÖ‚†f÷&ÒÇ7FvR“ÓæÆF—câG¶æ–ÖFVEWDÖ&·W†—FVÒÂ'&öB"Ç7FvR—ÓÇ6ÖÆÃâG¶W62†f÷&Ò—ÓÂ÷6ÖÆÃãÂöF—cæ’æ¦ö–â‚""—ÓÂöF—cãÂöF—cãÆ'WGFöâ6Æ73Ò"G¶÷væVCò'6ögB#¢'&–Ö'’'Ò"G¶÷væVCöFF×6VÆV7B×WCÒ"G¶—FVÒæ–GÒ&¦FFÖ'W’×WCÒ"G¶—FVÒæ–GÒ&ÒG·6VÆV7FVCò&F—6&ÆVB#¢"'ÓâG·6VÆV7FVCò.)É2[Ù>X˜ŞKÉKËB#¦÷væVCò.˜hº‹ùXú®Xªxš’#¦G¶—FVÒç&–6WÒ)ˆûˆòš(nX[¶ÓÂö'WGFöããÂö'F–6ÆSæ·Ò’æ¦ö–â‚""“·Ğ¢Ğ ¢gVæ7F–öâ6&UWG2‚—¶ÆWB6†ævVCÖfÇ6S·7FFRçWG2æ÷væVBæf÷$V6‚†–CÓç¶6öç7B&öw&W73×WE&öw&W72†–B’ÆÆ7C×&öw&W72æÆ7EWFFWÇÆ—6ò‚’ÆF—3ÖF—4&WGvVVâ†Æ7BÆ—6ò‚’“¶–b†F—3ã—·&öw&W72ægVÆÆæW73ÔÖF‚æÖ‚ƒÇ&öw&W72ægVÆÆæW72ÖF—2£B“·&öw&W72æÆ7EWFFSÖ—6ò‚“¶6†ævVC×G'VS·×Ò“¶–b†6†ævVB—6fR‚“·Ğ¢gVæ7F–öâ&VæFW%WG2‚—°¢6&UWG2‚“¶6öç7BWCÖ6FÆöuWB‚“°¢–b‚WB—²B‚'WD6&R"’æ–ææW$…DÔÃÖÇ6V7F–öâ6Æ73Ò'æVÂWBÖV×G’#ãÇ7ãï	ùãÂ÷7ããÆƒ#î‹ùk*iÈXªxšKÉKËCÂöƒ#ãÇîXë¾h‰™[şYXnYøî˜hº[şxÊ¾8[şx¹~h‰n[şK˜Î›éş8.š(nX[¾YîûÈÎK»¾Xªˆë~[é~y¨N{*îš9ş[ˆ;ŞkKîKˆ®yJYË®8#Â÷ãÆ'WGFöâ6Æ73Ò'&–Ö'’"FFÖ÷VâÖÖ&¶WCÒ&æ–ÖÇ2#îXë¾Xªxšš(nX[¾XË£Âö'WGFöããÂ÷6V7F–öãæ²B‚&÷væVEWDw&–B"’æ–ææW$…DÔÃÒ"#·&WGW&ã·Ğ¢6öç7B&öw&W73×WE&öw&W72‚’Ç7FvSÖw&÷wF„ÆWfVÂ‡&öw&W72ç‡ÇWBçF‡&W6†öÆG2’ÆæW‡C×WBçF‡&W6†öÆG5·7FvR³Ó°¢B‚'WD6&R"’æ–ææW$…DÔÃÖÇ6V7F–öâ6Æ73Ò'WB×7FvR"7G–ÆSÒ"Ò×WBÖ6öÆ÷#¢G·WBæ6öÆ÷'Ò#âG¶æ–ÖFVEWDÖ&·W‡WBÂ&Æ&vR"Ç7FvR—ÓÇ6ÖÆÃâG¶W62‡WBç7V6–W2—Ò+rzÊÂG·7FvR³Şh‰™[ş™‹njëSÂ÷6ÖÆÃãÆƒ#âG¶W62‡WBæf÷&×5·7FvUÒ—ÓÂöƒ#ãÇâG·&öw&W72ægVÆÆæW73ÃÓò.KÉKËNš[ş[é~k*iÈ{+îzYîK¨nûÈÎŠû~K«.h˜¾h©^Yh.8"#¢.Zè>KÉ®YÎY8i~inY(Î‹{>‹x>ûÈÎx+Kˆ¾™Ú.y¨NhÈ™*îKˆîZè>K©.XªY
+~8"'ÓÂ÷ãÆF—b6Æ73Ò'WBÖ7F–öç26&RÖ7F–öç2#ãÆ'WGFöâFF×WBÖ7F–öãÒ'B#ï	ùiûˆòiiƒÂö'WGFöããÆ'WGFöâFF×WBÖ7F–öãÒ&§V×#î*Ènûˆò‹{>‹x3Âö'WGFöããÆ'WGFöâFF×WBÖ7F–öãÒ'vÆ²#ï	ùâiZ>jÚSÂö'WGFöããÂöF—cãÂ÷6V7F–öããÇ6V7F–öâ6Æ73Ò'æVÂWB×7FG2#ãÆF—b6Æ73Ò'WB×vÆÆWB#ï	úZ2{*îš9òÆ#âG·7FFRæfööG7ÓÂö#ãÂöF—cãÆF—b6Æ73Ò&VæW&w’×&÷r#ãÇ7ãîš[š9ş[ªcÂ÷7ããÆ#âG·&öw&W72ægVÆÆæW77ÒóÂö#ãÂöF—cãÆF—b6Æ73Ò&VæW&w’Ö&"#ãÇ7â7G–ÆSÒ'v–GFƒ¢G·&öw&W72ægVÆÆæW77ÒR#ãÂ÷7ããÂöF—cãÆF—b6Æ73Ò&VæW&w’×&÷r#ãÇ7ãîh‰™[şXÃÂ÷7ããÆ#âG·&öw&W72ç‡ÒG¶æW‡CöòG¶æW‡GÖ¢"+r[{.‹ëî{¸iè'ÓÂö#ãÂöF—cãÆF—b6Æ73Ò&VæW&w’Ö&"WB×‡#ãÇ7â7G–ÆSÒ'v–GFƒ¢G¶æW‡CôÖF‚æÖ–âƒÇ&öw&W72ç‡öæW‡B£“£ÒR#ãÂ÷7ããÂöF—cãÆ'WGFöâ6Æ73Ò'&–Ö'’"–CÒ&fVVEWD'Fâ"G·7FFRæfööG3Ã#ò&F—6&ÆVB#¢"'ÓîK«.h˜¾h©^Yh"(‰#"	úZ3Âö'WGFöããÇ6ÖÆÃîjøşjÊ³bh‰™[şXÎûÉ¾k*iÈjøşiz^jÊi[Kˆ®™™ûÈÎiÈZI®[	{*îš9ş[ˆ;Şh©^Yh.ZI®[	jÊ8.{¸iè[Ú.h™ÈŠhC#h‰™[şXÎ8#Â÷6ÖÆÃãÂ÷6V7F–öãæ°¢B‚&fVVEWD'Fâ"’æöæ6Æ–6³ÖfVVEWC°¢B‚&÷væVEWDw&–B"’æ–ææW$…DÔÃ×7FFRçWG2æ÷væVBæÖ†–CÓç¶6öç7B—FVÓÖ6FÆöuWB†–B’ÆFF×WE&öw&W72†–B’ÆÆWfVÃÖw&÷wF„ÆWfVÂ†FFç‡Æ—FVÒçF‡&W6†öÆG2“·&WGW&âÆ'WGFöâ6Æ73Ò&÷væVB×WBG¶–CÓÓ×7FFRçWG2ç6VÆV7FVCò&7F—fR#¢"'Ò"FF×6VÆV7B×WCÒ"G¶–GÒ#âG¶æ–ÖFVEWDÖ&·W†—FVÒÂ&Ö–æ’"ÆÆWfVÂ—ÓÆF—cãÆ#âG¶W62†—FVÒææÖR—ÓÂö#ãÇ6ÖÆÃâG¶W62†—FVÒæf÷&×5¶ÆWfVÅÒ—Ò+rG¶FFç‡ÒóC#Â÷6ÖÆÃãÂöF—cãÆVÓâG¶–CÓÓ×7FFRçWG2ç6VÆV7FVCò.[Ù>X˜ŞKÉKËB#¢.˜hº’'ÓÂöVÓãÂö'WGFöãæ·Ò’æ¦ö–â‚""“°¢Ğ¢gVæ7F–öâfVVEWB‚—¶6öç7BWCÖ6FÆöuWB‚“¶–b‚WB—&WGW&ã¶–b‡7FFRæfööG3Ã"—&WGW&âFö7B‚.{*îš9şKˆŞ‹k>ûÈÎZèÎh‰ZÚnKšK»¾XªXúşKº^ˆë~[é~{*îš9ò"“¶6öç7B&öw&W73×WE&öw&W72‚“·7FFRæfööG2ÓÓ#·&öw&W72ægVÆÆæW73ÔÖF‚æÖ–âƒÇ&öw&W72ægVÆÆæW72³#“·&öw&W72ç‡³Óc·&öw&W72æÆ7DfVCÖ—6ò‚“·&öw&W72æÆ7EWFFSÖ—6ò‚“·6fR‚“·&VæFW$†öÖUWB‚“¶–b‚B‚'f–Wr×WG2"’æ6Æ74Æ—7Bæ6öçF–ç2‚&7F—fR"’—&VæFW%WG2‚“¶–b‚B‚'f–WrÖÖ&¶WB"’æ6Æ74Æ—7Bæ6öçF–ç2‚&7F—fR"’—&VæFW$Ö&¶WB‚“·Æ•WD7F–öâ‚&†’"“·Ğ¢gVæ7F–öâ'W•ÆçB†–B—¶6öç7B—FVÓÖ6FÆöuÆçB†–B“¶–b‡7FFRçÆçBæ÷væVBæ–æ6ÇVFW2†–B’—&WGW&â6VÆV7EÆçB†–B“¶–b‡7FFRç7Vç3Æ—FVÒç&–6R—&WGW&âFö7B†‹ù™ÈŠhG¶—FVÒç&–6R×7FFRç7Vç7ÒKŠ®[şZJ®™‹>ûÈÎYÙ®hÈZèÎh‰K»¾XªY
+v“·7FFRç7Vç2ÓÖ—FVÒç&–6S·7FFRçÆçBæ÷væVBçW6‚†–B“·7FFRçÆçBç6VÆV7FVCÖ–C·ÆçE&öw&W72†–B“·7FFRçÆçBæÆ7DFFSÖ—6ò‚“·6fR‚“·Fö7B†h‰X©şŠz>™HG¶—FVÒææÖWŞûÈÎZè>[{.{¸ş‹ù¾XZ^ZÚnKšZèhªNˆ«YºÖ“¶–b‚B‚'f–WrÖÖ&¶WB"’æ6Æ74Æ—7Bæ6öçF–ç2‚&7F—fR"’—&VæFW$Ö&¶WB‚“¶–b‚B‚'f–WrÖv&FVâ"’æ6Æ74Æ—7Bæ6öçF–ç2‚&7F—fR"’—&VæFW$v&FVâ‚“·Ğ¢gVæ7F–öâ6VÆV7EÆçB†–B—¶–b‚7FFRçÆçBæ÷væVBæ–æ6ÇVFW2†–B’—&WGW&ã·7FFRçÆçBç6VÆV7FVCÖ–C·7FFRçÆçBæÆ7DFFSÖ—6ò‚“·ÆçE&öw&W72†–B“·6fR‚“·Fö7B†[{.˜hº’G¶6FÆöuÆçB†–B’ææÖWÖ“·&VæFW$v&FVâ‚“¶–b†Fö7VÖVçBævWDVÆVÖVçD'”–B‚'f–WrÖÖ&¶WB"’æ6Æ74Æ—7Bæ6öçF–ç2‚&7F—fR"’—&VæFW$Ö&¶WB‚“·Ğ¢gVæ7F–öâ'W•WB†–B—¶6öç7B—FVÓÔu$õuD…ô4DÄôrçWG2æf–æB‡WCÓçWBæ–CÓÓÖ–B“¶–b‚—FVÒ—&WGW&ã¶–b‡7FFRçWG2æ÷væVBæ–æ6ÇVFW2†–B’—&WGW&â6VÆV7EWB†–B“¶–b‡7FFRç7Vç3Æ—FVÒç&–6R—&WGW&âFö7B†‹ù™ÈŠhG¶—FVÒç&–6R×7FFRç7Vç7ÒKŠ®[şZJ®™‹>h˜Şˆ;Şš(nX[¶“·7FFRç7Vç2ÓÖ—FVÒç&–6S·7FFRçWG2æ÷væVBçW6‚†–B“·7FFRçWG2ç6VÆV7FVCÖ–C·7FFRçWG2ç&öw&W75¶–EÓ×¶gVÆÆæW73£sÇ‡£ÆÆ7DfVC¢""ÆÆ7EWFFS¦—6ò‚—Ó·6fR‚“·Fö7B†h‰X©şš(nX[²G¶—FVÒææÖWŞûÈÎŠë[é~yJK»¾Xª{*îš9şK«.h˜¾h©^Yh&“·&VæFW$Ö&¶WB‚“·Ğ¢gVæ7F–öâ6VÆV7EWB†–B—¶–b‚7FFRçWG2æ÷væVBæ–æ6ÇVFW2†–B’—&WGW&ã·7FFRçWG2ç6VÆV7FVCÖ–C·WE&öw&W72†–B“·6fR‚“·Fö7B†[{.˜hº’G¶6FÆöuWB†–B’ææÖWÒKÙÎK‹®[Ù>X˜ŞKÉKËF“·&VæFW%WG2‚“·&VæFW$†öÖUWB‚“¶–b†Fö7VÖVçBævWDVÆVÖVçD'”–B‚'f–WrÖÖ&¶WB"’æ6Æ74Æ—7Bæ6öçF–ç2‚&7F—fR"’—&VæFW$Ö&¶WB‚“·Ğ ¢gVæ7F–öâ&VæFW%&W÷'B‚—°¢6öç7B67W&7“×7FFRçV—¢çF÷FÃôÖF‚ç&÷VæB‡7FFRçV—¢æ6÷'&V7B÷7FFRçV—¢çF÷FÂ£“£²B‚'&W÷'D6&G2"’æ–ææW$…DÔÃÖÆ'F–6ÆSãÇ7ãï	ù9£Â÷7ããÆ#âG¶6ö×ÆWFVEVæ—G2‚—ÓÂö#ãÇ6ÖÆÃîZèÎh‰XÙ^XX3Â÷6ÖÆÃãÂö'F–6ÆSãÆ'F–6ÆSãÇ7ãï	úz“Â÷7ããÆ#âG·7FFRç7FvTFöæRæÆVæwF‡ÓÂö#ãÇ6ÖÆÃîZèÎh‰ZÚnKšjÚ^šªCÂ÷6ÖÆÃãÂö'F–6ÆSãÆ'F–6ÆSãÇ7ãï	ùJCÂ÷7ããÆ#âG·7FFRæÖ7FW&VBæÆVæwF‡ÓÂö#ãÇ6ÖÆÃîhèÎhúXÙ^ŠøÓÂ÷6ÖÆÃãÂö'F–6ÆSãÆ'F–6ÆSãÇ7ãï	øêóÂ÷7ããÆ#âG¶67W&7—ÇÂ.(	B'ÒG¶67W&7“ò"R#¢"'ÓÂö#ãÇ6ÖÆÃî[şkX¾jÚ>zîxèsÂ÷6ÖÆÃãÂö'F–6ÆSãÆ'F–6ÆSãÇ7ãï	úZ3Â÷7ããÆ#âG·7FFRæfööG7ÓÂö#ãÇ6ÖÆÃî{*îš9ş[©>ZÙƒÂ÷6ÖÆÃãÂö'F–6ÆSãÆ'F–6ÆSãÇ7ãï	ùãÂ÷7ããÆ#âG·7FFRçWG2æ÷væVBæÆVæwF‡ÓÂö#ãÇ6ÖÆÃîXªxšKÉKËCÂ÷6ÖÆÃãÂö'F–6ÆSæ°¢6öç7BF—3ÕµÓ¶f÷"†ÆWB“Óc¶“ãÓ¶’ÒÒ—¶6öç7BCÖæWrFFR‚“¶Bç6WDFFR†BævWDFFR‚’Ö’“¶6öç7B¶W“Ö—6ò†B“¶F—2çW6‚‡¶æÖS¥².izR"Â.Kˆ"Â.K¨Â"Â.Kˆ’"Â.Y¹²"Â.K©B"Â.XZÒ%Õ¶BævWDF’‚•ÒÆ6÷VçC§7FFRæ7F—f—G•¶¶W•×ÇÃÇFöF“¦“ÓÓÓÒ“·Ò6öç7BÖƒÔÖF‚æÖ‚ƒBÂââæF—2æÖ†CÓæBæ6÷VçB’“²B‚'vVV´6†'B"’æ–ææW$…DÔÃÖF—2æÖ†CÓæÆF—b6Æ73Ò&6†'BÖF’#ãÆ#âG¶Bæ6÷VçGÓÂö#ãÇ7â7G–ÆSÒ&†V–v‡C¢G´ÖF‚æÖ‚ƒ‚ÆBæ6÷VçBöÖ‚£#—×‚#ãÂ÷7ããÇ6ÖÆÃâG¶BçFöF“ò.K¸®ZJ’#¢.Y‚"¶BææÖWÓÂ÷6ÖÆÃãÂöF—cæ’æ¦ö–â‚""“°¢6öç7BGf–6SÕµÓ²–b‡7FFRçvV²æÆVæwF‚–Gf–6RçW6‚†iÊÎYiÈ’G·7FFRçvV²æÆVæwF‡ÒKŠ®ŠøŞ™ÈŠhZHŞKš8.jøşZJXú®hÉ^KŠ®X®(	ÎyÈ¾KŠŞih~ŠûNˆ»ih~(	ŞûÈÎKˆŞŠh{Ù®h¨N8&“²VÇ6RGf–6RçW6‚‚.yºîX˜Şk*iÈzzş{Jş™IŠøŞ8.ZèÎh‰KˆjÊXÙ^XX>[şkX¾YîûÈÎ{;¾{¹şKÉ®{¹X{®i»NXxnzîy¨NZHŞKš[»®Šêî8""“²–b‡7G&V´6÷VçB‚“Ã2–Gf–6RçW6‚‚.XXh¨®yºîj~Zé®K‹®‹ùî{ºÓ>ZJûÈÎjøşZJ“#Xˆn™)şûÉ¾[Ú.h‰ˆ¨.ZXşjùNKˆjÊZÚnKˆ[şi{ni»N˜xŞŠh8""“²VÇ6RGf–6RçW6‚†[{.{¸ş‹ùî{ºŞZÚnKšG·7G&V´6÷VçB‚—ÒZJ8.Šû~ZI®ˆ*şZé®ZÚZÙy¨NYÙ®hÈûÈÎKˆŞXú®yÈ¾Xˆni[8&“²Gf–6RçW6‚‚.Zën™[şXúşKº^X®Y
+ÎKÉ~ûÉ®Šû~ZÚZÙyJiÊÎXÙ^XX>Xú^Yè¾K¸¾{¸ŞKˆK»nyÉşZéîy¨NK¨¾ûÈÎY
+Îhx.Yî‹ûŞ™zîKˆKŠ®zèXÙ^™zîš)8""“²B‚'&VçDGf–6R"’æ–ææW$…DÔÃÖGf–6RæÖ‚†Æ’“ÓæÆ'F–6ÆSãÇ7ãâG¶’³ÓÂ÷7ããÇâG¶ÓÂ÷ãÂö'F–6ÆSæ’æ¦ö–â‚""“°¢Ğ ¢Fö7VÖVçBæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÆSÓç°¢6öç7Bf–WsÖRçF&vWBæ6Æ÷6W7B‚%¶FF×f–WuÒ"“²–b‡f–Wr—·&÷WFR‡f–WræFF6WBçf–Wr“·&WGW&ã·Ğ¢6öç7B&öf–ÆT6†ö–6SÖRçF&vWBæ6Æ÷6W7B‚%¶FF×&öf–ÆRÖ–EÒ"“¶–b‡&öf–ÆT6†ö–6R—·7v—F6…&öf–ÆR‡&öf–ÆT6†ö–6RæFF6WBç&öf–ÆT–B“·&WGW&ã·Ğ¢6öç7Bw&ÖÖ%F÷–3ÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖw&ÖÖ"×F÷–5Ò"“¶–b†w&ÖÖ%F÷–2—¶w&ÖÖ%F÷–4–CÖw&ÖÖ%F÷–2æFF6WBæw&ÖÖ%F÷–3¶w&ÖÖ$ç7vW'3×·Ó¶w&ÖÖ%&W7VÇCÖçVÆÃ·&VæFW$w&ÖÖ"‚“·&WGW&ã·Ğ¢6öç7Bw&ÖÖ$÷F–öãÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖw&ÖÖ"Ö÷F–öåÒ"“¶–b†w&ÖÖ$÷F–öâ—¶w&ÖÖ$ç7vW'5´çVÖ&W"†w&ÖÖ$÷F–öâæFF6WBæw&ÖÖ$÷F–öâ•ÓÖw&ÖÖ$÷F–öâæFF6WBæw&ÖÖ%fÇVS¶w&ÖÖ%&W7VÇCÖçVÆÃ·&VæFW$w&ÖÖ"‚“·&WGW&ã·Ğ¢6öç7Bw&ÖÖ%7V&Ö—CÖRçF&vWBæ6Æ÷6W7B‚"77V&Ö—Dw&ÖÖ%V—¢"“¶–b†w&ÖÖ%7V&Ö—B—·7V&Ö—Dw&ÖÖ%V—¢‚“·&WGW&ã·Ğ¢6öç7B7F–öãÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖ7F–öåÒ"“²–b†7F–öãòæFF6WBæ7F–öãÓÓÒ'&–çB"—·v–æF÷rç&–çB‚“·&WGW&ã·Ğ¢6öç7Bw&FSÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖw&FUÒ"“²–b†w&FR—·6VÆV7FVDw&FSÔçVÖ&W"†w&FRæFF6WBæw&FR“·&VæFW$6÷W'6W2‚“·&WGW&ã·Ğ¢6öç7BFW&ÓÖRçF&vWBæ6Æ÷6W7B‚%¶FF×FW&ÕÒ"“²–b‡FW&Ò—·6VÆV7FVEFW&Ó×FW&ÒæFF6WBçFW&Ó·&VæFW$6÷W'6W2‚“·&WGW&ã·Ğ¢6öç7BVæ—CÖRçF&vWBæ6Æ÷6W7B‚%¶FF×Væ—BÖ&ööµÒ"“²–b‡Væ—B—·7FFRæ&öö´–C×Væ—BæFF6WBçVæ—D&öö³·7FFRçVæ—D–æFWƒÔçVÖ&W"‡Væ—BæFF6WBçVæ—D–æFW‚“·7FFRç7FvSÒ&÷fW'f–Wr#·6VÆV7FVDw&FSÖ&öö´æ÷r‚’æw&FS·6VÆV7FVEFW&ÓÖ&öö´æ÷r‚’çFW&Ó·6fR‚“·V—¤ç7vW'3×·Ó·&÷WFR‚'Væ—B"“·&WGW&ã·Ğ¢6öç7B7FvSÖRçF&vWBæ6Æ÷6W7B‚%¶FF×7FvUÒ"“²–b‡7FvR—·7FFRç7FvS×7FvRæFF6WBç7FvS·6fR‚“·V—¤ç7vW'3×·Ó·&VæFW%Væ—B‚“·&WGW&ã·Ğ¢6öç7B÷VãÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖ÷Vâ×7FvUÒÅ¶FFÖF–Ç’×7FvUÒ"“²–b†÷Vâ—·7FFRç7FvSÖ÷VâæFF6WBæ÷Vå7FvWÇÆ÷VâæFF6WBæF–Ç•7FvS·6fR‚“·&÷WFR‚'Væ—B"“·&WGW&ã·Ğ¢6öç7BF–7FF–öãÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖ÷VâÖF–7FF–öåÒ"“²–b†F–7FF–öâ—¶÷VäF–7FF–öâ†F–7FF–öâæFF6WBæ÷VäF–7FF–öâ“·&WGW&ã·Ğ¢6öç7B&Wf–WsÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖ÷Vâ×&Wf–WuÒ"“²–b‡&Wf–Wr—¶÷Vå&Wf–Wr‚“·&WGW&ã·Ğ¢6öç7B÷VäÖ&¶WCÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖ÷VâÖÖ&¶WEÒ"“²–b†÷VäÖ&¶WB—¶Ö&¶WEF#Ö÷VäÖ&¶WBæFF6WBæ÷VäÖ&¶WC·&÷WFR‚&Ö&¶WB"“·&WGW&ã·Ğ¢6öç7BÖ&¶WCÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖÖ&¶WB×F%Ò"“²–b†Ö&¶WB—¶Ö&¶WEF#ÖÖ&¶WBæFF6WBæÖ&¶WEF#·&VæFW$Ö&¶WB‚“·&WGW&ã·Ğ¢6öç7B'W•ÆçD'WGFöãÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖ'W’×ÆçEÒ"“²–b†'W•ÆçD'WGFöâ—¶'W•ÆçB†'W•ÆçD'WGFöâæFF6WBæ'W•ÆçB“·&WGW&ã·Ğ¢6öç7B6VÆV7EÆçD'WGFöãÖRçF&vWBæ6Æ÷6W7B‚%¶FF×6VÆV7B×ÆçEÒ"“²–b‡6VÆV7EÆçD'WGFöâ—·6VÆV7EÆçB‡6VÆV7EÆçD'WGFöâæFF6WBç6VÆV7EÆçB“·&WGW&ã·Ğ¢6öç7B'W•WD'WGFöãÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖ'W’×WEÒ"“²–b†'W•WD'WGFöâ—¶'W•WB†'W•WD'WGFöâæFF6WBæ'W•WB“·&WGW&ã·Ğ¢6öç7B6VÆV7EWD'WGFöãÖRçF&vWBæ6Æ÷6W7B‚%¶FF×6VÆV7B×WEÒ"“²–b‡6VÆV7EWD'WGFöâ—·6VÆV7EWB‡6VÆV7EWD'WGFöâæFF6WBç6VÆV7EWB“·&WGW&ã·Ğ¢6öç7BWD7F–öãÖRçF&vWBæ6Æ÷6W7B‚%¶FF×WBÖ7F–öåÒ"“²–b‡WD7F–öâ—·Æ•WD7F–öâ‡WD7F–öâæFF6WBçWD7F–öâ“·&WGW&ã·Ğ¢6öç7BWDfVVCÖRçF&vWBæ6Æ÷6W7B‚%¶FF×WBÖfVVEÒ"“²–b‡WDfVVB—¶fVVEWB‚“·&WGW&ã·Ğ¢6öç7BF–7F–öæ'•F#ÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖF–7F–öæ'’×6V7F–öåÒ"“²–b†F–7F–öæ'•F"—¶F–7F–öæ'•6V7F–öãÖF–7F–öæ'•F"æFF6WBæF–7F–öæ'•6V7F–öã¶F–7F–öæ'”ÆWGFW#Ò&ÆÂ#¶F–7F–öæ'•VW'“Ò"#¶F–7F–öæ'”Æ–Ö—CÓCƒ·&VæFW$F–7F–öæ'’‚“·&WGW&ã·Ğ¢6öç7BF–7F–öæ'”ÆWGFW$'WGFöãÖRçF&vWBæ6Æ÷6W7B‚%¶FFÖF–7F–öæ'’ÖÆWGFW%Ò"“²–b†F–7F–öæ'”ÆWGFW$'WGFöâ—¶F–7F–öæ'”ÆWGFW#ÖF–7F–öæ'”ÆWGFW$'WGFöâæFF6WBæF–7F–öæ'”ÆWGFW#¶F–7F–öæ'”Æ–Ö—CÓCƒ·&VæFW$F–7F–öæ'’‚“·&WGW&ã·Ğ¢6öç7Bf–ÇFW#ÖRçF&vWBæ6Æ÷6W7B‚%¶FF×v÷&BÖf–ÇFW%Ò"“²–b†f–ÇFW"—¶ÖVÖ÷'”f–ÇFW#Öf–ÇFW"æFF6WBçv÷&Df–ÇFW#¶ÖVÖ÷'”–æFWƒÓ¶ÖVÖ÷'”fÆ—VCÖfÇ6S·&VæFW%v÷&G2‚“·&WGW&ã·Ğ¢6öç7BF÷CÖRçF&vWBæ6Æ÷6W7B‚%¶FF×v÷&BÖ–æFW…Ò"“²–b†F÷B—¶ÖVÖ÷'”–æFWƒÔçVÖ&W"†F÷BæFF6WBçv÷&D–æFW‚“¶ÖVÖ÷'”fÆ—VCÖfÇ6S·&VæFW%v÷&G2‚“·Ğ¢Ò“°¢B‚'&öf–ÆT'WGFöâ"’æöæ6Æ–6³Ö÷Vå&öf–ÆTF–Æös°¢B‚&6Æ÷6U&öf–ÆTF–Æör"’æöæ6Æ–6³Ö6Æ÷6U&öf–ÆTF–Æös°¢B‚'&öf–ÆTF–Æör"’æFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÆWfVçCÓç¶–b†WfVçBçF&vWCÓÓÒB‚'&öf–ÆTF–Æör"’–6Æ÷6U&öf–ÆTF–Æör‚“·Ò“°¢B‚&6öçF–çVT'Fâ"’æöæ6Æ–6³Ò‚“Óç·7FFRç7FvSÖæW‡E7FvR‚’æ–C·6fR‚“·&÷WFR‚'Væ—B"“·Ó°¢B‚&F–7F–öæ'•6V&6‚"’æFDWfVçDÆ—7FVæW"‚&–çWB"ÆWfVçCÓç¶F–7F–öæ'•VW'“ÖWfVçBçF&vWBçfÇVS¶F–7F–öæ'”ÆWGFW#Ò&ÆÂ#¶F–7F–öæ'”Æ–Ö—CÓCƒ·&VæFW$F–7F–öæ'’‚“²B‚&F–7F–öæ'•6V&6‚"’æfö7W2‚“·Ò“°¢B‚&F–7F–öæ'”Ö÷&R"’æöæ6Æ–6³Ò‚“Óç¶F–7F–öæ'”Æ–Ö—B³ÓCƒ·&VæFW$F–7F–öæ'’‚“·Ó°¢B‚&6Æ÷6U&7F–6TF–Æör"’æöæ6Æ–6³Ò‚“Óç²B‚'&7F–6TF–Æör"’æ6Æ÷6Sòâ‚“²B‚'&7F–6TF–Æör"’æ6Æ74Æ—7Bç&VÖ÷fR‚&÷Vâ"“·Ó°¢B‚'&7F–6TF–Æör"’æFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÆWfVçCÓç¶–b†WfVçBçF&vWCÓÓÒB‚'&7F–6TF–Æör"’’B‚&6Æ÷6U&7F–6TF–Æör"’æ6Æ–6²‚“·Ò“°¢B‚'v÷&D¶æ÷r"’æöæ6Æ–6³Ò‚“ÓæÖ÷fUv÷&B‡G'VR“²B‚'v÷&Dv–â"’æöæ6Æ–6³Ò‚“ÓæÖ÷fUv÷&B†fÇ6R“°¢B‚&6Æ–ÔF–Ç”&öçW2"’æöæ6Æ–6³Ò‚“Óç¶6öç7B¶W“ÖG¶—6ò‚—Ó¢G·Væ—D¶W’‚—ÖÇFöF•F6·3Ö7F—fUF6·2‚“¶–b†F–Ç”6ö×ÆWFR‚“ÇFöF•F6·2æÆVæwF‡ÇÇ7FFRæ&öçW6W2æ–æ6ÇVFW2†¶W’’—&WGW&ã·7FFRæ&öçW6W2çW6‚†¶W’“·&Wv&Bƒ2Â.ZèÎh‰K¸®iz^XZ˜:K»¾Xª"Ã"“·&VæFW%FöF’‚“·Ó°¢B‚&6†V6´–ä'Fâ"’æöæ6Æ–6³Ò‚“Óç¶–b‡7FFRç6–vä–ç2æ–æ6ÇVFW2†—6ò‚’’—&WGW&ã·7FFRç6–vä–ç2çW6‚†—6ò‚’“·&Wv&Bƒ"Â.K¸®iz^zÛîX‹h‰X©ò"“·&VæFW$v&FVâ‚“·Ó°¢B‚&fVVD'Fâ"’æöæ6Æ–6³Ò‚“Óç¶6öç7B&öw&W73×ÆçE&öw&W72‚“¶–b‡7FFRç7Vç3Ã"—&WGW&âFö7B‚.[şZJ®™‹>KˆŞ‹k>ûÈÎXXZèÎh‰ZÚnKšK»¾XªY
+r"“·7FFRç7Vç2ÓÓ#·&öw&W72æVæW&w“ÔÖF‚æÖ–âƒÇ&öw&W72æVæW&w’³#“·&öw&W72ç‡³ÓS·&öw&W72æÆ7DfVCÖ—6ò‚“·6fR‚“·Fö7B‚/	ù*rkX~xÎh‰X©şûÈÎjHŞxšh‰™[şXÂ³^ûÉ¾[şZJ®™‹>XX^‹k>i{nXúşKº^{º~{ºŞkX~xÂ"“·&VæFW$v&FVâ‚“·Ó° ¢6&UÆçB‚“¶6&UWG2‚“·&VæFW$†VFW"‚“·&VæFW$†öÖR‚“°¢–b‚'6W'f–6Uv÷&¶W""–âæf–vF÷"’v–æF÷ræFDWfVçDÆ—7FVæW"‚&ÆöB"Â‚“Óææf–vF÷"ç6W'f–6Uv÷&¶W"ç&Vv—7FW"‚'6W'f–6R×v÷&¶W"æ§3÷cÓr"Ç·WFFUf–66†S¢&æöæR'Ò’çF†Vâ‡&VsÓç&VrçWFFR‚’’æ6F6‚‚‚“Óç·Ò’“°§Ò’‚“° 
