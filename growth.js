@@ -4,16 +4,16 @@
   const thresholds = [0, 40, 120, 260, 500];
   window.GROWTH_CATALOG = {
     plants: [
-      {id:"sunflower",name:"向阳花",rarity:"普通",price:0,color:"#f2b93f",stages:["🌱","🌿","🌻","🌻✨","☀️🌳✨"],forms:["破土小芽","向阳绿苗","灿烂向阳花","金光花王","太阳圣树"],description:"陪伴每位新同学开始第一段坚持。"},
-      {id:"clover",name:"幸运四叶草",rarity:"进阶",price:30,color:"#55ad62",stages:["🌱","☘️","🍀","🍀✨","🌈🍀✨"],forms:["幸运种子","三叶幼苗","四叶精灵","幸运花环","彩虹幸运王冠"],description:"叶片会随着坚持逐渐聚成幸运光环。"},
-      {id:"cactus",name:"沙漠守护者",rarity:"进阶",price:60,color:"#47a873",stages:["🌱","🌵","🌵🌼","🌵✨","🏜️👑🌵"],forms:["沙粒嫩芽","小仙人掌","沙漠开花","荧光守卫","沙漠王座"],description:"坚韧的沙漠伙伴，象征不怕困难。"},
-      {id:"tulip",name:"彩虹郁金香",rarity:"稀有",price:100,color:"#ef718f",stages:["🌱","🌷","🌷🌷","🌷✨","🌈🌷👑"],forms:["郁金香芽","初绽花朵","缤纷花束","水晶花冠","彩虹花皇"],description:"每次照顾都会让花冠更加绚丽。"},
-      {id:"sakura",name:"樱花心愿树",rarity:"稀有",price:160,color:"#ef9fbd",stages:["🌱","🌿","🌸","🌸🌳","🌸🌳✨"],forms:["心愿种子","樱叶幼树","初樱盛开","粉云樱树","星雨心愿神树"],description:"终极形态会落下闪耀的心愿花雨。"},
-      {id:"lotus",name:"水晶莲花",rarity:"史诗",price:240,color:"#68bcd2",stages:["💧","🌱","🪷","💎🪷","🌊💎🪷✨"],forms:["清澈水滴","莲心嫩芽","静水莲花","水晶圣莲","星海水晶莲座"],description:"从一滴清水成长为照亮湖面的圣莲。"},
-      {id:"aurora",name:"极光藤蔓",rarity:"史诗",price:360,color:"#7c78df",stages:["🌱","🌿","🪻","🌌🌿","🌌🪻✨"],forms:["夜色种子","星点藤芽","极光花簇","天幕藤桥","永夜极光王庭"],description:"稀有藤蔓会在终极形态展开极光天幕。"},
-      {id:"star_tree",name:"星愿神树",rarity:"传说",price:520,color:"#725bd1",stages:["✨","🌱✨","🌳⭐","🌳🌌","🌌🌳👑"],forms:["星尘核心","星芽","许愿树","银河古树","星愿宇宙神树"],description:"收集学习星光，最终点亮整片银河。"},
-      {id:"dragon_flower",name:"龙焰圣花",rarity:"传说",price:750,color:"#e45b43",stages:["🔥","🌱🔥","🌺🔥","🐉🌺","🐉🔥🌺👑"],forms:["龙焰火种","赤焰幼芽","烈焰圣花","龙魂觉醒","九天龙焰花皇"],description:"只有长期坚持者才能唤醒沉睡的龙魂。"},
-      {id:"world_tree",name:"宇宙世界树",rarity:"神话",price:1000,color:"#e3b446",stages:["🌟","🌱🌟","🌳✨","🌍🌳","🌌🌍🌳👑✨"],forms:["宇宙星核","创世嫩芽","星辉巨树","世界守护树","宇宙创世终极神树"],description:"商城最高荣誉，终极形态连接星辰与世界。"}
+      {id:"sunflower",name:"晨光铃兰",rarity:"普通",role:"采光型",price:0,color:"#f2b93f",stages:["🌱","🌿","🌼","🌼✨","🌞🌼✨"],forms:["晨光种子","铃兰幼苗","采光花朵","晨曦花冠","太阳铃兰守卫"],description:"收集清晨光点，帮学习花园保持明亮和专注。"},
+      {id:"clover",name:"幸运豆荚",rarity:"进阶",role:"鼓励型",price:30,color:"#55ad62",stages:["🌱","🌿","🫛","🫛✨","🌈🫛✨"],forms:["幸运小豆","卷叶豆苗","笑脸豆荚","连心豆塔","彩虹豆荚队长"],description:"会弹出鼓励豆，让遇到难题的小伙伴重新振作。"},
+      {id:"cactus",name:"盾叶仙掌",rarity:"进阶",role:"防护型",price:60,color:"#47a873",stages:["🌱","🌵","🛡️🌵","🌵✨","🛡️🌵👑"],forms:["厚叶种子","小盾仙掌","双叶护卫","荧光盾卫","翡翠盾叶队长"],description:"展开厚实叶盾，挡住走神、拖延和粗心小怪。"},
+      {id:"tulip",name:"音符喇叭花",rarity:"稀有",role:"音波型",price:100,color:"#ef718f",stages:["🌱","🌷","🎵🌷","🎶🌷","🌈🎺🌷"],forms:["音符花籽","小喇叭芽","清音花朵","和声花束","彩虹旋律花王"],description:"吹出清脆音符，提醒小主人认真听读和大胆开口。"},
+      {id:"sakura",name:"泡泡樱树",rarity:"稀有",role:"安抚型",price:160,color:"#ef9fbd",stages:["🌱","🌿","🌸","🫧🌸🌳","🫧🌸🌳✨"],forms:["泡泡种子","粉叶幼树","初樱泡泡","云朵樱树","梦境泡泡樱王"],description:"释放柔软泡泡，把焦躁情绪变成安静的学习节奏。"},
+      {id:"lotus",name:"涟漪莲卫",rarity:"史诗",role:"净化型",price:240,color:"#68bcd2",stages:["💧","🌱","🪷","💎🪷","🌊💎🪷✨"],forms:["清澈水滴","莲心嫩芽","涟漪莲花","水晶莲卫","星海涟漪守护者"],description:"荡开清澈涟漪，帮助复习错词并整理混乱的记忆。"},
+      {id:"aurora",name:"极光藤哨",rarity:"史诗",role:"控场型",price:360,color:"#7c78df",stages:["🌱","🌿","🪻","🌌🌿","🌌🪻✨"],forms:["夜色藤籽","星点藤芽","极光花哨","天幕藤桥","永夜极光指挥官"],description:"挥动极光藤条，把四处乱跑的注意力重新聚拢。"},
+      {id:"star_tree",name:"星果抛抛树",rarity:"传说",role:"远投型",price:520,color:"#725bd1",stages:["✨","🌱✨","🌳⭐","🌳🌌","🌌🌳👑"],forms:["星果核心","抛抛星芽","星果小树","银河抛抛树","星雨抛抛统领"],description:"把记忆星果抛向远方，让学过的知识隔天再次出现。"},
+      {id:"dragon_flower",name:"赤焰龙花",rarity:"传说",role:"爆发型",price:750,color:"#e45b43",stages:["🔥","🌱🔥","🌺🔥","🐉🌺","🐉🔥🌺👑"],forms:["赤焰火种","龙纹幼芽","烈焰龙花","龙翼花卫","九天赤焰花将"],description:"困难来临时燃起勇气火焰，陪孩子完成高难度挑战。"},
+      {id:"world_tree",name:"彩虹知识古树",rarity:"神话",role:"全能型",price:1000,color:"#e3b446",stages:["🌟","🌱🌟","🌳✨","🌍🌳","🌈🌍🌳👑✨"],forms:["知识星核","彩虹嫩芽","智慧巨树","花园守护古树","彩虹知识终极古树"],description:"长期坚持者的最高荣誉，连接词汇、句型、阅读和表达。"}
     ].map(item => ({...item, thresholds})),
     pets: [
       {id:"cat",species:"小猫",name:"橘色小猫",price:80,icon:"🐱",color:"#e79a43",image:"assets/cat-growth.webp",stages:["幼崽","少年","成年","完全成长"],forms:["奶萌小猫","活力小猫","阳光成猫","威风大猫"],description:"从小小橘猫逐渐长成蓬松、可靠的学习伙伴。"},
