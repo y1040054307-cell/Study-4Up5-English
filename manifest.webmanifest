@@ -1,0 +1,10 @@
+{
+  "name": "向阳英语岛｜2026闽教版四升五",
+  "short_name": "向阳英语岛",
+  "description": "2026闽教版小学四升五英语15天暑假自学工具",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fffdf8",
+  "theme_color": "#ff7355",
+  "lang": "zh-CN"
+}
