@@ -236,9 +236,9 @@
   }
   function bindSentenceWords(box){box.querySelectorAll("[data-word-say]").forEach(button=>button.onclick=()=>{speak(button.dataset.wordSay,.68);const help=button.closest(".sentence-study").querySelector(".word-help");help.innerHTML=`<span>🔊</span><p><b>${esc(button.dataset.wordSay)}</b><em>${esc(button.dataset.wordMeaning)}</em></p>`;button.closest(".interactive-sentence").querySelectorAll("button").forEach(item=>item.classList.toggle("active",item===button));});}
   function renderWordStage(box,u){
-    const core=seededShuffle(u.core.slice(0,Math.min(8,u.core.length)),`${iso()}:${u.id}:core`),extra=seededShuffle(u.core.slice(8),`${iso()}:${u.id}:extra`),testItems=seededShuffle(core.map((word,index)=>wordSentenceStudy(word,index,u)),`${iso()}:${u.id}:sentence-test`).slice(0,Math.min(5,core.length)),done=state.stageDone.includes(stageKey("words"));
+    const core=seededShuffle(u.core.slice(0,Math.min(8,u.core.length)),`${iso()}:${u.id}:core`),extra=seededShuffle(u.core.slice(8),`${iso()}:${u.id}:extra`),testPool=core.flatMap((word,index)=>wordSentenceStudies(word,index,u)),testItems=seededShuffle(testPool,`${iso()}:${u.id}:sentence-test`).slice(0,Math.min(20,testPool.length)),done=state.stageDone.includes(stageKey("words"));
     let testRecorded=done;
-    box.innerHTML=`<div class="content-head"><span>第2步 · 单词本</span><h2>必备单词：在完整句式中理解和使用</h2><p>每个重要单词旁边都有句式学习。请依次听单词、看意思、读完整句子，全部学完后再进入填词测试。</p></div><section id="wordLearningBlock"><div class="word-section-title"><h3>⭐ 本单元重要单词</h3><small>单词 + 中文意思 + 完整句式 + 逐词点读</small></div><div class="vocab-grid sentence-vocab-grid">${core.map((w,i)=>wordCard(w,i,u,"core")).join("")}</div>${extra.length?`<div class="word-section-title"><h3>🚀 拓展单词</h3><small>先会听懂和使用，不要求一次默写</small></div><div class="vocab-grid extra sentence-vocab-grid">${extra.map((w,i)=>wordCard(w,i+8,u,"extra")).join("")}</div>`:""}<div class="memory-method"><h3>四次回忆法</h3><ol><li>听单词，跟读2遍</li><li>读旁边的完整句式</li><li>点击句中生词听发音</li><li>遮住单词，口头补全句子</li></ol></div><button class="primary word-test-start" id="startWordTest">我已学完本单元单词，进入句子填词 →</button></section><section class="cloze-practice word-cloze-zone" id="wordClozeTest" hidden><div class="cloze-section-head"><div><h3>本单元单词填词测试</h3><p>单词和例句已经隐藏。请根据句意和中文提示，把学过的重要单词填回完整句子。</p></div><span>${testItems.length} 题</span></div><div class="cloze-question-list">${testItems.map((item,index)=>`<article class="cloze-question" data-word-cloze="${index}"><span>${index+1}</span><div><b>${esc(blankSentence(item.en,item.answer))}</b><p>${esc(item.zh)}</p><small>提示：${esc(item.word.meaning)} · ${esc(item.answer.charAt(0))}${"＿".repeat(Math.max(1,item.answer.length-1))}</small><input type="text" autocomplete="off" spellcheck="false" data-word-cloze-answer data-word="${esc(item.word.word)}" data-expected="${esc(item.answer)}" placeholder="填入本单元单词"><em></em></div><button type="button" data-say="${esc(blankSentence(item.en,item.answer).replace("________","blank"))}" aria-label="朗读填空句">🔊</button></article>`).join("")}</div><div class="cloze-actions"><button class="soft" id="backToWordLearning">返回复习单词与句式</button><button class="primary" id="checkWordCloze">提交并检查</button></div><div id="wordClozeResult"></div><div id="wordStageFinish" ${done?"":"hidden"}>${doneButton("我已完成单词与句式学习")}</div></section>`;
+    box.innerHTML=`<div class="content-head"><span>第2步 · 单词本</span><h2>必备单词：在完整句式中理解和使用</h2><p>每个重要单词提供3个不同例句，并解释整句意思和单词作用。全部学完后再进入20题填词测试。</p></div><section id="wordLearningBlock"><div class="word-section-title"><h3>⭐ 本单元重要单词</h3><small>每词3句 + 句子意思 + 单词作用 + 逐词点读</small></div><div class="vocab-grid sentence-vocab-grid">${core.map((w,i)=>wordCard(w,i,u,"core")).join("")}</div>${extra.length?`<div class="word-section-title"><h3>🚀 拓展单词</h3><small>每个拓展词同样提供3个例句，先理解使用，不要求一次默写</small></div><div class="vocab-grid extra sentence-vocab-grid">${extra.map((w,i)=>wordCard(w,i+8,u,"extra")).join("")}</div>`:""}<div class="memory-method"><h3>四次回忆法</h3><ol><li>听单词，跟读2遍</li><li>读完旁边3个例句</li><li>理解整句意思和单词作用</li><li>遮住单词，口头补全句子</li></ol></div><button class="primary word-test-start" id="startWordTest">我已学完本单元单词，进入20题填词 →</button></section><section class="cloze-practice word-cloze-zone" id="wordClozeTest" hidden><div class="cloze-section-head"><div><h3>本单元单词填词测试</h3><p>单词和例句已经隐藏。请根据句意和中文提示，把学过的重要单词填回完整句子。</p></div><span>${testItems.length} 题</span></div><div class="cloze-question-list">${testItems.map((item,index)=>`<article class="cloze-question" data-word-cloze="${index}"><span>${index+1}</span><div><b>${esc(blankSentence(item.en,item.answer))}</b><p>${esc(item.zh)}</p><small>提示：${esc(item.word.meaning)} · ${esc(item.answer.charAt(0))}${"＿".repeat(Math.max(1,item.answer.length-1))}</small><input type="text" autocomplete="off" spellcheck="false" data-word-cloze-answer data-word="${esc(item.word.word)}" data-expected="${esc(item.answer)}" placeholder="填入本单元单词"><em></em></div><button type="button" data-say="${esc(blankSentence(item.en,item.answer).replace("________","blank"))}" aria-label="朗读填空句">🔊</button></article>`).join("")}</div><div class="cloze-actions"><button class="soft" id="backToWordLearning">返回复习单词与句式</button><button class="primary" id="checkWordCloze">提交并检查</button></div><div id="wordClozeResult"></div><div id="wordStageFinish" ${done?"":"hidden"}>${doneButton("我已完成单词与句式学习")}</div></section>`;
     box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
     box.querySelectorAll("[data-toggle-word]").forEach(b=>b.onclick=()=>b.closest(".vocab-card").classList.toggle("revealed"));
     bindSentenceWords(box);
@@ -246,12 +246,93 @@
     $("backToWordLearning").onclick=()=>{$("wordClozeTest").hidden=true;$("wordLearningBlock").hidden=false;$("wordLearningBlock").scrollIntoView({behavior:"smooth",block:"start"});};
     $("checkWordCloze").onclick=()=>{let correct=0;box.querySelectorAll("[data-word-cloze-answer]").forEach(input=>{const row=input.closest(".cloze-question"),expected=input.dataset.expected,word=input.dataset.word,ok=answerNorm(input.value)===answerNorm(expected),key=`${u.id}:${word}`;row.classList.remove("correct","wrong");row.classList.add(ok?"correct":"wrong");row.querySelector("em").textContent=ok?"✓ 正确":input.value.trim()?`正确答案：${expected}`:`还没有填写，正确答案：${expected}`;if(ok){correct+=1;if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(item=>item!==key);}else if(!state.weak.includes(key))state.weak.push(key);});if(!testRecorded){state.quiz.correct+=correct;state.quiz.total+=testItems.length;testRecorded=true;}save();$("wordClozeResult").innerHTML=`<div class="quiz-result"><b>${correct}/${testItems.length}</b><p>${correct===testItems.length?"全部正确！你已经理解这些单词在句子中的用法。":"请读一遍正确句子，再修改错题并重新检查。"}</p></div>`;$("wordStageFinish").hidden=false;$("checkWordCloze").textContent="再次检查";const complete=$("completeStageBtn");if(complete)complete.onclick=()=>completeStage("words");};
   }
-  function wordSentenceStudy(w,index,u){
-    const sources=[...u.patterns.map(pattern=>({en:pattern.en,zh:pattern.zh})),...(u.story.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[]).map(sentence=>({en:sentence.trim(),zh:`情境理解：${u.zh}；句中“${w.word}”表示“${w.meaning}”。`}))];
-    for(const source of sources){const answer=findWordForm(source.en,w.word);if(answer)return{word:w,en:source.en,zh:source.zh,answer};}
-    const en=wordExample(w,index,u),answer=findWordForm(en,w.word)||w.word;return{word:w,en,zh:`句中“${w.word}”表示“${w.meaning}”。请结合完整句子理解。`,answer};
+  function wordPracticeFrames(w,u){
+    const word=w.word,lower=word.toLowerCase(),cap=word.charAt(0).toUpperCase()+word.slice(1),article=/^[aeiou]/i.test(word)?"an":"a";
+    const weather=["sunny","rainy","cloudy","windy","snowy","hot","cold","warm","cool"],feelings=["happy","sad","angry","tired","afraid","worried","proud"],adjectives=["big","small","cute","colorful","tall","short","strong","thin","quiet","clever","helpful","kind","healthy","unhealthy","cheap","expensive","comfortable","beautiful","different","larger","higher","highest","late","busy","lucky","unusual","wonderful","funny","delicious","new","far","excited","thankful"],numbers=["one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","twenty","thirty","forty","fifty"],weekdays=["monday","tuesday","wednesday","thursday","friday","saturday","sunday"],months=["january","february","march","april","may","june","july","august","september","october","november","december"],seasons=["spring","summer","autumn","winter"],positions=["in","on","under","behind","near","beside"],verbs=["meet","wear","want","sing","dance","read","play","draw","swim","collect","visit","celebrate","walk","ride","run","exercise","clean","buy","thank","teach","plan","call","speak","wait","stay","watch","turn","hide","find","paint","leave","enjoy","win","try","jog","skip","stretch","fit","sweep","mop","wash","cook","tidy","help","hear","rest","make","give","graduate","miss","remember","wish","carry","count","decorate","begin","share","invite","travel"],uncountable=["rice","bread","milk","fish","water","sugar","salt","fruit","chicken","porridge","homework","weather","snow","rain","grass","space","peace","housework","laundry","medicine","love","friendship","energy"],abstract=["family","birthday","festival","time","hobby","week","price","size","change","trip","plan","weekend","vacation","outing","race","team","view","date","olympics","exercise","health","habit","future","dream","job","memory","farewell","tradition","universe"];
+    if(weather.includes(lower))return[`It is ${word} today.`,`The weather is ${word}.`,`Tomorrow may be ${word}.`];
+    if(feelings.includes(lower))return[`I feel ${word}.`,`She looks ${word} today.`,`Why are you ${word}?`];
+    if(adjectives.includes(lower))return[`It is ${word}.`,`This looks ${word}.`,`The picture is ${word}.`];
+    if(numbers.includes(lower))return[`I can count to ${word}.`,`The answer is ${word}.`,`Number ${word} is on the card.`];
+    if(weekdays.includes(lower))return[`We have English on ${word}.`,`${cap} is a school day.`,`I play sports on ${word}.`];
+    if(months.includes(lower))return[`My birthday is in ${word}.`,`${cap} is a month of the year.`,`We have a school activity in ${word}.`];
+    if(seasons.includes(lower))return[`I like ${word}.`,`We have fun in ${word}.`,`${cap} is my favorite season.`];
+    if(positions.includes(lower))return[`The book is ${word} the desk.`,`Put the bag ${word} the chair.`,`I found it ${word} the box.`];
+    if(["left","right"].includes(lower))return[`Turn ${word}, please.`,`The shop is on the ${word}.`,`Look to your ${word}.`];
+    if(lower==="straight")return["Go straight, please.","Walk straight to the gate.","The road goes straight ahead."];
+    const past={played:["I played football yesterday.","We played together after school.","She played a fun game."],watched:["I watched TV yesterday.","We watched a film together.","She watched the game at home."],went:["I went there yesterday.","We went to the park.","She went home early."],took:["I took a photo.","We took a train yesterday.","She took her bag to school."],saw:["I saw a panda.","We saw two birds.","She saw her friend at school."],made:["I made a card.","We made a snowman.","She made breakfast for Mum."],happened:["Something happened yesterday.","What happened at school?","It happened in the morning."],woke:["I woke up early.","She woke at seven.","We woke to a sunny day."],missed:["I missed the bus.","She missed her friend.","We missed the first lesson."],found:["I found my book.","She found a small gift.","We found the right way."],cleaned:["We cleaned the room together.","I cleaned my desk.","She cleaned the window."],began:["The class began at eight.","It began to rain.","We began our lesson."]};
+    if(past[lower])return past[lower];
+    if(lower==="feel")return["I feel happy.","How do you feel?","We feel better today."];
+    if(lower==="become")return["I want to become a teacher.","She will become a doctor.","Dreams can become real."];
+    if(lower.includes(" ")&&/^(get|go|play|take|watch|fly|try|keep)/.test(lower))return[`I can ${word}.`,`We ${word} together.`,`Let's ${word}.`];
+    if(verbs.includes(lower))return[`I can ${word}.`,`We ${word} together.`,`Please ${word} with me.`];
+    if(uncountable.includes(lower))return[`I like ${word}.`,`We need some ${word}.`,`${cap} is useful in our life.`];
+    if(abstract.includes(lower)||lower.includes(" "))return[`We are learning about ${word}.`,`${cap} is important in this unit.`,`I can talk about ${word}.`];
+    if(lower.endsWith("s"))return[`I can see ${word}.`,`These ${word} are here.`,`We are learning about ${word}.`];
+    return[`This is ${article} ${word}.`,`I can see ${article} ${word}.`,`The ${word} is here.`];
   }
-  function wordCard(w,i,u,type){const known=state.mastered.includes(`${u.id}:${w.word}`),sentence=wordSentenceStudy(w,i,u);return `<article class="vocab-card sentence-word-card ${known?"known":""}"><button class="sound" data-say="${esc(w.word)}">🔊 单词</button><small>${type==="core"?"必备":"拓展"} ${i+1}</small><h3>${esc(w.word)}</h3><button class="meaning-cover" data-toggle-word>点击查看意思</button><p class="word-meaning">${esc(w.meaning)}</p><div class="word-sentence-module"><div><em>句式学习</em><button data-say="${esc(sentence.en)}">🔊 整句</button></div>${interactiveSentence(sentence.en,u)}<p>${esc(sentence.zh)}</p></div></article>`;}
+  function sentenceChineseHint(en,w,u){
+    const word=w.word,meaning=w.meaning;
+    if(en===`It is ${word} today.`)return`今天是“${meaning}”的状态。`;
+    if(en===`The weather is ${word}.`)return`天气是“${meaning}”的。`;
+    if(en===`Tomorrow may be ${word}.`)return`明天可能会是“${meaning}”的天气。`;
+    if(en===`I feel ${word}.`)return`我感觉“${meaning}”。`;
+    if(en===`She looks ${word} today.`)return`她今天看起来很“${meaning}”。`;
+    if(en===`Why are you ${word}?`)return`你为什么感到“${meaning}”？`;
+    if(en===`It is ${word}.`)return`它是“${meaning}”的状态或特点。`;
+    if(en===`This looks ${word}.`)return`这个看起来很“${meaning}”。`;
+    if(en===`The picture is ${word}.`)return`这幅图是“${meaning}”的。`;
+    if(en===`I can count to ${word}.`)return`我能数到“${meaning}”。`;
+    if(en===`The answer is ${word}.`)return`答案是“${meaning}”。`;
+    if(en===`Number ${word} is on the card.`)return`卡片上有数字“${meaning}”。`;
+    if(en.includes(` on ${word}.`))return`这句话表示某件事安排在“${meaning}”。`;
+    if(en.includes(` in ${word}.`))return`这句话表示某件事发生在“${meaning}”。`;
+    if(en===`I like ${word}.`)return`我喜欢“${meaning}”。`;
+    if(en===`We have fun in ${word}.`)return`我们在“${meaning}”过得很开心。`;
+    if(en.includes(`${word} is my favorite season`))return`“${meaning}”是我最喜欢的季节。`;
+    if(en===`The book is ${word} the desk.`)return`书在课桌的“${meaning}”位置。`;
+    if(en===`Put the bag ${word} the chair.`)return`把书包放在椅子的“${meaning}”位置。`;
+    if(en===`I found it ${word} the box.`)return`我在盒子的“${meaning}”位置找到了它。`;
+    if(en===`Turn ${word}, please.`)return`请向“${meaning}”转。`;
+    if(en===`I can ${word}.`)return`我会“${meaning}”。`;
+    if(en===`We ${word} together.`)return`我们一起“${meaning}”。`;
+    if(en===`Please ${word} with me.`)return`请和我一起“${meaning}”。`;
+    if(en===`Let's ${word}.`)return`让我们一起“${meaning}”。`;
+    if(en===`We need some ${word}.`)return`我们需要一些“${meaning}”。`;
+    if(en===`${word.charAt(0).toUpperCase()+word.slice(1)} is useful in our life.`)return`“${meaning}”在生活中很有用。`;
+    if(en===`We are learning about ${word}.`)return`我们正在学习关于“${meaning}”的内容。`;
+    if(en===`I can talk about ${word}.`)return`我能谈论“${meaning}”。`;
+    if(en.startsWith("This is "))return`这是一个（或一件）“${meaning}”。`;
+    if(en.startsWith("I can see "))return`我能看到“${meaning}”。`;
+    if(en===`The ${word} is here.`)return`这个“${meaning}”就在这里。`;
+    if(en.startsWith("Please read the word"))return`请大声读出“${word}”这个词，它的意思是“${meaning}”。`;
+    if(en.startsWith("Can you spell the word"))return`你能拼写“${word}”这个词吗？`;
+    if(en.startsWith("I can use the word"))return`我能在本单元中使用“${word}（${meaning}）”。`;
+    return`这句话表达“${u.zh}”情境中的一个完整信息，其中“${word}”表示“${meaning}”。`;
+  }
+  function wordRoleInfo(w,answer){
+    const word=w.word.toLowerCase(),adjectives=["sunny","rainy","cloudy","windy","snowy","hot","cold","warm","cool","happy","sad","angry","tired","afraid","worried","proud","big","small","cute","colorful","tall","short","strong","thin","quiet","clever","helpful","kind","healthy","unhealthy","cheap","expensive","comfortable","beautiful","different","larger","higher","highest","late","busy","lucky","unusual","wonderful","funny","delicious","new","far","excited","thankful"],prepositions=["in","on","under","behind","near","beside"],numbers=["one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","twenty","thirty","forty","fifty","first","second","third","fourth","fifth","eighth","ninth","twelfth"],pronouns=["he","she","they","this","that","these","those"],timeWords=["monday","tuesday","wednesday","thursday","friday","saturday","sunday","january","february","march","april","may","june","july","august","september","october","november","december","today","tomorrow","yesterday","now","every day","after school","every"],adverbs=["finally","suddenly","then","often","usually","sometimes","early","together","later","outside","fast"],questions=["why","when","where","who","what","which","how many","how much","what time"],verbs=["meet","wear","want","sing","dance","read","play","draw","swim","collect","visit","celebrate","walk","ride","run","exercise","clean","buy","thank","teach","plan","call","speak","wait","stay","watch","turn","hide","find","paint","leave","enjoy","win","try","jog","skip","stretch","fit","sweep","mop","wash","cook","tidy","help","hear","rest","make","give","graduate","miss","remember","wish","carry","count","decorate","begin","share","invite","travel","feel","become","like","love","get","go","put","eat","drink","do","have","know","write","look","see","learn","use","need","show","give","take","work","live","say","tell","talk","played","watched","went","took","saw","made","happened","woke","missed","found","cleaned"];
+    if(prepositions.includes(word))return{label:"介词作用",detail:"连接地点与事物，说明它们之间的位置关系。"};
+    if(["left","right","straight"].includes(word))return{label:"方位词作用",detail:"说明移动方向或所在位置。"};
+    if(numbers.includes(word))return{label:"数词作用",detail:"在句中表达数量、顺序或数字信息。"};
+    if(pronouns.includes(word))return{label:"代词作用",detail:"代替人物名称，避免在句中重复说同一个人。"};
+    if(timeWords.includes(word))return{label:"时间词作用",detail:"说明动作发生的日期、时间或频率。"};
+    if(adverbs.includes(word))return{label:"副词作用",detail:"补充说明动作发生的时间、频率、方式或程度。"};
+    if(questions.includes(word))return{label:"疑问词作用",detail:"放在问句中，用来询问人物、时间、原因、数量或其他信息。"};
+    if(adjectives.includes(word))return{label:"形容词作用",detail:"描述人物、事物或天气的状态和特点。"};
+    if(verbs.includes(word)||/ed$/.test(answer.toLowerCase()))return{label:word.includes(" ")?"动词短语作用":"动词作用",detail:`表达句子中的动作或状态；本句实际使用的词形是“${answer}”。`};
+    if(word.includes(" "))return{label:"固定短语作用",detail:"作为一个整体表达特定的时间、事物或活动，使用时不要随意拆开。"};
+    return{label:"名词作用",detail:"表示句子中谈到的人、事物、地点或概念。"};
+  }
+  function wordSentenceStudies(w,index,u){
+    const items=[],seen=new Set(),add=(en,zh)=>{const answer=findWordForm(en,w.word);if(!answer||seen.has(en.toLowerCase()))return;seen.add(en.toLowerCase());items.push({word:w,en,zh:zh||sentenceChineseHint(en,w,u),answer,role:wordRoleInfo(w,answer)});};
+    u.patterns.forEach(pattern=>add(pattern.en,pattern.zh));
+    (u.story.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[]).forEach(sentence=>add(sentence.trim(),`情境理解：${u.zh}；句中“${w.word}”表示“${w.meaning}”。`));
+    add(wordExample(w,index,u),`句中“${w.word}”表示“${w.meaning}”。请结合完整句子理解。`);
+    wordPracticeFrames(w,u).forEach(en=>add(en,sentenceChineseHint(en,w,u)));
+    [`Please read the word ${w.word} aloud.`,`Can you spell the word ${w.word}?`,`I can use the word ${w.word} in this unit.`].forEach(en=>add(en,sentenceChineseHint(en,w,u)));
+    return items.slice(0,3);
+  }
+  function wordCard(w,i,u,type){const known=state.mastered.includes(`${u.id}:${w.word}`),sentences=wordSentenceStudies(w,i,u);return `<article class="vocab-card sentence-word-card ${known?"known":""}"><button class="sound" data-say="${esc(w.word)}">🔊 单词</button><small>${type==="core"?"必备":"拓展"} ${i+1}</small><h3>${esc(w.word)}</h3><button class="meaning-cover" data-toggle-word>点击查看意思</button><p class="word-meaning">${esc(w.meaning)}</p><div class="word-sentence-module"><div class="word-sentence-title"><em>句式学习</em><b>3个例句</b></div><div class="word-sentence-list">${sentences.map((sentence,index)=>`<section><div><span>例句 ${index+1}</span><button data-say="${esc(sentence.en)}">🔊 整句</button></div>${interactiveSentence(sentence.en,u)}<div class="sentence-explanation"><p><b>句子意思</b>${esc(sentence.zh)}</p><p><b>${esc(sentence.role.label)}</b><strong>${esc(w.word)}</strong>：${esc(sentence.role.detail)}</p></div></section>`).join("")}</div></div></article>`;}
 
   function renderPatternStage(box,u){
     box.innerHTML=`<div class="content-head"><span>第3步</span><h2>重点句型：知道为什么，再学会替换</h2><p>先听完整句子；遇到不会的词，直接点击该单词听发音、看意思。</p></div><div class="pattern-list">${u.patterns.map((p,i)=>`<article class="pattern-card"><div class="pattern-number">${i+1}</div><div><button class="line-sound" data-say="${esc(p.en)}">🔊 听完整句子</button>${interactiveSentence(p.en,u)}<p class="sentence-translation">${esc(p.zh)}</p><div class="rule"><b>为什么这样说？</b>${esc(p.rule)}</div><div class="try"><b>替换练习</b><span>先读原句3遍，再把关键词换成本单元另一个词。最后合上提示说一遍。</span></div></div></article>`).join("")}</div><div class="mistake-box"><h3>⚠️ 本单元检查清单</h3><ul><li>句子开头是否大写？结尾是否有问号或句号？</li><li>he / she 作主语时，动词是否需要变化？</li><li>时间、日期、星期前的介词是否用对？只检查本句真正出现的规则。</li></ul></div>${doneButton("我已会读并替换")}`;
@@ -512,5 +593,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=14",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=15",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
