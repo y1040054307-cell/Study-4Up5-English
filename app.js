@@ -43,12 +43,13 @@
   const stageKey = (stage) => `${unitKey()}:${stage}`;
   const stages = [
     {id:"overview",icon:"🎯",name:"理解目标"},{id:"words",icon:"🔤",name:"必备单词"},{id:"patterns",icon:"🧩",name:"重点句型"},
-    {id:"dialogue",icon:"🗣️",name:"情境对话"},{id:"reading",icon:"📖",name:"原创阅读"},{id:"practice",icon:"✅",name:"分层练习"}
+    {id:"cloze",icon:"✏️",name:"句式填词"},{id:"dialogue",icon:"🗣️",name:"情境对话"},{id:"reading",icon:"📖",name:"原创阅读"},{id:"practice",icon:"✅",name:"分层练习"}
   ];
   const tasks = [
     {id:"understand",icon:"👀",title:"看懂本单元目标",detail:"读学习目标和情境说明，先明白要学会做什么",stage:"overview"},
     {id:"vocab",icon:"🔤",title:"点读必备单词",detail:"听、读、看意思，至少主动回忆6个词",stage:"words"},
     {id:"speak",icon:"🗣️",title:"跟读并替换句型",detail:"每个重点句型读3遍，再换一个关键词",stage:"patterns"},
+    {id:"cloze",icon:"✏️",title:"完成句式填词",detail:"先读本单元完整例句，再隐藏答案填写重要单词",stage:"cloze"},
     {id:"read",icon:"📖",title:"完成对话或阅读",detail:"先读英文猜意思，再看中文理解线索",stage:"reading"},
     {id:"quiz",icon:"🎯",title:"完成5分钟小测",detail:"错题不是失败，会自动进入复习清单",stage:"practice"},
     {id:"zh2en",icon:"✍️",title:"看中文写英文",detail:"完成本单元5个词的英文默写，注意拼写",stage:"words"},
@@ -137,36 +138,36 @@
     const plant=plantState(),progress=plantProgress(); $("homePlant").textContent=plant.icon; $("plantName").textContent=plant.name; $("plantHint").textContent=`活力 ${progress.energy}/100 · 必须亲手浇灌才会成长`;
     $("homeTasks").innerHTML=todayTasks.slice(0,3).map(t=>{const done=state.dailyDone.includes(todayKey(t.id));return `<button class="preview-task ${done?"done":""}" data-open-stage="${t.stage}"><span>${done?"✓":t.icon}</span><div><b>${t.title}</b><small>${t.detail}</small></div><em>${done?"已完成":"去学习 →"}</em></button>`}).join("");
     const unitDone=stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length;
-    $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} · Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/6*100}%"></span></div><small>${unitDone}/6 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
+    $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} · Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/stages.length*100}%"></span></div><small>${unitDone}/${stages.length} 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
     renderHomePet();
   }
 
-  function nextStage(){ return stages.find(s=>!state.stageDone.includes(stageKey(s.id))) || stages[5]; }
+  function nextStage(){ return stages.find(s=>!state.stageDone.includes(stageKey(s.id))) || stages.at(-1); }
 
   function renderCourses(){
     $("gradeSwitch").innerHTML=[3,4,5,6].map(g=>`<button class="${selectedGrade===g?"active":""}" data-grade="${g}">${g}年级</button>`).join("");
     $("termSwitch").innerHTML=["上册","下册"].map(t=>`<button class="${selectedTerm===t?"active":""}" data-term="${t}">${t}</button>`).join("");
     const book=COURSE_BOOKS.find(b=>b.grade===selectedGrade&&b.term===selectedTerm);
     const done=book.units.filter(u=>stages.every(s=>state.stageDone.includes(`${u.id}:${s.id}`))).length;
-    $("bookSummary").innerHTML=`<div><span>${book.edition}</span><h2>${book.label}</h2><p>${book.units.length}个主题单元 · 每单元6步 · 原创讲解与练习</p></div><div><b>${done}/${book.units.length}</b><small>完成单元</small></div>`;
+    $("bookSummary").innerHTML=`<div><span>${book.edition}</span><h2>${book.label}</h2><p>${book.units.length}个主题单元 · 每单元${stages.length}步 · 原创讲解与练习</p></div><div><b>${done}/${book.units.length}</b><small>完成单元</small></div>`;
     $("unitGrid").innerHTML=book.units.map(u=>{
       const stepDone=stages.filter(s=>state.stageDone.includes(`${u.id}:${s.id}`)).length;
       const current=state.bookId===book.id&&state.unitIndex===u.number-1;
-      return `<button class="unit-card ${current?"current":""}" data-unit-book="${book.id}" data-unit-index="${u.number-1}"><span class="unit-icon">${u.icon}</span><span class="unit-no">UNIT ${String(u.number).padStart(2,"0")}</span><h3>${u.title}</h3><p>${u.zh} · ${u.goal}</p><div class="unit-materials"><span>3课时</span><span>${u.core.length}词</span><span>${u.patterns.length}句型</span><span>阅读+练习</span></div><div class="thin-bar"><span style="width:${stepDone/6*100}%"></span></div><small>${stepDone}/6步完成 ${current?"· 正在学习":""}</small><strong class="unit-cta">${stepDone?"继续单元教材":"进入单元教材"} →</strong></button>`;
+      return `<button class="unit-card ${current?"current":""}" data-unit-book="${book.id}" data-unit-index="${u.number-1}"><span class="unit-icon">${u.icon}</span><span class="unit-no">UNIT ${String(u.number).padStart(2,"0")}</span><h3>${u.title}</h3><p>${u.zh} · ${u.goal}</p><div class="unit-materials"><span>3课时</span><span>${u.core.length}词</span><span>${u.patterns.length}句型</span><span>句式填词</span></div><div class="thin-bar"><span style="width:${stepDone/stages.length*100}%"></span></div><small>${stepDone}/${stages.length}步完成 ${current?"· 正在学习":""}</small><strong class="unit-cta">${stepDone?"继续单元教材":"进入单元教材"} →</strong></button>`;
     }).join("");
   }
 
   function lessonPlan(u){
     return [
       {number:1,title:"词汇启蒙课",time:"约20分钟",icon:"🔤",detail:`理解主题，点读并掌握前${Math.min(8,u.core.length)}个必备词`,stage:"words"},
-      {number:2,title:"句型交流课",time:"约20分钟",icon:"🗣️",detail:`学会${u.patterns.length}个重点句型，完成角色对话`,stage:"patterns"},
+      {number:2,title:"句型交流课",time:"约25分钟",icon:"🗣️",detail:`学会${u.patterns.length}个重点句型，完成例句学习和句式填词`,stage:"patterns"},
       {number:3,title:"阅读运用课",time:"约25分钟",icon:"📖",detail:"朗读原创短文，完成理解题、单元小测与表达任务",stage:"reading"}
     ];
   }
 
   function renderUnit(){
     const book=bookNow(), u=unitNow();
-    $("unitHero").innerHTML=`<div class="unit-hero-icon">${u.icon}</div><div><span>完整单元教材 · ${book.label} · UNIT ${String(u.number).padStart(2,"0")}</span><h1>${u.title}</h1><h2>${u.zh}</h2><p>${u.goal}</p><div class="unit-hero-actions"><button data-open-stage="${nextStage().id}">▶ ${stages.find(s=>s.id===nextStage().id).name}</button><button data-action="print">🖨️ 打印学习单</button></div></div><div class="hero-count"><b>${stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length}/6</b><small>学习步骤</small></div>`;
+    $("unitHero").innerHTML=`<div class="unit-hero-icon">${u.icon}</div><div><span>完整单元教材 · ${book.label} · UNIT ${String(u.number).padStart(2,"0")}</span><h1>${u.title}</h1><h2>${u.zh}</h2><p>${u.goal}</p><div class="unit-hero-actions"><button data-open-stage="${nextStage().id}">▶ ${stages.find(s=>s.id===nextStage().id).name}</button><button data-action="print">🖨️ 打印学习单</button></div></div><div class="hero-count"><b>${stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length}/${stages.length}</b><small>学习步骤</small></div>`;
     $("lessonTabs").innerHTML=stages.map(s=>`<button class="${state.stage===s.id?"active":""} ${state.stageDone.includes(stageKey(s.id))?"done":""}" data-stage="${s.id}"><span>${state.stageDone.includes(stageKey(s.id))?"✓":s.icon}</span>${s.name}</button>`).join("");
     renderStage();
   }
@@ -176,14 +177,15 @@
     state.stageDone.push(key); if(!state.dailyDone.includes(todayKey(stageTask(stage)))) state.dailyDone.push(todayKey(stageTask(stage)));
     reward(1,"完成一个学习步骤",1); renderUnit();
   }
-  function stageTask(stage){ return ({overview:"understand",words:"vocab",patterns:"speak",dialogue:"read",reading:"read",practice:"quiz"})[stage]; }
+  function stageTask(stage){ return ({overview:"understand",words:"vocab",patterns:"speak",cloze:"cloze",dialogue:"read",reading:"read",practice:"quiz"})[stage]; }
   function doneButton(label="完成这一步"){ return `<div class="stage-finish"><p>做完后点一下，记录学习进度并领取小太阳。</p><button class="primary" id="completeStageBtn">${state.stageDone.includes(stageKey(state.stage))?"✓ 已完成":label+" +1 ☀️"}</button></div>`; }
 
   function renderStage(){
     const u=unitNow(), box=$("lessonContent");
-    if(state.stage==="overview") box.innerHTML=`<div class="content-head"><span>单元教材导学</span><h2>这套教材怎样学习？</h2><p>本单元分成3课时，不需要一次学完。每完成一课，第二天先复习5分钟。</p></div><div class="material-summary"><article><b>${u.core.length}</b><span>必备与拓展词</span></article><article><b>${u.patterns.length}</b><span>重点句型</span></article><article><b>1</b><span>原创情境对话</span></article><article><b>1+5</b><span>阅读与小测</span></article></div><div class="textbook-plan">${lessonPlan(u).map(item=>`<button data-open-stage="${item.stage}"><span>${item.icon}</span><div><small>LESSON ${item.number} · ${item.time}</small><h3>${item.title}</h3><p>${item.detail}</p></div><em>开始学习 →</em></button>`).join("")}</div><h3 class="goal-title">学完本单元，我可以做到</h3><div class="objective-list"><article><b>我能听懂</b><p>在“${u.zh}”情境中听出关键词，判断人物在谈论什么。</p></article><article><b>我能开口</b><p>${u.goal}</p></article><article><b>我能读懂</b><p>读一段3—5句的原创短文，找到人物、地点或主要信息。</p></article><article><b>我能写出</b><p>仿照重点句型替换关键词，独立写2—3个句子。</p></article></div><div class="explain-card"><span>${u.icon}</span><div><h3>生活情境</h3><p>想一想：你在真实生活中什么时候会用到“${u.zh}”英语？先用中文说清楚，再尝试说出一个英文关键词。</p><strong>学习秘诀：理解意思 → 看例子 → 自己换词 → 离开提示再说一遍。</strong></div></div>${doneButton("我已经看懂学习路线")}`;
+    if(state.stage==="overview") box.innerHTML=`<div class="content-head"><span>单元教材导学</span><h2>这套教材怎样学习？</h2><p>本单元分成3课时，不需要一次学完。每完成一课，第二天先复习5分钟。</p></div><div class="material-summary"><article><b>${u.core.length}</b><span>必备与拓展词</span></article><article><b>${u.patterns.length}</b><span>重点句型</span></article><article><b>3–5</b><span>完整例句与填词</span></article><article><b>1+5</b><span>阅读与小测</span></article></div><div class="textbook-plan">${lessonPlan(u).map(item=>`<button data-open-stage="${item.stage}"><span>${item.icon}</span><div><small>LESSON ${item.number} · ${item.time}</small><h3>${item.title}</h3><p>${item.detail}</p></div><em>开始学习 →</em></button>`).join("")}</div><h3 class="goal-title">学完本单元，我可以做到</h3><div class="objective-list"><article><b>我能听懂</b><p>在“${u.zh}”情境中听出关键词，判断人物在谈论什么。</p></article><article><b>我能开口</b><p>${u.goal}</p></article><article><b>我能读懂</b><p>读一段3—5句的原创短文，找到人物、地点或主要信息。</p></article><article><b>我能写出</b><p>仿照重点句型替换关键词，独立写2—3个句子。</p></article></div><div class="explain-card"><span>${u.icon}</span><div><h3>生活情境</h3><p>想一想：你在真实生活中什么时候会用到“${u.zh}”英语？先用中文说清楚，再尝试说出一个英文关键词。</p><strong>学习秘诀：理解意思 → 看例子 → 自己换词 → 离开提示再说一遍。</strong></div></div>${doneButton("我已经看懂学习路线")}`;
     if(state.stage==="words") renderWordStage(box,u);
     if(state.stage==="patterns") renderPatternStage(box,u);
+    if(state.stage==="cloze") renderClozeStage(box,u);
     if(state.stage==="dialogue") renderDialogueStage(box,u);
     if(state.stage==="reading") renderReadingStage(box,u);
     if(state.stage==="practice") renderPracticeStage(box,u);
@@ -235,19 +237,55 @@
     bindSentenceWords(box);
   }
 
+  function regexSafe(text){return String(text).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}
+  function wordVariants(word){
+    const value=word.toLowerCase(),forms=[value];if(value.includes(" "))return forms;
+    forms.push(value+"s",value+"es",value+"ed",value+"ing");
+    if(value.endsWith("e"))forms.push(value.slice(0,-1)+"ing",value+"d");
+    if(value.endsWith("y")){forms.push(value.slice(0,-1)+"ies",value.slice(0,-1)+"ied");}
+    return [...new Set(forms)].sort((a,b)=>b.length-a.length);
+  }
+  function sentenceWord(text,u,used=new Set()){
+    const words=[...u.core].sort((a,b)=>b.word.length-a.word.length);
+    for(const word of words){if(used.has(word.word.toLowerCase()))continue;for(const form of wordVariants(word.word)){const pattern=new RegExp(`(^|[^A-Za-z])(${regexSafe(form)})(?=$|[^A-Za-z])`,"i"),match=text.match(pattern);if(match)return{word,answer:match[2]};}}
+    return null;
+  }
+  function sentenceClozeItems(u){
+    const items=[],used=new Set();
+    const add=(sentence,translation,source)=>{const found=sentenceWord(sentence,u,used);if(!found)return;used.add(found.word.word.toLowerCase());items.push({sentence:sentence.trim(),translation:typeof translation==="function"?translation(found):translation,target:found.word.word,answer:found.answer,meaning:found.word.meaning,source});};
+    u.patterns.forEach(pattern=>add(pattern.en,pattern.zh,"重点句型"));
+    (u.story.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[]).forEach(sentence=>add(sentence,found=>`情境提示：${u.zh}；关键词“${found.word.word}”意为“${found.word.meaning}”。`,"情境例句"));
+    for(const word of u.core){if(items.length>=3)break;if(used.has(word.word.toLowerCase()))continue;used.add(word.word.toLowerCase());items.push({sentence:`Please use ${word.word} in this unit.`,translation:`请在本单元中使用“${word.meaning}”这个词。`,target:word.word,answer:word.word,meaning:word.meaning,source:"词汇运用"});}
+    return items.slice(0,5);
+  }
+  function blankSentence(sentence,answer){return sentence.replace(new RegExp(regexSafe(answer),"i"),"________");}
+  function answerNorm(text){return String(text||"").trim().replace(/\s+/g," ").toLowerCase();}
+  function renderClozeStage(box,u){
+    const items=sentenceClozeItems(u),done=state.stageDone.includes(stageKey("cloze"));
+    box.innerHTML=`<div class="content-head"><span>第4步 · 新模块</span><h2>句式填词：先看懂完整句子，再独立写出单词</h2><p>先学习 ${items.length} 个完整例句。点击“开始填空”后，例句会隐藏，避免照着答案抄写。</p></div><section class="cloze-guide"><div><b>① 看完整句</b><span>理解单词在句子里的位置和作用</span></div><i>→</i><div><b>② 听读两遍</b><span>点击整句或单词练习发音</span></div><i>→</i><div><b>③ 隐藏答案</b><span>根据中文提示完成句子填空</span></div></section><section class="cloze-examples" id="clozeExamples"><div class="cloze-section-head"><div><h3>完整例句学习</h3><p>重点单词已经标出。先理解整句，不要只背孤立单词。</p></div><span>${items.length} 句</span></div><div class="cloze-example-grid">${items.map((item,index)=>`<article class="cloze-example-card"><div class="cloze-example-no">${index+1}</div><div><div class="cloze-example-meta"><em>${esc(item.source)}</em><b>${esc(item.target)} · ${esc(item.meaning)}</b></div>${interactiveSentence(item.sentence,u)}<p>${esc(item.translation)}</p></div><button data-say="${esc(item.sentence)}" aria-label="朗读完整例句">🔊 整句</button></article>`).join("")}</div><button class="primary cloze-start" id="startClozeBtn">我已读懂例句，开始独立填空 →</button></section><section class="cloze-practice" id="clozePractice" hidden><div class="cloze-section-head"><div><h3>独立句子填空</h3><p>完整例句已隐藏。请根据中文意思和首字母提示，填入本单元单词。</p></div><span>不要看答案</span></div><div class="cloze-question-list">${items.map((item,index)=>`<article class="cloze-question" data-cloze-question="${index}"><span>${index+1}</span><div><b>${esc(blankSentence(item.sentence,item.answer))}</b><p>${esc(item.translation)}</p><small>提示：${esc(item.meaning)} · ${esc(item.answer.charAt(0))}${"＿".repeat(Math.max(1,item.answer.length-1))}</small><input type="text" autocomplete="off" spellcheck="false" data-cloze-answer data-word="${esc(item.target)}" data-expected="${esc(item.answer)}" placeholder="在这里填写英文单词"><em></em></div><button type="button" data-say="${esc(blankSentence(item.sentence,item.answer).replace("________","blank"))}" aria-label="朗读填空句">🔊</button></article>`).join("")}</div><div class="cloze-actions"><button class="soft" id="backToExamples">返回复习例句</button><button class="primary" id="checkClozeBtn">提交并检查</button></div><div id="clozeResult"></div><div id="clozeFinish" hidden>${doneButton("我已完成句式填词")}</div></section>`;
+    box.querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));bindSentenceWords(box);
+    $("startClozeBtn").onclick=()=>{$("clozeExamples").hidden=true;$("clozePractice").hidden=false;$("clozePractice").scrollIntoView({behavior:"smooth",block:"start"});setTimeout(()=>box.querySelector("[data-cloze-answer]")?.focus(),350);};
+    $("backToExamples").onclick=()=>{$("clozePractice").hidden=true;$("clozeExamples").hidden=false;$("clozeExamples").scrollIntoView({behavior:"smooth",block:"start"});};
+    $("checkClozeBtn").onclick=()=>{
+      let correct=0;box.querySelectorAll("[data-cloze-answer]").forEach(input=>{const row=input.closest(".cloze-question"),expected=input.dataset.expected,word=input.dataset.word,ok=answerNorm(input.value)===answerNorm(expected),key=`${u.id}:${word}`;row.classList.remove("correct","wrong");row.classList.add(ok?"correct":"wrong");row.querySelector("em").textContent=ok?"✓ 正确":input.value.trim()?`正确答案：${expected}`:`还没有填写，正确答案：${expected}`;if(ok){correct+=1;if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(item=>item!==key);}else if(!state.weak.includes(key))state.weak.push(key);});
+      state.quiz.correct+=correct;state.quiz.total+=items.length;save();$("clozeResult").innerHTML=`<div class="quiz-result"><b>${correct}/${items.length}</b><p>${correct===items.length?"全部正确！你已经能把单词放进句子里。":"先读一遍正确句子，再修改错题并重新检查。"}</p></div>`;$("clozeFinish").hidden=false;$("checkClozeBtn").textContent="再次检查";const complete=$("completeStageBtn");if(complete)complete.onclick=()=>completeStage("cloze");
+    };
+    if(done)$("clozeFinish").hidden=false;
+  }
+
   function dialogueLines(u){ const p=u.patterns; return [
     ["A",`Hi! Let's talk about ${u.title}.`],["B",p[0].en],["A",p[1]?.en||"That's interesting."],["B",p[2]?.en||"Let's learn together."],["A","Great! Can you say it again?"],["B","Sure. Let's practise together!"]
   ]; }
   function renderDialogueStage(box,u){
     const lines=dialogueLines(u);
-    box.innerHTML=`<div class="content-head"><span>第4步</span><h2>原创情境对话：把句型真正说出来</h2><p>第一遍听完整句，第二遍逐词点读，第三遍分别扮演A和B。</p></div><div class="dialogue-card"><div class="scene-label">情境：两位同学在练习“${u.zh}”</div>${lines.map(([role,text])=>`<article class="dialogue-line role-${role.toLowerCase()}"><span>${role}</span><div>${interactiveSentence(text,u)}</div><button class="dialogue-sound" data-say="${esc(text)}" aria-label="播放完整句子">🔊 整句</button></article>`).join("")}</div><div class="speaking-challenge"><h3>🎤 开口挑战</h3><p>把对话中的一个关键词换成自己的真实信息，再完整说一遍。能让家长听懂意思，就算过关。</p></div>${doneButton("我已完成角色朗读")}`;
+    box.innerHTML=`<div class="content-head"><span>第5步</span><h2>原创情境对话：把句型真正说出来</h2><p>第一遍听完整句，第二遍逐词点读，第三遍分别扮演A和B。</p></div><div class="dialogue-card"><div class="scene-label">情境：两位同学在练习“${u.zh}”</div>${lines.map(([role,text])=>`<article class="dialogue-line role-${role.toLowerCase()}"><span>${role}</span><div>${interactiveSentence(text,u)}</div><button class="dialogue-sound" data-say="${esc(text)}" aria-label="播放完整句子">🔊 整句</button></article>`).join("")}</div><div class="speaking-challenge"><h3>🎤 开口挑战</h3><p>把对话中的一个关键词换成自己的真实信息，再完整说一遍。能让家长听懂意思，就算过关。</p></div>${doneButton("我已完成角色朗读")}`;
     box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
     bindSentenceWords(box);
   }
 
   function renderReadingStage(box,u){
     const q1=`What is the passage mainly about?`, q2=`Find one word about “${u.zh}”.`, q3="Can you say one true sentence about yourself?";
-    box.innerHTML=`<div class="content-head"><span>第5步</span><h2>原创阅读：先猜，再找证据</h2><p>不要逐字翻译。先找人物、地点、时间和重复出现的词。</p></div><article class="reading-sheet"><span>READING · ${u.title.toUpperCase()}</span><button data-say="${esc(u.story)}">🔊 听全文</button><h3>${u.zh}小故事</h3><p class="english-reading">${esc(u.story)}</p><details><summary>需要帮助？查看中文理解线索</summary><p>这篇短文围绕“${u.zh}”展开。先圈出熟悉的单词，再判断人物做了什么。中文只用于检查理解，不要求逐字对应。</p></details></article><div class="reading-questions"><h3>读后思考</h3>${[[q1,`It is mainly about ${u.title}.`],[q2,`参考答案：${u.core[0].word}。其他符合主题的词也可以。`],[q3,"开放题：用本单元任一重点句型说一个真实句子。"]].map((q,i)=>`<details><summary>${i+1}. ${esc(q[0])}</summary><p>${esc(q[1])}</p></details>`).join("")}</div><div class="reading-method"><b>阅读三遍法</b><span>第一遍看大意；第二遍圈证据；第三遍大声朗读。遇到生词先猜，不要立刻查。</span></div>${doneButton("我已完成阅读")}`;
+    box.innerHTML=`<div class="content-head"><span>第6步</span><h2>原创阅读：先猜，再找证据</h2><p>不要逐字翻译。先找人物、地点、时间和重复出现的词。</p></div><article class="reading-sheet"><span>READING · ${u.title.toUpperCase()}</span><button data-say="${esc(u.story)}">🔊 听全文</button><h3>${u.zh}小故事</h3><p class="english-reading">${esc(u.story)}</p><details><summary>需要帮助？查看中文理解线索</summary><p>这篇短文围绕“${u.zh}”展开。先圈出熟悉的单词，再判断人物做了什么。中文只用于检查理解，不要求逐字对应。</p></details></article><div class="reading-questions"><h3>读后思考</h3>${[[q1,`It is mainly about ${u.title}.`],[q2,`参考答案：${u.core[0].word}。其他符合主题的词也可以。`],[q3,"开放题：用本单元任一重点句型说一个真实句子。"]].map((q,i)=>`<details><summary>${i+1}. ${esc(q[0])}</summary><p>${esc(q[1])}</p></details>`).join("")}</div><div class="reading-method"><b>阅读三遍法</b><span>第一遍看大意；第二遍圈证据；第三遍大声朗读。遇到生词先猜，不要立刻查。</span></div>${doneButton("我已完成阅读")}`;
     box.querySelector("[data-say]").onclick=()=>speak(u.story);
   }
 
@@ -261,7 +299,7 @@
   function shuffle(a){const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
   function renderPracticeStage(box,u){
     const items=quizItems(u);
-    box.innerHTML=`<div class="content-head"><span>第6步</span><h2>分层练习：从记单词到真正会运用</h2><p>先完成基础小测，再做句型、阅读和表达任务。错词会自动进入复习清单。</p></div><h3 class="practice-level">第一关 · 基础词汇</h3><div class="quiz-list">${items.map((item,i)=>`<article class="quiz-item" data-question="${i}"><b>${i+1}. ${esc(item.q)}</b><div>${item.opts.map(o=>`<button data-answer="${esc(o)}">${esc(o)}</button>`).join("")}</div><p></p></article>`).join("")}</div><button class="primary submit-quiz" id="submitQuiz">提交并查看结果</button><div id="quizResult"></div><h3 class="practice-level">第二关 · 理解与表达</h3><div class="ability-practice"><details><summary>1. 句型理解：翻译并朗读</summary><p><b>${esc(u.patterns[0].en)}</b><br>${esc(u.patterns[0].zh)}<br><small>朗读3遍，再替换一个关键词。</small></p></details><details><summary>2. 阅读理解：短文主要讲什么？</summary><p>主要围绕“${esc(u.zh)}”展开。请从短文中圈出两个能证明答案的词。</p></details><details><summary>3. 独立表达：说或写3句话</summary><p>第1句使用本单元必备词，第2句使用重点句型，第3句说自己的真实情况。完成后读给家长听。</p></details></div>${doneButton("我已完成本单元")}`;
+    box.innerHTML=`<div class="content-head"><span>第7步</span><h2>分层练习：从记单词到真正会运用</h2><p>先完成基础小测，再做句型、阅读和表达任务。错词会自动进入复习清单。</p></div><h3 class="practice-level">第一关 · 基础词汇</h3><div class="quiz-list">${items.map((item,i)=>`<article class="quiz-item" data-question="${i}"><b>${i+1}. ${esc(item.q)}</b><div>${item.opts.map(o=>`<button data-answer="${esc(o)}">${esc(o)}</button>`).join("")}</div><p></p></article>`).join("")}</div><button class="primary submit-quiz" id="submitQuiz">提交并查看结果</button><div id="quizResult"></div><h3 class="practice-level">第二关 · 理解与表达</h3><div class="ability-practice"><details><summary>1. 句型理解：翻译并朗读</summary><p><b>${esc(u.patterns[0].en)}</b><br>${esc(u.patterns[0].zh)}<br><small>朗读3遍，再替换一个关键词。</small></p></details><details><summary>2. 阅读理解：短文主要讲什么？</summary><p>主要围绕“${esc(u.zh)}”展开。请从短文中圈出两个能证明答案的词。</p></details><details><summary>3. 独立表达：说或写3句话</summary><p>第1句使用本单元必备词，第2句使用重点句型，第3句说自己的真实情况。完成后读给家长听。</p></details></div>${doneButton("我已完成本单元")}`;
     box.querySelectorAll(".quiz-item button").forEach(b=>b.onclick=()=>{const item=b.closest(".quiz-item");item.querySelectorAll("button").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");quizAnswers[item.dataset.question]=b.dataset.answer;});
     $("submitQuiz").onclick=()=>{
       let correct=0; items.forEach((item,i)=>{const el=box.querySelector(`[data-question="${i}"]`), chosen=quizAnswers[i]; const ok=chosen===item.answer; if(ok)correct++; el.classList.add(chosen?(ok?"correct":"wrong"):"wrong"); el.querySelector("p").textContent=chosen?(ok?"回答正确！":"正确答案："+item.answer):"还没有作答，正确答案："+item.answer; const key=`${u.id}:${item.word}`; if(ok){if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(x=>x!==key);}else if(!state.weak.includes(key))state.weak.push(key);});
@@ -476,5 +514,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=12",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=13",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
