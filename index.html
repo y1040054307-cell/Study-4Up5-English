@@ -9,7 +9,7 @@
   <meta property="og:title" content="向阳英语成长岛｜闽教版三至六年级">
   <meta property="og:description" content="每天20分钟，真正听懂、读懂、会说、会用。">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -27,9 +27,10 @@
   <nav class="main-tabs" aria-label="主要功能">
     <button class="active" data-view="home"><span>🏠</span>学习首页</button>
     <button data-view="courses"><span>📚</span>课程</button>
-    <button data-view="today"><span>✅</span>每日任务</button>
-    <button data-view="words"><span>🔤</span>单词本</button>
-    <button data-view="phonics"><span>👄</span>音标课堂</button>
+      <button data-view="today"><span>✅</span>每日任务</button>
+      <button data-view="words"><span>🔤</span>单词本</button>
+      <button data-view="dictionary"><span>📕</span>词典库</button>
+      <button data-view="phonics"><span>👄</span>音标课堂</button>
     <button data-view="garden"><span>🌱</span>成长花园</button>
     <button data-view="report"><span>📈</span>成长报告</button>
   </nav>
@@ -105,7 +106,7 @@
     <section class="view" id="view-today">
       <div class="page-title"><span class="eyebrow">DAILY LEARNING</span><h1>每日学习任务</h1><p>建议每天20—30分钟。按顺序完成，比一次学很多更有效。</p></div>
       <div class="daily-layout">
-        <section class="panel"><div class="daily-heading"><div><b id="todayDate"></b><span id="todayCourse"></span></div><div class="circle-progress" id="circleProgress">0/5</div></div><div id="dailyTasks" class="daily-tasks"></div></section>
+        <section class="panel"><div class="daily-heading"><div><b id="todayDate"></b><span id="todayCourse"></span></div><div class="circle-progress" id="circleProgress">0/7</div></div><div id="dailyTasks" class="daily-tasks"></div></section>
         <aside class="panel reward-panel"><span class="big-sun">☀️</span><h2>今日奖励</h2><p>每项任务 +1 小太阳<br>全部完成再 +3 小太阳</p><button class="primary" id="claimDailyBonus">领取全勤奖励</button><small id="bonusHint"></small></aside>
       </div>
       <section class="daily-practice-zone" id="dailyPracticeZone"></section>
@@ -117,6 +118,22 @@
       <div class="memory-card" id="memoryCard"></div>
       <div class="memory-actions"><button class="danger-soft" id="wordAgain">还不熟</button><button class="primary" id="wordKnow">我记住了</button></div>
       <div class="word-dots" id="wordDots"></div>
+    </section>
+
+    <section class="view" id="view-dictionary">
+      <div class="page-title"><span class="eyebrow">WORD LIBRARY</span><h1>单词词典库</h1><p>按学习阶段分开查词。点击单词可以听发音，搜索时不会影响每日任务。</p></div>
+      <div class="dictionary-tabs" id="dictionaryTabs">
+        <button class="active" data-dictionary-section="primary">🎒 小学必备单词库</button>
+        <button data-dictionary-section="gaokao">🎓 高考必备单词库</button>
+        <button data-dictionary-section="mine">⭐ 我的学习词库</button>
+      </div>
+      <section class="dictionary-toolbar">
+        <div><b id="dictionaryTitle">小学必备单词库</b><span id="dictionaryCount"></span></div>
+        <label>🔎<input id="dictionarySearch" type="search" autocomplete="off" placeholder="输入英文或中文搜索"></label>
+      </section>
+      <div class="dictionary-letter" id="dictionaryLetters"></div>
+      <div class="dictionary-grid" id="dictionaryGrid"></div>
+      <button class="soft dictionary-more" id="dictionaryMore">显示更多单词</button>
     </section>
 
     <section class="view" id="view-phonics">
@@ -149,8 +166,14 @@
     </section>
   </main>
 
+  <dialog class="practice-dialog" id="practiceDialog" aria-labelledby="practiceDialogTitle">
+    <button class="dialog-close" id="closePracticeDialog" aria-label="关闭独立练习窗口">×</button>
+    <div id="practiceDialogContent"></div>
+  </dialog>
+
   <div class="toast" id="toast" role="status"></div>
-  <script src="curriculum.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="curriculum.js?v=7"></script>
+  <script src="dictionary.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
