@@ -114,22 +114,71 @@
     parts.forEach(part=>{let rest=part.trim();while(rest.length>150){let cut=rest.lastIndexOf(" ",150);if(cut<50)cut=150;chunks.push(rest.slice(0,cut));rest=rest.slice(cut).trim();}if(rest)chunks.push(rest);});
     return chunks.length?chunks:[String(text||"").trim()];
   };
-  function stopVoice(){speechRequestId+=1;try{window.speechSynthesis?.cancel();}catch{}if(activeAudio){activeAudio.pause();activeAudio.src="";activeAudio=null;}}
-  function playNetworkVoice(text,rate,requestId){
-    const chunks=speechChunks(text);let index=0;
-    if(!networkVoiceNoticeShown){networkVoiceNoticeShown=true;toast("已自动切换到在线英语语音");}
-    const playNext=()=>{if(requestId!==speechRequestId||index>=chunks.length)return;const chunk=chunks[index],encoded=encodeURIComponent(chunk),sources=[`https://fanyi.baidu.com/gettts?lan=en&text=${encoded}&spd=3&source=web`,`https://dict.youdao.com/dictvoice?audio=${encoded}&type=2`,`https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encoded}`];let sourceIndex=0;
-      const trySource=()=>{if(requestId!==speechRequestId)return;const audio=new Audio(sources[sourceIndex]);activeAudio=audio;audio.preload="auto";audio.playbackRate=Math.max(.7,Math.min(1.05,rate+.12));audio.onended=()=>{index+=1;playNext()};audio.onerror=()=>{sourceIndex+=1;if(sourceIndex<sources.length)trySource();else if(requestId===speechRequestId)toast("语音加载失败，请检查网络后再试")};audio.play().catch(()=>{if(requestId===speechRequestId)toast("请再次点击播放按钮")});};trySource();};
+  const voicePlayer = () => {
+    let player=$("voicePlayer");
+    if(!player){player=document.createElement("audio");player.id="voicePlayer";player.hidden=true;player.preload="auto";player.setAttribute("playsinline","");document.body.appendChild(player);}
+    player.referrerPolicy="no-referrer";
+    return player;
+  };
+  function stopVoice(){
+    speechRequestId+=1;
+    try{window.speechSynthesis?.cancel();}catch{}
+    if(activeAudio){activeAudio.onended=null;activeAudio.onerror=null;activeAudio.pause();activeAudio.removeAttribute("src");try{activeAudio.load();}catch{}activeAudio=null;}
+  }
+  function playDeviceVoice(content,rate,requestId,allowNetworkFallback=true){
+    if(!("speechSynthesis" in window)||typeof SpeechSynthesisUtterance==="undefined"){
+      if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else if(requestId===speechRequestId)toast("语音暂时无法播放，请检查网络后重试");
+      return;
+    }
+    try{
+      const utterance=new SpeechSynthesisUtterance(content),voices=window.speechSynthesis.getVoices?.()||[];
+      utterance.lang="en-US";utterance.rate=rate;utterance.pitch=1;utterance.voice=voices.find(voice=>voice.lang==="en-US")||voices.find(voice=>String(voice.lang).startsWith("en"))||null;
+      let started=false,fellBack=false;
+      const fallback=()=>{if(fellBack||started||requestId!==speechRequestId)return;fellBack=true;if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else toast("语音暂时无法播放，请检查网络后重试");};
+      utterance.onstart=()=>{started=true};
+      utterance.onerror=event=>{if(["canceled","interrupted"].includes(event.error))return;fallback();};
+      window.speechSynthesis.resume?.();window.speechSynthesis.speak(utterance);
+      setTimeout(()=>{if(!started&&!window.speechSynthesis.speaking&&!window.speechSynthesis.pending)fallback();},1200);
+    }catch{if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else if(requestId===speechRequestId)toast("语音暂时无法播放，请检查网络后重试");}
+  }
+  function playNetworkVoice(text,rate,requestId,allowDeviceFallback=true){
+    const chunks=speechChunks(text),player=voicePlayer();let index=0;
+    activeAudio=player;
+    if(!networkVoiceNoticeShown){networkVoiceNoticeShown=true;toast("正在使用稳定的在线整句发音");}
+    const playNext=()=>{
+      if(requestId!==speechRequestId)return;
+      if(index>=chunks.length)return;
+      const chunk=chunks[index],plain=chunk.replace(/[^A-Za-z0-9' -]/g," ").replace(/\s+/g," ").trim()||chunk;
+      const encoded=encodeURIComponent(chunk),plainEncoded=encodeURIComponent(plain);
+      const sources=[
+        `https://fanyi.baidu.com/gettts?lan=en&text=${encoded}&spd=3&source=web`,
+        `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encoded}`,
+        `https://dict.youdao.com/dictvoice?audio=${plainEncoded}&type=2`
+      ];
+      let sourceIndex=0;
+      const trySource=()=>{
+        if(requestId!==speechRequestId)return;
+        if(sourceIndex>=sources.length){if(allowDeviceFallback)playDeviceVoice(text,rate,requestId,false);else toast("语音暂时无法播放，请检查网络后重试");return;}
+        let sourceSettled=false;
+        const failSource=error=>{
+          if(sourceSettled||requestId!==speechRequestId)return;
+          sourceSettled=true;
+          if(error?.name==="NotAllowedError"){toast("请再点击一次播放按钮，允许浏览器播放声音");return;}
+          sourceIndex+=1;trySource();
+        };
+        player.onended=()=>{if(requestId!==speechRequestId)return;sourceSettled=true;index+=1;playNext();};
+        player.onerror=()=>failSource();
+        player.pause();player.src=sources[sourceIndex];player.playbackRate=Math.max(.7,Math.min(1.05,rate+.12));player.load();
+        const started=player.play();if(started?.catch)started.catch(failSource);
+      };
+      trySource();
+    };
     playNext();
   }
   function speak(text,rate=.78){
     const content=String(text||"").trim();if(!content)return;stopVoice();const requestId=speechRequestId;
-    if(!("speechSynthesis" in window)||typeof SpeechSynthesisUtterance==="undefined"){playNetworkVoice(content,rate,requestId);return;}
-    try{
-      const utterance=new SpeechSynthesisUtterance(content),voices=window.speechSynthesis.getVoices?.()||[];utterance.lang="en-US";utterance.rate=rate;utterance.pitch=1;utterance.voice=voices.find(voice=>voice.lang==="en-US")||voices.find(voice=>String(voice.lang).startsWith("en"))||null;
-      let started=false;utterance.onstart=()=>{started=true};utterance.onerror=event=>{if(requestId!==speechRequestId||["canceled","interrupted"].includes(event.error))return;playNetworkVoice(content,rate,requestId)};window.speechSynthesis.speak(utterance);
-      setTimeout(()=>{if(requestId===speechRequestId&&!started&&!window.speechSynthesis.speaking&&!window.speechSynthesis.pending)playNetworkVoice(content,rate,requestId)},1200);
-    }catch{playNetworkVoice(content,rate,requestId);}
+    if(/\s/.test(content))playNetworkVoice(content,rate,requestId,true);
+    else playDeviceVoice(content,rate,requestId,true);
   }
   const speakPhoneme = (symbol) => speak(PHONEME_VOICE[symbol]||symbol,.48);
   const daysBetween = (a,b) => Math.floor((new Date(`${b}T00:00:00`)-new Date(`${a}T00:00:00`))/86400000);
@@ -733,5 +782,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=21",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=22",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
