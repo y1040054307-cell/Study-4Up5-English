@@ -3,8 +3,13 @@
 
   const STORE = "sunny-english-longterm-v3";
   const iso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, plant:{energy:70,xp:0,lastDate:iso()} };
-  const load = () => { try { return { ...defaultState, ...JSON.parse(localStorage.getItem(STORE)||"{}"), plant:{...defaultState.plant,...(JSON.parse(localStorage.getItem(STORE)||"{}").plant||{})}, quiz:{...defaultState.quiz,...(JSON.parse(localStorage.getItem(STORE)||"{}").quiz||{})} }; } catch { return structuredClone(defaultState); } };
+  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
+  const load = () => { try {
+    const raw=JSON.parse(localStorage.getItem(STORE)||"{}"),legacyPlant=raw.plant||{},plant={...defaultState.plant,...legacyPlant,owned:[...new Set(["sunflower",...(legacyPlant.owned||[])])],progress:{...defaultState.plant.progress,...(legacyPlant.progress||{})}};
+    if(!legacyPlant.progress)plant.progress.sunflower={energy:Number(legacyPlant.energy??70),xp:Number(legacyPlant.xp??0),lastFed:""};
+    const pets={...defaultState.pets,...(raw.pets||{}),owned:[...new Set(raw.pets?.owned||[])],progress:{...(raw.pets?.progress||{})}};
+    return {...defaultState,...raw,foods:Number(raw.foods||0),plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})}};
+  } catch { return structuredClone(defaultState); } };
   let state = load();
   let selectedGrade = Number(state.bookId[1]) || 4;
   let selectedTerm = state.bookId.endsWith("a") ? "上册" : "下册";
@@ -16,6 +21,7 @@
   let dictionaryLetter = "all";
   let dictionaryLimit = 48;
   let dictionaryQuery = "";
+  let marketTab = "plants";
   let quizAnswers = {};
   let toastTimer;
 
@@ -24,7 +30,7 @@
   const bookNow = () => COURSE_BOOKS.find(b => b.id === state.bookId) || COURSE_BOOKS[2];
   const unitNow = () => bookNow().units[state.unitIndex] || bookNow().units[0];
   const unitKey = () => unitNow().id;
-  const todayKey = (task) => `${iso()}:${unitKey()}:${task}`;
+  const todayKey = (task) => task==="review"?`${iso()}:global:review`:`${iso()}:${unitKey()}:${task}`;
   const stageKey = (stage) => `${unitKey()}:${stage}`;
   const stages = [
     {id:"overview",icon:"🎯",name:"理解目标"},{id:"words",icon:"🔤",name:"必备单词"},{id:"patterns",icon:"🧩",name:"重点句型"},
@@ -37,7 +43,8 @@
     {id:"read",icon:"📖",title:"完成对话或阅读",detail:"先读英文猜意思，再看中文理解线索",stage:"reading"},
     {id:"quiz",icon:"🎯",title:"完成5分钟小测",detail:"错题不是失败，会自动进入复习清单",stage:"practice"},
     {id:"zh2en",icon:"✍️",title:"看中文写英文",detail:"完成本单元5个词的英文默写，注意拼写",stage:"words"},
-    {id:"en2zh",icon:"🀄",title:"看英文写中文",detail:"写出5个英文单词的准确中文意思",stage:"words"}
+    {id:"en2zh",icon:"🀄",title:"看英文写中文",detail:"写出5个英文单词的准确中文意思",stage:"words"},
+    {id:"review",icon:"🔁",title:"复习过往单词",detail:"只从已经学过的单元中随机抽取，不提前出现未来词汇",stage:"review"}
   ];
 
   const PHONICS_GROUPS = {
@@ -69,15 +76,24 @@
   const speak = (text,rate=.78) => { if (!("speechSynthesis" in window)) return toast("当前浏览器不支持语音"); speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=rate; speechSynthesis.speak(u); };
   const speakPhoneme = (symbol) => speak(PHONEME_VOICE[symbol]||symbol,.48);
   const daysBetween = (a,b) => Math.floor((new Date(`${b}T00:00:00`)-new Date(`${a}T00:00:00`))/86400000);
-  const carePlant = () => { const n=daysBetween(state.plant.lastDate,iso()); if(n>0){ state.plant.energy=Math.max(0,state.plant.energy-n*6); state.plant.lastDate=iso(); save(); } };
+  const plantProgress = (id=state.plant.selected) => {if(!state.plant.progress[id])state.plant.progress[id]={energy:70,xp:0,lastFed:""};return state.plant.progress[id];};
+  const petProgress = (id=state.pets.selected) => {if(!state.pets.progress[id])state.pets.progress[id]={fullness:60,xp:0,lastFed:""};return state.pets.progress[id];};
+  const carePlant = () => { const n=daysBetween(state.plant.lastDate,iso()); if(n>0){ const progress=plantProgress();progress.energy=Math.max(0,progress.energy-n*5);state.plant.lastDate=iso();save(); } };
   const activity = (amount=1) => { state.activity[iso()] = (state.activity[iso()]||0)+amount; };
-  const reward = (amount,msg) => { state.suns += amount; state.plant.xp += amount; state.plant.energy=Math.min(100,state.plant.energy+amount); activity(); save(); toast(`☀️ ${msg}，获得 ${amount} 个小太阳`); };
-  const dailyComplete = () => tasks.filter(t=>state.dailyDone.includes(todayKey(t.id))).length;
+  const reward = (amount,msg,food=0) => { state.suns += amount;state.foods+=food;activity();save();toast(`☀️ ${msg}，获得 ${amount} 个小太阳${food?`和 ${food} 份粮食`:""}`); };
+  const activeTasks = () => tasks.filter(task=>task.id!=="review"||pastLearnedWords().length>0);
+  const dailyComplete = () => activeTasks().filter(t=>state.dailyDone.includes(todayKey(t.id))).length;
   const completedUnits = () => COURSE_BOOKS.flatMap(b=>b.units).filter(u=>stages.every(s=>state.stageDone.includes(`${u.id}:${s.id}`))).length;
   const allWords = () => COURSE_BOOKS.flatMap(b=>b.units.flatMap(u=>u.core.map(w=>({...w,unitId:u.id,unitTitle:u.title}))));
+  const pastLearnedWords = () => {
+    const learned=allWords().filter(item=>{const key=`${item.unitId}:${item.word}`;return state.stageDone.includes(`${item.unitId}:words`)||state.mastered.includes(key)||state.weak.includes(key);}),unique=new Map();
+    learned.forEach(item=>{const key=item.word.toLowerCase();if(!unique.has(key))unique.set(key,item);});
+    return [...unique.values()];
+  };
 
   function renderHeader(){
     $("topSuns").textContent=state.suns;
+    $("topFoods").textContent=state.foods;
     $("topStreak").textContent=streakCount();
   }
   function streakCount(){
@@ -95,19 +111,21 @@
     if(view==="words") renderWords();
     if(view==="dictionary") renderDictionary();
     if(view==="phonics") renderPhonics();
+    if(view==="market") renderMarket();
     if(view==="garden") renderGarden();
+    if(view==="pets") renderPets();
     if(view==="report") renderReport();
     window.scrollTo({top:0,behavior:"smooth"});
   }
 
   function renderHome(){
-    const book=bookNow(), unit=unitNow(), done=dailyComplete();
+    const book=bookNow(), unit=unitNow(), done=dailyComplete(),todayTasks=activeTasks();
     $("welcomeText").textContent=`当前：${book.label} · Unit ${unit.number} ${unit.title}。今天用20—30分钟完成一个小闭环。`;
-    $("todayBar").style.width=`${done/tasks.length*100}%`; $("todayProgressText").textContent=`今日 ${done} / ${tasks.length} 项`;
+    $("todayBar").style.width=`${done/todayTasks.length*100}%`; $("todayProgressText").textContent=`今日 ${done} / ${todayTasks.length} 项`;
     $("statLessons").textContent=state.stageDone.length; $("statWords").textContent=state.mastered.length;
     $("statAccuracy").textContent=state.quiz.total?`${Math.round(state.quiz.correct/state.quiz.total*100)}%`:"—"; $("statSuns").textContent=state.suns;
-    const plant=plantState(); $("homePlant").textContent=plant.icon; $("plantName").textContent=plant.name; $("plantHint").textContent=`活力 ${state.plant.energy}/100 · 累计成长值 ${state.plant.xp}`;
-    $("homeTasks").innerHTML=tasks.slice(0,3).map(t=>{const done=state.dailyDone.includes(todayKey(t.id));return `<button class="preview-task ${done?"done":""}" data-open-stage="${t.stage}"><span>${done?"✓":t.icon}</span><div><b>${t.title}</b><small>${t.detail}</small></div><em>${done?"已完成":"去学习 →"}</em></button>`}).join("");
+    const plant=plantState(),progress=plantProgress(); $("homePlant").textContent=plant.icon; $("plantName").textContent=plant.name; $("plantHint").textContent=`活力 ${progress.energy}/100 · 必须亲手浇灌才会成长`;
+    $("homeTasks").innerHTML=todayTasks.slice(0,3).map(t=>{const done=state.dailyDone.includes(todayKey(t.id));return `<button class="preview-task ${done?"done":""}" data-open-stage="${t.stage}"><span>${done?"✓":t.icon}</span><div><b>${t.title}</b><small>${t.detail}</small></div><em>${done?"已完成":"去学习 →"}</em></button>`}).join("");
     const unitDone=stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length;
     $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} · Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/6*100}%"></span></div><small>${unitDone}/6 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
   }
@@ -145,7 +163,7 @@
   function completeStage(stage=state.stage){
     const key=stageKey(stage); if(state.stageDone.includes(key)) return toast("这个学习步骤已经完成");
     state.stageDone.push(key); if(!state.dailyDone.includes(todayKey(stageTask(stage)))) state.dailyDone.push(todayKey(stageTask(stage)));
-    reward(1,"完成一个学习步骤"); renderUnit();
+    reward(1,"完成一个学习步骤",1); renderUnit();
   }
   function stageTask(stage){ return ({overview:"understand",words:"vocab",patterns:"speak",dialogue:"read",reading:"read",practice:"quiz"})[stage]; }
   function doneButton(label="完成这一步"){ return `<div class="stage-finish"><p>做完后点一下，记录学习进度并领取小太阳。</p><button class="primary" id="completeStageBtn">${state.stageDone.includes(stageKey(state.stage))?"✓ 已完成":label+" +1 ☀️"}</button></div>`; }
@@ -236,21 +254,34 @@
     box.querySelectorAll(".quiz-item button").forEach(b=>b.onclick=()=>{const item=b.closest(".quiz-item");item.querySelectorAll("button").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");quizAnswers[item.dataset.question]=b.dataset.answer;});
     $("submitQuiz").onclick=()=>{
       let correct=0; items.forEach((item,i)=>{const el=box.querySelector(`[data-question="${i}"]`), chosen=quizAnswers[i]; const ok=chosen===item.answer; if(ok)correct++; el.classList.add(chosen?(ok?"correct":"wrong"):"wrong"); el.querySelector("p").textContent=chosen?(ok?"回答正确！":"正确答案："+item.answer):"还没有作答，正确答案："+item.answer; const key=`${u.id}:${item.word}`; if(ok){if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(x=>x!==key);}else if(!state.weak.includes(key))state.weak.push(key);});
-      state.quiz.correct+=correct;state.quiz.total+=items.length; if(!state.dailyDone.includes(todayKey("quiz")))state.dailyDone.push(todayKey("quiz")); reward(Math.max(1,correct),`答对 ${correct}/${items.length} 题`); $("quizResult").innerHTML=`<div class="quiz-result"><b>${correct}/${items.length}</b><p>${correct===items.length?"全部正确！明天还要再回忆一次。":correct>=3?"基本掌握，去单词本复习错词。":"先别急，回到必备单词再听读一遍。"}</p></div>`;
+      state.quiz.correct+=correct;state.quiz.total+=items.length; if(!state.dailyDone.includes(todayKey("quiz")))state.dailyDone.push(todayKey("quiz")); reward(Math.max(1,correct),`答对 ${correct}/${items.length} 题`,1); $("quizResult").innerHTML=`<div class="quiz-result"><b>${correct}/${items.length}</b><p>${correct===items.length?"全部正确！明天还要再回忆一次。":correct>=3?"基本掌握，去单词本复习错词。":"先别急，回到必备单词再听读一遍。"}</p></div>`;
     };
   }
 
   function renderToday(){
-    const u=unitNow(),done=dailyComplete(); $("todayDate").textContent=new Intl.DateTimeFormat("zh-CN",{month:"long",day:"numeric",weekday:"long"}).format(new Date()); $("todayCourse").textContent=`${bookNow().label} · ${u.title}`; $("circleProgress").textContent=`${done}/${tasks.length}`; $("circleProgress").style.background=`conic-gradient(var(--green) 0 ${done/tasks.length*100}%,#e8efeb ${done/tasks.length*100}% 100%)`;
-    $("dailyTasks").innerHTML=tasks.map((t,i)=>{const yes=state.dailyDone.includes(todayKey(t.id));const link=t.id==="zh2en"||t.id==="en2zh"?`data-open-dictation="${t.id}"`:`data-daily-stage="${t.stage}"`;return `<button class="daily-task ${yes?"done":""}" ${link}><span>${yes?"✓":i+1}</span><i>${t.icon}</i><div><b>${t.title}</b><small>${t.detail}</small></div><em>${yes?"已完成":"+1 ☀️"}</em></button>`}).join("");
-    const claimed=state.bonuses.includes(`${iso()}:${unitKey()}`); $("claimDailyBonus").disabled=done<tasks.length||claimed; $("claimDailyBonus").textContent=claimed?"✓ 今日已领取":"领取全勤奖励"; $("bonusHint").textContent=done<tasks.length?`再完成 ${tasks.length-done} 项即可领取`:claimed?"明天继续保持":"现在可以领取3个小太阳";
+    const u=unitNow(),done=dailyComplete(),todayTasks=activeTasks(); $("todayDate").textContent=new Intl.DateTimeFormat("zh-CN",{month:"long",day:"numeric",weekday:"long"}).format(new Date()); $("todayCourse").textContent=`${bookNow().label} · ${u.title}`; $("circleProgress").textContent=`${done}/${todayTasks.length}`; $("circleProgress").style.background=`conic-gradient(var(--green) 0 ${done/todayTasks.length*100}%,#e8efeb ${done/todayTasks.length*100}% 100%)`;
+    $("dailyTasks").innerHTML=todayTasks.map((t,i)=>{const yes=state.dailyDone.includes(todayKey(t.id));const link=t.id==="zh2en"||t.id==="en2zh"?`data-open-dictation="${t.id}"`:t.id==="review"?"data-open-review":`data-daily-stage="${t.stage}"`;return `<button class="daily-task ${yes?"done":""}" ${link}><span>${yes?"✓":i+1}</span><i>${t.icon}</i><div><b>${t.title}</b><small>${t.detail}</small></div><em>${yes?"已完成":t.id==="review"?"+1☀️ +2🥣":"+1☀️ +1🥣"}</em></button>`}).join("");
+    const claimed=state.bonuses.includes(`${iso()}:${unitKey()}`); $("claimDailyBonus").disabled=done<todayTasks.length||claimed; $("claimDailyBonus").textContent=claimed?"✓ 今日已领取":"领取全勤奖励"; $("bonusHint").textContent=done<todayTasks.length?`再完成 ${todayTasks.length-done} 项即可领取`:claimed?"明天继续保持":"现在可以领取 3☀️ + 2🥣";
     renderDailyPractice();
   }
 
   function dailyPracticeWords(mode){return seededShuffle(unitNow().core,`${iso()}:${unitKey()}:${mode}:independent`).slice(0,Math.min(5,unitNow().core.length));}
   function renderDailyPractice(){
-    const zhDone=state.dailyDone.includes(todayKey("zh2en")),enDone=state.dailyDone.includes(todayKey("en2zh"));
-    $("dailyPracticeZone").innerHTML=`<article class="practice-launch ${zhDone?"done":""}"><span>✍️</span><small>独立窗口 A</small><h2>看中文，写英文</h2><p>窗口内只显示中文题目，不出现英文单词表，避免从旁边抄写。</p><button class="primary" data-open-dictation="zh2en">${zhDone?"再次练习":"开始英文默写"}</button></article><article class="practice-launch ${enDone?"done":""}"><span>🀄</span><small>独立窗口 B</small><h2>看英文，写中文</h2><p>窗口内只显示英文题目，不出现中文单词表，两种练习互不展示答案。</p><button class="primary" data-open-dictation="en2zh">${enDone?"再次练习":"开始中文释义"}</button></article>`;
+    const zhDone=state.dailyDone.includes(todayKey("zh2en")),enDone=state.dailyDone.includes(todayKey("en2zh")),reviewDone=state.dailyDone.includes(todayKey("review")),learned=pastLearnedWords();
+    $("dailyPracticeZone").innerHTML=`<article class="practice-launch ${zhDone?"done":""}"><span>✍️</span><small>独立窗口 A</small><h2>看中文，写英文</h2><p>窗口内只显示中文题目，不出现英文单词表，避免从旁边抄写。</p><button class="primary" data-open-dictation="zh2en">${zhDone?"再次练习":"开始英文默写"}</button></article><article class="practice-launch ${enDone?"done":""}"><span>🀄</span><small>独立窗口 B</small><h2>看英文，写中文</h2><p>窗口内只显示英文题目，不出现中文单词表，两种练习互不展示答案。</p><button class="primary" data-open-dictation="en2zh">${enDone?"再次练习":"开始中文释义"}</button></article><article class="practice-launch review-launch ${reviewDone?"done":""} ${learned.length?"":"locked"}"><span>🔁</span><small>历史巩固 · ${learned.length}个已学词可复习</small><h2>随机复习过往单词</h2><p>${learned.length?"只从已经完成过单词学习的单元抽题，绝不会提前出现未来课程单词。":"完成任意单元的“必备单词”学习后自动解锁。"}</p><button class="primary" data-open-review ${learned.length?"":"disabled"}>${reviewDone?"再次巩固":learned.length?"开始历史复习":"尚未解锁"}</button></article>`;
+  }
+  function openReview(){
+    const words=seededShuffle(pastLearnedWords(),`${iso()}:past-review`).slice(0,5),dialog=$("practiceDialog");
+    if(!words.length)return toast("先完成一个单元的必备单词学习，再来复习过往内容");
+    $("practiceDialogContent").innerHTML=`<div class="dictation-window"><div class="dictation-head"><span>🔁</span><div><small>历史巩固 · 只抽取已学习词汇</small><h2 id="practiceDialogTitle">随机复习过往单词</h2><p>题目来自你真正打开并完成过的单词课，不包含未来单元。</p></div></div><div class="privacy-note">🧠 今日随机抽取 ${words.length} 个历史词，中英方向交替练习。</div><div class="dictation-list">${words.map((word,index)=>{const mode=index%2===0?"zh2en":"en2zh";return `<label><b>${index+1}. ${esc(mode==="zh2en"?word.meaning:word.word)}</b>${mode==="en2zh"?`<button type="button" data-say="${esc(word.word)}">🔊</button>`:""}<input type="text" autocomplete="off" spellcheck="false" data-review-answer data-mode="${mode}" data-unit-id="${esc(word.unitId)}" data-word="${esc(word.word)}" data-expected="${esc(mode==="zh2en"?word.word:word.meaning)}" placeholder="${mode==="zh2en"?"写英文":"写中文"}"><small></small></label>`;}).join("")}</div><button class="primary dictation-submit" id="checkPastReview">检查历史复习</button></div>`;
+    $("practiceDialogContent").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
+    $("checkPastReview").onclick=checkPastReview;
+    if(dialog.showModal)dialog.showModal();else dialog.classList.add("open");
+  }
+  function checkPastReview(){
+    const inputs=[...$("practiceDialogContent").querySelectorAll("[data-review-answer]")],clean=value=>String(value).trim().toLowerCase().replace(/[，。；、,.;]/g,"").replace(/\s+/g," ");let correct=0;
+    inputs.forEach(input=>{const answer=clean(input.value),expected=clean(input.dataset.expected),choices=expected.split(/或|\/|；/).map(clean),ok=input.dataset.mode==="zh2en"?answer===expected:choices.some(item=>item===answer||item.includes(answer)&&answer.length>=2),label=input.closest("label");label.classList.toggle("correct",ok);label.classList.toggle("wrong",!ok);input.nextElementSibling.textContent=ok?"✓ 正确":`答案：${input.dataset.expected}`;if(ok)correct+=1;else{const key=`${input.dataset.unitId}:${input.dataset.word}`;if(!state.weak.includes(key))state.weak.push(key);}});
+    if(correct===inputs.length){const key=todayKey("review"),first=!state.dailyDone.includes(key);if(first){state.dailyDone.push(key);reward(1,"完成历史词汇巩固",2);renderToday();}else toast("历史复习全部正确，今天已经领取过奖励");const button=$("checkPastReview");button.disabled=true;button.textContent="✓ 历史复习全部正确";}else{save();toast(`历史复习答对 ${correct}/${inputs.length}，订正后再检查`);}
   }
   function openDictation(mode){
     const words=dailyPracticeWords(mode),isEnglish=mode==="zh2en",dialog=$("practiceDialog");
@@ -264,7 +295,7 @@
     const inputs=[...$("practiceDialogContent").querySelectorAll(`[data-dictation="${mode}"]`)]; let correct=0;
     const clean=value=>String(value).trim().toLowerCase().replace(/[，。；、,.;]/g,"").replace(/\s+/g," ");
     inputs.forEach(input=>{const answer=clean(input.value),expected=clean(input.dataset.expected);const choices=expected.split(/或|\/|；/).map(clean);const ok=mode==="zh2en"?answer===expected:choices.some(item=>item===answer||item.includes(answer)&&answer.length>=2);input.closest("label").classList.toggle("correct",ok);input.closest("label").classList.toggle("wrong",!ok);input.nextElementSibling.textContent=ok?"✓ 正确":`答案：${input.dataset.expected}`;if(ok)correct+=1;else{const key=`${unitKey()}:${input.dataset.word}`;if(!state.weak.includes(key))state.weak.push(key);}});
-    if(correct===inputs.length){const key=todayKey(mode),first=!state.dailyDone.includes(key);if(first){state.dailyDone.push(key);reward(1,mode==="zh2en"?"完成英文默写":"完成中文释义");renderToday();}else toast("全部正确，这一项今天已经完成过了");const submit=$("practiceDialogContent").querySelector("[data-check-dictation]");submit.disabled=true;submit.textContent="✓ 全部正确";}else{save();toast(`答对 ${correct}/${inputs.length}，请订正后再检查`);}
+    if(correct===inputs.length){const key=todayKey(mode),first=!state.dailyDone.includes(key);if(first){state.dailyDone.push(key);reward(1,mode==="zh2en"?"完成英文默写":"完成中文释义",1);renderToday();}else toast("全部正确，这一项今天已经完成过了");const submit=$("practiceDialogContent").querySelector("[data-check-dictation]");submit.disabled=true;submit.textContent="✓ 全部正确";}else{save();toast(`答对 ${correct}/${inputs.length}，请订正后再检查`);}
   }
 
   function wordPool(){
@@ -319,13 +350,42 @@
     document.querySelectorAll("[data-finish-phoneme]").forEach(button=>button.onclick=()=>{const key=button.dataset.finishPhoneme;if(state.phonicsDone.includes(key)){toast("这个音标已经学过了，继续巩固吧");return;}state.phonicsDone.push(key);reward(1,"完成一个音标跟读");renderPhonics();});
   }
 
-  function plantState(){ const xp=state.plant.xp; if(state.plant.energy<=0)return{icon:"🥀",name:"枯萎休眠的小植物",level:1}; if(state.plant.energy<=20)return{icon:"🥀",name:"需要关心的小植物",level:1}; if(xp<15)return{icon:"🌱",name:"英语小芽",level:1}; if(xp<40)return{icon:"🌿",name:"勇气绿苗",level:2}; if(xp<80)return{icon:"🌻",name:"向阳花",level:3}; if(xp<150)return{icon:"🌳",name:"知识树",level:4}; return{icon:"🌳✨",name:"智慧大树",level:5}; }
-  function renderGarden(){ const p=plantState(); $("gardenPlant").textContent=p.icon;$("gardenLevel").textContent=`Lv.${p.level}`;$("gardenPlantName").textContent=p.name;$("energyText").textContent=`${state.plant.energy} / 100`;$("energyBar").style.width=`${state.plant.energy}%`;$("gardenMessage").textContent=state.plant.energy<=0?"它因为很久没有获得小太阳而枯萎休眠了。现在完成一个学习任务，就能重新唤醒它。":state.plant.energy<30?"植物有点没精神，完成一个小任务就能恢复活力。":"它正在因为你的坚持而成长。偶尔漏学没关系，回来继续就好。"; const signed=state.signIns.includes(iso());$("checkInBtn").disabled=signed;$("checkInBtn").textContent=signed?"✓ 今日已签到":"今日签到 +2 ☀️";$("feedBtn").disabled=state.suns<3||state.plant.energy>=100;
-    const levels=[{icon:"🌱",name:"英语小芽",xp:0},{icon:"🌿",name:"勇气绿苗",xp:15},{icon:"🌻",name:"向阳花",xp:40},{icon:"🌳",name:"知识树",xp:80},{icon:"🌳✨",name:"智慧大树",xp:150}]; $("growthRoad").innerHTML=levels.map(l=>`<article class="${state.plant.xp>=l.xp?"unlocked":""}"><span>${l.icon}</span><b>${l.name}</b><small>${l.xp}成长值</small></article>`).join("");
+  function catalogPlant(id=state.plant.selected){return GROWTH_CATALOG.plants.find(item=>item.id===id)||GROWTH_CATALOG.plants[0];}
+  function catalogPet(id=state.pets.selected){return GROWTH_CATALOG.pets.find(item=>item.id===id)||null;}
+  function growthLevel(xp,thresholds){let level=0;thresholds.forEach((value,index)=>{if(xp>=value)level=index;});return level;}
+  function plantState(){const plant=catalogPlant(),progress=plantProgress(),level=growthLevel(progress.xp,plant.thresholds);return{...plant,level:level+1,stage:level,icon:progress.energy<=0?"🥀":plant.stages[level],name:progress.energy<=0?`${plant.name}（休眠）`:plant.forms[level]};}
+  function renderGarden(){
+    const plant=plantState(),progress=plantProgress(),signed=state.signIns.includes(iso()),fed=progress.lastFed===iso();
+    $("gardenPlant").textContent=plant.icon;$("gardenPlant").style.setProperty("--plant-color",plant.color);$("gardenPlant").classList.toggle("ultimate",plant.stage===plant.stages.length-1&&progress.energy>0);$("gardenLevel").textContent=`Lv.${plant.level}`;$("gardenRarity").textContent=`${plant.rarity}植物 · ${catalogPlant().name}`;$("gardenPlantName").textContent=plant.name;$("energyText").textContent=`${progress.energy} / 100`;$("energyBar").style.width=`${progress.energy}%`;
+    $("gardenMessage").textContent=progress.energy<=0?"植物已经休眠。学习不会自动唤醒它，请亲手浇灌恢复活力。":fed?"今天已经亲手浇灌过了。明天再来，长期坚持才能抵达终极形态。":progress.energy<30?"植物有点没精神，需要你亲手浇灌。":"学习获得小太阳后，记得由你亲手完成今天的照顾。";
+    $("checkInBtn").disabled=signed;$("checkInBtn").textContent=signed?"✓ 今日已签到":"今日签到 +2 ☀️";$("feedBtn").disabled=state.suns<2||fed;$("feedBtn").textContent=fed?"✓ 今天已亲手浇灌":"亲手浇灌 −2 ☀️";
+    $("growthRoad").innerHTML=catalogPlant().stages.map((icon,index)=>`<article class="${progress.xp>=catalogPlant().thresholds[index]?"unlocked":""}"><span>${icon}</span><b>${esc(catalogPlant().forms[index])}</b><small>${catalogPlant().thresholds[index]}成长值</small></article>`).join("");
+    $("ownedPlantGrid").innerHTML=state.plant.owned.map(id=>{const item=catalogPlant(id),data=plantProgress(id),level=growthLevel(data.xp,item.thresholds);return `<button class="owned-plant ${id===state.plant.selected?"active":""}" data-select-plant="${id}"><span>${data.energy<=0?"🥀":item.stages[level]}</span><div><b>${esc(item.name)}</b><small>${esc(item.forms[level])} · ${data.xp}成长值</small></div><em>${id===state.plant.selected?"正在照顾":"选择"}</em></button>`;}).join("");
   }
 
+  function renderMarket(){
+    $("marketSuns").textContent=state.suns;$("marketFoods").textContent=state.foods;document.querySelectorAll("[data-market-tab]").forEach(button=>button.classList.toggle("active",button.dataset.marketTab===marketTab));
+    if(marketTab==="plants"){$("marketNote").innerHTML=`<b>10种植物 · 越稀有越难兑换</b><span>兑换只是开始；每株植物仍要每天手动浇灌，最高形态需要500成长值。</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.plants.map((item,index)=>{const owned=state.plant.owned.includes(item.id),selected=state.plant.selected===item.id;return `<article class="market-card rarity-${index}"><div class="market-preview" style="--accent:${item.color}"><span>${item.stages.at(-1)}</span><small>终极形态</small></div><div class="market-copy"><em>${esc(item.rarity)}</em><h2>${esc(item.name)}</h2><p>${esc(item.description)}</p><div class="form-road">${item.stages.map(icon=>`<span>${icon}</span>`).join("→")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-plant="${item.id}"`:`data-buy-plant="${item.id}"`} ${selected?"disabled":""}>${selected?"✓ 正在照顾":owned?"选择这株植物":item.price?`${item.price} ☀️ 兑换`:"初始赠送"}</button></article>`;}).join("");}
+    else{$("marketNote").innerHTML=`<b>3类动物 · 每类3个常见品种</b><span>使用小太阳领养；领养后要靠任务粮食每天手动投喂，约70次照顾达到终极形态。</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.pets.map((item,index)=>{const owned=state.pets.owned.includes(item.id),selected=state.pets.selected===item.id;return `<article class="market-card pet-product rarity-${Math.min(9,index+1)}"><div class="market-preview" style="--accent:${item.color}"><span>${item.stages.at(-1)}</span><small>${esc(item.species)}终极形态</small></div><div class="market-copy"><em>${esc(item.species)}</em><h2>${esc(item.breed)}</h2><p>${esc(item.description)}</p><div class="form-road">${item.stages.map(icon=>`<span>${icon}</span>`).join("→")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-pet="${item.id}"`:`data-buy-pet="${item.id}"`} ${selected?"disabled":""}>${selected?"✓ 当前伙伴":owned?"选择这只动物":`${item.price} ☀️ 领养`}</button></article>`;}).join("");}
+  }
+
+  function carePets(){let changed=false;state.pets.owned.forEach(id=>{const progress=petProgress(id),last=progress.lastUpdate||iso(),days=daysBetween(last,iso());if(days>0){progress.fullness=Math.max(0,progress.fullness-days*4);progress.lastUpdate=iso();changed=true;}});if(changed)save();}
+  function renderPets(){
+    carePets();const pet=catalogPet();
+    if(!pet){$("petCare").innerHTML=`<section class="panel pet-empty"><span>🐾</span><h2>还没有动物伙伴</h2><p>去成长商城选择小猫、小狗或小乌龟。领养后，任务获得的粮食就能派上用场。</p><button class="primary" data-open-market="animals">去动物领养区</button></section>`;$("ownedPetGrid").innerHTML="";return;}
+    const progress=petProgress(),stage=growthLevel(progress.xp,pet.thresholds),fed=progress.lastFed===iso(),next=pet.thresholds[stage+1];
+    $("petCare").innerHTML=`<section class="pet-stage" style="--pet-color:${pet.color}"><span class="pet-avatar ${stage===pet.stages.length-1?"ultimate":""}">${progress.fullness<=0?"💤":pet.stages[stage]}</span><small>${esc(pet.species)} · ${esc(pet.breed)}</small><h2>${esc(pet.forms[stage])}</h2><p>${progress.fullness<=0?"伙伴饿得没有精神了，请亲手投喂。":fed?"今天已经吃饱啦，明天再来照顾。":"它正在等你使用任务粮食亲手投喂。"}</p></section><section class="panel pet-stats"><div class="pet-wallet">🥣 粮食 <b>${state.foods}</b></div><div class="energy-row"><span>饱食度</span><b>${progress.fullness}/100</b></div><div class="energy-bar"><span style="width:${progress.fullness}%"></span></div><div class="energy-row"><span>成长值</span><b>${progress.xp}${next?` / ${next}`:" · 已达终极"}</b></div><div class="energy-bar pet-xp"><span style="width:${next?Math.min(100,progress.xp/next*100):100}%"></span></div><button class="primary" id="feedPetBtn" ${state.foods<2||fed?"disabled":""}>${fed?"✓ 今天已投喂":"亲手投喂 −2 🥣"}</button><small>每天最多投喂一次，每次 +6 成长值；终极形态需420成长值，至少坚持70天。</small></section>`;
+    $("feedPetBtn").onclick=feedPet;
+    $("ownedPetGrid").innerHTML=state.pets.owned.map(id=>{const item=catalogPet(id),data=petProgress(id),level=growthLevel(data.xp,item.thresholds);return `<button class="owned-pet ${id===state.pets.selected?"active":""}" data-select-pet="${id}"><span>${item.stages[level]}</span><div><b>${esc(item.breed)}</b><small>${esc(item.forms[level])} · ${data.xp}/420</small></div><em>${id===state.pets.selected?"当前伙伴":"选择"}</em></button>`;}).join("");
+  }
+  function feedPet(){const progress=petProgress();if(progress.lastFed===iso())return toast("今天已经投喂过了，明天再来");if(state.foods<2)return toast("粮食不足，完成学习任务可以获得粮食");state.foods-=2;progress.fullness=Math.min(100,progress.fullness+20);progress.xp+=6;progress.lastFed=iso();progress.lastUpdate=iso();save();toast("🥣 你亲手完成了今天的投喂，动物成长值 +6");renderPets();}
+  function buyPlant(id){const item=catalogPlant(id);if(state.plant.owned.includes(id))return selectPlant(id);if(state.suns<item.price)return toast(`还需要 ${item.price-state.suns} 个小太阳，坚持完成任务吧`);state.suns-=item.price;state.plant.owned.push(id);state.plant.selected=id;plantProgress(id);state.plant.lastDate=iso();save();toast(`成功兑换 ${item.name}，请每天亲手浇灌`);renderMarket();}
+  function selectPlant(id){if(!state.plant.owned.includes(id))return;state.plant.selected=id;state.plant.lastDate=iso();plantProgress(id);save();toast(`已选择 ${catalogPlant(id).name}`);renderGarden();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
+  function buyPet(id){const item=GROWTH_CATALOG.pets.find(pet=>pet.id===id);if(!item)return;if(state.pets.owned.includes(id))return selectPet(id);if(state.suns<item.price)return toast(`还需要 ${item.price-state.suns} 个小太阳才能领养`);state.suns-=item.price;state.pets.owned.push(id);state.pets.selected=id;state.pets.progress[id]={fullness:70,xp:0,lastFed:"",lastUpdate:iso()};save();toast(`成功领养 ${item.breed}，记得用任务粮食亲手投喂`);renderMarket();}
+  function selectPet(id){if(!state.pets.owned.includes(id))return;state.pets.selected=id;petProgress(id);save();toast(`已选择 ${catalogPet(id).breed} 作为当前伙伴`);renderPets();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
+
   function renderReport(){
-    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0; $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article>`;
+    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0; $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🥣</span><b>${state.foods}</b><small>粮食库存</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
     const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const key=iso(d);days.push({name:["日","一","二","三","四","五","六"][d.getDay()],count:state.activity[key]||0,today:i===0});} const max=Math.max(4,...days.map(d=>d.count)); $("weekChart").innerHTML=days.map(d=>`<div class="chart-day"><b>${d.count}</b><span style="height:${Math.max(8,d.count/max*120)}px"></span><small>${d.today?"今天":"周"+d.name}</small></div>`).join("");
     const advice=[]; if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
   }
@@ -339,6 +399,13 @@
     const stage=e.target.closest("[data-stage]"); if(stage){state.stage=stage.dataset.stage;save();quizAnswers={};renderUnit();return;}
     const open=e.target.closest("[data-open-stage],[data-daily-stage]"); if(open){state.stage=open.dataset.openStage||open.dataset.dailyStage;save();route("unit");return;}
     const dictation=e.target.closest("[data-open-dictation]"); if(dictation){openDictation(dictation.dataset.openDictation);return;}
+    const review=e.target.closest("[data-open-review]"); if(review){openReview();return;}
+    const openMarket=e.target.closest("[data-open-market]"); if(openMarket){marketTab=openMarket.dataset.openMarket;route("market");return;}
+    const market=e.target.closest("[data-market-tab]"); if(market){marketTab=market.dataset.marketTab;renderMarket();return;}
+    const buyPlantButton=e.target.closest("[data-buy-plant]"); if(buyPlantButton){buyPlant(buyPlantButton.dataset.buyPlant);return;}
+    const selectPlantButton=e.target.closest("[data-select-plant]"); if(selectPlantButton){selectPlant(selectPlantButton.dataset.selectPlant);return;}
+    const buyPetButton=e.target.closest("[data-buy-pet]"); if(buyPetButton){buyPet(buyPetButton.dataset.buyPet);return;}
+    const selectPetButton=e.target.closest("[data-select-pet]"); if(selectPetButton){selectPet(selectPetButton.dataset.selectPet);return;}
     const dictionaryTab=e.target.closest("[data-dictionary-section]"); if(dictionaryTab){dictionarySection=dictionaryTab.dataset.dictionarySection;dictionaryLetter="all";dictionaryQuery="";dictionaryLimit=48;renderDictionary();return;}
     const dictionaryLetterButton=e.target.closest("[data-dictionary-letter]"); if(dictionaryLetterButton){dictionaryLetter=dictionaryLetterButton.dataset.dictionaryLetter;dictionaryLimit=48;renderDictionary();return;}
     const filter=e.target.closest("[data-word-filter]"); if(filter){memoryFilter=filter.dataset.wordFilter;memoryIndex=0;memoryFlipped=false;renderWords();return;}
@@ -350,10 +417,10 @@
   $("closePracticeDialog").onclick=()=>{$("practiceDialog").close?.();$("practiceDialog").classList.remove("open");};
   $("practiceDialog").addEventListener("click",event=>{if(event.target===$("practiceDialog"))$("closePracticeDialog").click();});
   $("wordKnow").onclick=()=>moveWord(true); $("wordAgain").onclick=()=>moveWord(false);
-  $("claimDailyBonus").onclick=()=>{const key=`${iso()}:${unitKey()}`;if(dailyComplete()<tasks.length||state.bonuses.includes(key))return;state.bonuses.push(key);reward(3,"完成今日全部任务");renderToday();};
+  $("claimDailyBonus").onclick=()=>{const key=`${iso()}:${unitKey()}`,todayTasks=activeTasks();if(dailyComplete()<todayTasks.length||state.bonuses.includes(key))return;state.bonuses.push(key);reward(3,"完成今日全部任务",2);renderToday();};
   $("checkInBtn").onclick=()=>{if(state.signIns.includes(iso()))return;state.signIns.push(iso());reward(2,"今日签到成功");renderGarden();};
-  $("feedBtn").onclick=()=>{if(state.suns<3)return toast("小太阳不够，先完成学习任务吧");state.suns-=3;state.plant.energy=Math.min(100,state.plant.energy+18);state.plant.xp+=2;save();toast("植物恢复了活力");renderGarden();};
+  $("feedBtn").onclick=()=>{const progress=plantProgress();if(progress.lastFed===iso())return toast("今天已经亲手浇灌过了，明天再来");if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 你亲手完成了今天的浇灌，植物成长值 +5");renderGarden();};
 
-  carePlant(); renderHeader(); renderHome();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=7",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  carePlant();carePets();renderHeader();renderHome();
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=8",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();

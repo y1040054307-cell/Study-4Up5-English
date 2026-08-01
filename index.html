@@ -9,7 +9,7 @@
   <meta property="og:title" content="向阳英语成长岛｜闽教版三至六年级">
   <meta property="og:description" content="每天20分钟，真正听懂、读懂、会说、会用。">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -20,6 +20,7 @@
     </button>
     <div class="top-stats">
       <span class="streak-pill">🔥 <b id="topStreak">0</b> 天</span>
+      <span class="food-pill">🥣 <b id="topFoods">0</b> 粮食</span>
       <button class="sun-pill" data-view="garden">☀️ <b id="topSuns">0</b> 小太阳</button>
     </div>
   </header>
@@ -31,7 +32,9 @@
       <button data-view="words"><span>🔤</span>单词本</button>
       <button data-view="dictionary"><span>📕</span>词典库</button>
       <button data-view="phonics"><span>👄</span>音标课堂</button>
+    <button data-view="market"><span>🛍️</span>成长商城</button>
     <button data-view="garden"><span>🌱</span>成长花园</button>
+    <button data-view="pets"><span>🐾</span>动物伙伴</button>
     <button data-view="report"><span>📈</span>成长报告</button>
   </nav>
 
@@ -47,7 +50,7 @@
             <button class="soft" data-view="courses">选择课程</button>
           </div>
           <div class="today-progress"><span id="todayBar"></span></div>
-          <small id="todayProgressText">今日 0 / 5 项</small>
+          <small id="todayProgressText">今日 0 / 7 项</small>
         </article>
         <article class="plant-card">
           <div class="sky"><span class="float-sun">☀️</span><span class="plant" id="homePlant">🌱</span><span class="soil"></span></div>
@@ -107,7 +110,7 @@
       <div class="page-title"><span class="eyebrow">DAILY LEARNING</span><h1>每日学习任务</h1><p>建议每天20—30分钟。按顺序完成，比一次学很多更有效。</p></div>
       <div class="daily-layout">
         <section class="panel"><div class="daily-heading"><div><b id="todayDate"></b><span id="todayCourse"></span></div><div class="circle-progress" id="circleProgress">0/7</div></div><div id="dailyTasks" class="daily-tasks"></div></section>
-        <aside class="panel reward-panel"><span class="big-sun">☀️</span><h2>今日奖励</h2><p>每项任务 +1 小太阳<br>全部完成再 +3 小太阳</p><button class="primary" id="claimDailyBonus">领取全勤奖励</button><small id="bonusHint"></small></aside>
+        <aside class="panel reward-panel"><span class="big-sun">☀️</span><h2>今日奖励</h2><p>学习任务奖励小太阳和粮食<br>全部完成再奖励 3☀️ + 2🥣</p><button class="primary" id="claimDailyBonus">领取全勤奖励</button><small id="bonusHint"></small></aside>
       </div>
       <section class="daily-practice-zone" id="dailyPracticeZone"></section>
     </section>
@@ -150,12 +153,27 @@
     </section>
 
     <section class="view" id="view-garden">
-      <div class="page-title"><span class="eyebrow">LEARNING GARDEN</span><h1>成长花园</h1><p>坚持签到和完成学习任务，让植物健康成长；很久不照顾会逐渐枯萎，但重新学习就能把它唤醒。</p></div>
+      <div class="page-title"><span class="eyebrow">LEARNING GARDEN</span><h1>成长花园</h1><p>学习只会获得小太阳，不会自动喂养。请每天回来亲手照顾当前植物。</p></div>
       <div class="garden-layout">
         <section class="garden-stage"><span class="garden-sun">☀️</span><span class="garden-plant" id="gardenPlant">🌱</span><span class="garden-land"></span><div class="level-badge" id="gardenLevel">Lv.1</div></section>
-        <section class="panel garden-info"><h2 id="gardenPlantName">英语小芽</h2><div class="energy-row"><span>活力</span><b id="energyText">70 / 100</b></div><div class="energy-bar"><span id="energyBar"></span></div><p id="gardenMessage"></p><button class="primary" id="checkInBtn">今日签到 +2 ☀️</button><button class="soft" id="feedBtn">喂养植物 −3 ☀️</button></section>
+        <section class="panel garden-info"><small id="gardenRarity"></small><h2 id="gardenPlantName">英语小芽</h2><div class="energy-row"><span>活力</span><b id="energyText">70 / 100</b></div><div class="energy-bar"><span id="energyBar"></span></div><p id="gardenMessage"></p><button class="primary" id="checkInBtn">今日签到 +2 ☀️</button><button class="soft" id="feedBtn">亲手浇灌 −2 ☀️</button><button class="text-link garden-market-link" data-view="market">去商城兑换高级植物 →</button></section>
       </div>
+      <section class="panel owned-plants"><div class="section-head"><div><span class="eyebrow">MY COLLECTION</span><h2>我的植物收藏</h2></div><small>选择一株作为当前照顾对象</small></div><div class="owned-plant-grid" id="ownedPlantGrid"></div></section>
       <div class="growth-road" id="growthRoad"></div>
+    </section>
+
+    <section class="view" id="view-market">
+      <div class="page-title"><span class="eyebrow">GROWTH MARKET</span><h1>成长商城</h1><p>坚持学习积累小太阳。越稀有的生命伙伴价格越高，终极形态也更炫酷。</p></div>
+      <div class="market-wallet"><span>可用 ☀️ <b id="marketSuns">0</b></span><span>可用 🥣 <b id="marketFoods">0</b></span></div>
+      <div class="market-tabs"><button class="active" data-market-tab="plants">🌱 植物商城</button><button data-market-tab="animals">🐾 动物领养</button></div>
+      <div class="market-note" id="marketNote"></div>
+      <div class="market-grid" id="marketGrid"></div>
+    </section>
+
+    <section class="view" id="view-pets">
+      <div class="page-title"><span class="eyebrow">ANIMAL COMPANIONS</span><h1>动物伙伴</h1><p>任务获得粮食，动物必须由你每天亲手投喂。每只动物约需70次照顾才能达到终极形态。</p></div>
+      <div class="pet-care" id="petCare"></div>
+      <section class="panel"><div class="section-head"><div><span class="eyebrow">MY ANIMALS</span><h2>我的动物</h2></div><button class="text-link" data-open-market="animals">去领养动物 →</button></div><div class="owned-pet-grid" id="ownedPetGrid"></div></section>
     </section>
 
     <section class="view" id="view-report">
@@ -172,8 +190,9 @@
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
-  <script src="curriculum.js?v=7"></script>
-  <script src="dictionary.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="curriculum.js?v=8"></script>
+  <script src="dictionary.js?v=8"></script>
+  <script src="growth.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
