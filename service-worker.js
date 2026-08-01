@@ -1,4 +1,4 @@
-const CACHE_NAME = "sunny-english-island-v18";
+const CACHE_NAME = "sunny-english-island-v19";
 const APP_FILES = ["./", "./index.html", "./styles.css", "./curriculum.js", "./dictionary.js", "./growth.js", "./grammar.js", "./app.js", "./manifest.webmanifest", "./assets/app-icon-180.png", "./assets/app-icon-192.png", "./assets/app-icon-512.png", "./assets/cat-growth.webp", "./assets/dog-growth.webp", "./assets/turtle-growth.webp"];
 self.addEventListener("install", event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_FILES))); self.skipWaiting(); });
 self.addEventListener("activate", event => { event.waitUntil((async()=>{ await caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))); await self.clients.claim(); const pages=await self.clients.matchAll({type:"window"}); pages.forEach(page=>page.navigate(page.url)); })()); });
