@@ -1,546 +1,221 @@
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "sunny-english-island-2026-v1";
-  const today = () => {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  const defaultState = {
-    completedDays: [],
-    learnedWords: [],
-    weakWords: [],
-    quizBest: {},
-    stars: 0,
-    suns: 0,
-    signIns: [],
-    rewards: {},
-    sound: true,
-    currentLesson: 0,
-    plant: { energy: 70, xp: 0, feeds: 0, lastDecayDate: today() }
-  };
-
-  const loadState = () => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      return saved
-        ? {
-            ...defaultState,
-            ...saved,
-            plant: { ...defaultState.plant, ...(saved.plant || {}) },
-            rewards: saved.rewards || {},
-            quizBest: saved.quizBest || {}
-          }
-        : structuredClone(defaultState);
-    } catch {
-      return structuredClone(defaultState);
-    }
-  };
-
-  let state = loadState();
-  let cardLessonIndex = state.currentLesson || 0;
-  let cardIndex = 0;
-  let quizLessonIndex = state.currentLesson || 0;
-  let quizQuestions = [];
-  let quizPosition = 0;
-  let quizScore = 0;
+  const STORE = "sunny-english-longterm-v3";
+  const iso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, mastered:[], weak:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, plant:{energy:70,xp:0,lastDate:iso()} };
+  const load = () => { try { return { ...defaultState, ...JSON.parse(localStorage.getItem(STORE)||"{}"), plant:{...defaultState.plant,...(JSON.parse(localStorage.getItem(STORE)||"{}").plant||{})}, quiz:{...defaultState.quiz,...(JSON.parse(localStorage.getItem(STORE)||"{}").quiz||{})} }; } catch { return structuredClone(defaultState); } };
+  let state = load();
+  let selectedGrade = Number(state.bookId[1]) || 4;
+  let selectedTerm = state.bookId.endsWith("a") ? "上册" : "下册";
+  let memoryFilter = "current";
+  let memoryIndex = 0;
+  let memoryFlipped = false;
+  let quizAnswers = {};
   let toastTimer;
 
-  const saveState = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    renderAllStats();
-  };
-
-  const daysBetween = (from, to) => {
-    const start = new Date(`${from}T00:00:00`);
-    const end = new Date(`${to}T00:00:00`);
-    return Math.max(0, Math.floor((end - start) / 86400000));
-  };
-
-  const applyPlantDecay = () => {
-    const elapsed = daysBetween(state.plant.lastDecayDate, today());
-    if (elapsed > 0) {
-      state.plant.energy = Math.max(0, state.plant.energy - elapsed * 10);
-      state.plant.lastDecayDate = today();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-  };
-
   const $ = (id) => document.getElementById(id);
-  const escapeHtml = (value) =>
-    String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+  const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+  const bookNow = () => COURSE_BOOKS.find(b => b.id === state.bookId) || COURSE_BOOKS[2];
+  const unitNow = () => bookNow().units[state.unitIndex] || bookNow().units[0];
+  const unitKey = () => unitNow().id;
+  const todayKey = (task) => `${iso()}:${unitKey()}:${task}`;
+  const stageKey = (stage) => `${unitKey()}:${stage}`;
+  const stages = [
+    {id:"overview",icon:"🎯",name:"理解目标"},{id:"words",icon:"🔤",name:"必备单词"},{id:"patterns",icon:"🧩",name:"重点句型"},
+    {id:"dialogue",icon:"🗣️",name:"情境对话"},{id:"reading",icon:"📖",name:"原创阅读"},{id:"practice",icon:"✅",name:"分层练习"}
+  ];
+  const tasks = [
+    {id:"understand",icon:"👀",title:"看懂本单元目标",detail:"读学习目标和情境说明，先明白要学会做什么",stage:"overview"},
+    {id:"vocab",icon:"🔤",title:"点读必备单词",detail:"听、读、看意思，至少主动回忆6个词",stage:"words"},
+    {id:"speak",icon:"🗣️",title:"跟读并替换句型",detail:"每个重点句型读3遍，再换一个关键词",stage:"patterns"},
+    {id:"read",icon:"📖",title:"完成对话或阅读",detail:"先读英文猜意思，再看中文理解线索",stage:"reading"},
+    {id:"quiz",icon:"🎯",title:"完成5分钟小测",detail:"错题不是失败，会自动进入复习清单",stage:"practice"}
+  ];
 
-  const shuffle = (items) => {
-    const list = [...items];
-    for (let i = list.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [list[i], list[j]] = [list[j], list[i]];
-    }
-    return list;
-  };
+  const save = () => { localStorage.setItem(STORE, JSON.stringify(state)); renderHeader(); };
+  const toast = (msg) => { const el=$("toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2200); };
+  const speak = (text) => { if (!("speechSynthesis" in window)) return toast("当前浏览器不支持语音"); speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=.78; speechSynthesis.speak(u); };
+  const daysBetween = (a,b) => Math.floor((new Date(`${b}T00:00:00`)-new Date(`${a}T00:00:00`))/86400000);
+  const carePlant = () => { const n=daysBetween(state.plant.lastDate,iso()); if(n>0){ state.plant.energy=Math.max(15,state.plant.energy-n*6); state.plant.lastDate=iso(); save(); } };
+  const activity = (amount=1) => { state.activity[iso()] = (state.activity[iso()]||0)+amount; };
+  const reward = (amount,msg) => { state.suns += amount; state.plant.xp += amount; state.plant.energy=Math.min(100,state.plant.energy+amount); activity(); save(); toast(`☀️ ${msg}，获得 ${amount} 个小太阳`); };
+  const dailyComplete = () => tasks.filter(t=>state.dailyDone.includes(todayKey(t.id))).length;
+  const completedUnits = () => COURSE_BOOKS.flatMap(b=>b.units).filter(u=>stages.every(s=>state.stageDone.includes(`${u.id}:${s.id}`))).length;
+  const allWords = () => COURSE_BOOKS.flatMap(b=>b.units.flatMap(u=>u.core.map(w=>({...w,unitId:u.id,unitTitle:u.title}))));
 
-  const showToast = (message) => {
-    const toast = $("toast");
-    toast.textContent = message;
-    toast.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("show"), 2400);
-  };
-
-  const markActivity = () => {
-    state.plant.lastActivityDate = today();
-  };
-
-  const claimReward = (key, amount, message) => {
-    if (state.rewards[key]) return false;
-    state.rewards[key] = true;
-    state.suns += amount;
-    markActivity();
-    saveState();
-    showToast(`☀️ ${message}，获得 ${amount} 个小太阳`);
-    return true;
-  };
-
-  const speak = (text, rate = 0.84) => {
-    if (!state.sound || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = rate;
-    const voices = window.speechSynthesis.getVoices();
-    const englishVoice = voices.find((voice) => voice.lang.startsWith("en"));
-    if (englishVoice) utterance.voice = englishVoice;
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const firstIncompleteLesson = () => {
-    const index = LESSONS.findIndex((lesson) => !state.completedDays.includes(lesson.day));
-    return index === -1 ? 14 : index;
-  };
-
-  const routeTo = (route) => {
-    const pageName = route === "learn" ? "learn" : route;
-    document.querySelectorAll(".page").forEach((page) => {
-      page.classList.toggle("active", page.dataset.page === pageName);
-    });
-    document.querySelectorAll(".bottom-nav button").forEach((button) => {
-      const activeRoute = route === "learn" ? "plan" : route;
-      button.classList.toggle("active", button.dataset.route === activeRoute);
-    });
-    if (route === "plan") renderPlan();
-    if (route === "cards") renderFlashcard();
-    if (route === "quiz") resetQuizView();
-    if (route === "growth") renderPlant();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    $("app").focus({ preventScroll: true });
-  };
-
-  const populateSelectors = () => {
-    const options = LESSONS.map(
-      (lesson) => `<option value="${lesson.day - 1}">第${lesson.day}天 · ${escapeHtml(lesson.title)}</option>`
-    ).join("");
-    $("cardDaySelect").innerHTML = options;
-    $("quizDaySelect").innerHTML = options;
-    $("cardDaySelect").value = String(cardLessonIndex);
-    $("quizDaySelect").value = String(quizLessonIndex);
-  };
-
-  const renderPlan = () => {
-    $("planGrid").innerHTML = LESSONS.map((lesson) => {
-      const complete = state.completedDays.includes(lesson.day);
-      return `
-        <button class="day-card ${complete ? "completed" : ""}" type="button" data-lesson="${lesson.day - 1}" data-icon="${lesson.icon}">
-          <span class="day-top"><span class="day-number">DAY ${String(lesson.day).padStart(2, "0")}</span><span class="complete-mark">✓</span></span>
-          <h3>${escapeHtml(lesson.title)}</h3>
-          <p>${escapeHtml(lesson.focus)}</p>
-          <span class="phase-tag ${lesson.phaseKey}">${escapeHtml(lesson.phase)}</span>
-        </button>`;
-    }).join("");
-    document.querySelectorAll("[data-lesson]").forEach((button) => {
-      button.addEventListener("click", () => openLesson(Number(button.dataset.lesson)));
-    });
-  };
-
-  const openLesson = (index) => {
-    state.currentLesson = index;
-    cardLessonIndex = index;
-    quizLessonIndex = index;
-    saveState();
-    renderLesson(index);
-    routeTo("learn");
-  };
-
-  const renderLesson = (index) => {
-    const lesson = LESSONS[index];
-    $("lessonPhase").textContent = lesson.phase;
-    $("lessonDay").textContent = `DAY ${String(lesson.day).padStart(2, "0")}`;
-    $("lessonTitle").textContent = lesson.title;
-    $("lessonFocus").textContent = lesson.focus;
-    $("lessonUnit").textContent = `📘 ${lesson.unit || lesson.phase}`;
-    $("lessonTime").textContent = `⏱ 约${lesson.time || 50}分钟`;
-    $("lessonWordCount").textContent = `🪄 ${lesson.words.length}个必备单词`;
-    $("lessonSentenceCount").textContent = `💬 ${lesson.sentences.length}个重点句型`;
-    $("lessonObjectives").innerHTML = (lesson.objectives || []).map(
-      (objective, objectiveIndex) => `<div class="objective-item"><span>${objectiveIndex + 1}</span><p>${escapeHtml(objective)}</p></div>`
-    ).join("");
-    $("lessonWords").innerHTML = lesson.words.map((word, wordIndex) => `
-      <button class="word-tile" type="button" data-word-index="${wordIndex}">
-        <span class="speaker">🔊</span><span class="word-emoji">${word.emoji}</span>
-        <strong>${escapeHtml(word.word)}</strong><span class="meaning">${escapeHtml(word.meaning)}</span>
-        <p class="tile-example">${escapeHtml(word.example)}<br>${escapeHtml(word.exampleZh)}</p>
-      </button>`).join("");
-    $("sentenceList").innerHTML = lesson.sentences.map((sentence) => `
-      <div class="sentence-item"><strong>${escapeHtml(sentence.en)}</strong><span>${escapeHtml(sentence.zh)}</span></div>`
-    ).join("");
-    $("extraWords").innerHTML = (lesson.extra || []).map((word, wordIndex) => `
-      <button class="extra-word" type="button" data-extra-index="${wordIndex}">
-        <span>🔊</span><strong>${escapeHtml(word.word)}</strong><em>${escapeHtml(word.meaning)}</em>
-        <small>${escapeHtml(word.example)}</small>
-      </button>`).join("");
-    $("knowledgeGrid").innerHTML = (lesson.knowledge || []).map((point, pointIndex) => `
-      <article class="knowledge-card"><span>重点 ${pointIndex + 1}</span><h3>${escapeHtml(point.title)}</h3>
-        <p>${escapeHtml(point.text)}</p><strong>${escapeHtml(point.example)}</strong></article>`).join("");
-    const reading = lesson.reading || { title: "单元阅读", en: "", zh: "", questions: [] };
-    $("readingTitle").textContent = reading.title;
-    $("readingEn").textContent = reading.en;
-    $("readingZh").textContent = reading.zh;
-    $("readingQuestions").innerHTML = reading.questions.map((item, itemIndex) => `
-      <details><summary>${itemIndex + 1}. ${escapeHtml(item.q)}</summary><p>答案：${escapeHtml(item.a)}</p></details>`).join("");
-    $("practiceList").innerHTML = (lesson.practice || []).map((item, itemIndex) => `
-      <details><summary>${itemIndex + 1}. ${escapeHtml(item.q)}</summary><p>答案：${escapeHtml(item.a)}</p></details>`).join("");
-    $("memoryList").innerHTML = (lesson.memory || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-    $("mistakeList").innerHTML = (lesson.mistakes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-    $("studyTaskGrid").innerHTML = (lesson.studyTasks || []).map((task) => {
-      const key = `task:${lesson.day}:${task.id}`;
-      const complete = Boolean(state.rewards[key]);
-      return `<button class="study-task ${complete ? "completed" : ""}" type="button" data-task-id="${escapeHtml(task.id)}">
-        <span class="task-icon">${task.icon}</span><span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.detail)}</small></span>
-        <em>${complete ? "已领取 ✓" : "+1 ☀️"}</em></button>`;
-    }).join("");
-    document.querySelectorAll(".word-tile").forEach((tile) => {
-      tile.addEventListener("click", () => {
-        tile.classList.toggle("revealed");
-        speak(lesson.words[Number(tile.dataset.wordIndex)].word);
-      });
-    });
-    document.querySelectorAll(".extra-word").forEach((tile) => {
-      tile.addEventListener("click", () => speak(lesson.extra[Number(tile.dataset.extraIndex)].word));
-    });
-    document.querySelectorAll(".study-task").forEach((button) => {
-      button.addEventListener("click", () => {
-        const key = `task:${lesson.day}:${button.dataset.taskId}`;
-        if (state.rewards[key]) {
-          showToast("这项任务的小太阳已经领取过了");
-          return;
-        }
-        claimReward(key, 1, "完成一项今日学习任务");
-        renderLesson(index);
-      });
-    });
-  };
-
-  const renderFlashcard = () => {
-    const lesson = LESSONS[cardLessonIndex];
-    const word = lesson.words[cardIndex];
-    $("flashcard").classList.remove("flipped");
-    $("cardCounter").textContent = `${cardIndex + 1} / ${lesson.words.length}`;
-    $("cardEmoji").textContent = word.emoji;
-    $("cardWord").textContent = word.word;
-    $("cardMeaning").textContent = word.meaning;
-    $("cardExample").textContent = word.example;
-    $("cardExampleZh").textContent = word.exampleZh;
-  };
-
-  const moveCard = (direction) => {
-    const count = LESSONS[cardLessonIndex].words.length;
-    cardIndex = (cardIndex + direction + count) % count;
-    renderFlashcard();
-  };
-
-  const rememberCurrentWord = () => {
-    const word = LESSONS[cardLessonIndex].words[cardIndex].word;
-    if (!state.learnedWords.includes(word)) state.learnedWords.push(word);
-    state.weakWords = state.weakWords.filter((item) => item !== word);
-    const rewarded = claimReward(`word:${word.toLowerCase()}`, 1, `记住了 ${word}`);
-    if (!rewarded) {
-      saveState();
-      showToast(`太棒了，${word} 已经记住`);
-    }
-    setTimeout(() => moveCard(1), 350);
-  };
-
-  const reviewCurrentWord = () => {
-    const word = LESSONS[cardLessonIndex].words[cardIndex].word;
-    if (!state.weakWords.includes(word)) state.weakWords.push(word);
-    saveState();
-    showToast(`${word} 已加入复习清单`);
-    moveCard(1);
-  };
-
-  const resetQuizView = () => {
-    $("quizStart").classList.remove("hidden");
-    $("quizPlay").classList.add("hidden");
-    $("quizResult").classList.add("hidden");
-    $("quizDaySelect").value = String(quizLessonIndex);
-  };
-
-  const startQuiz = () => {
-    quizLessonIndex = Number($("quizDaySelect").value);
-    quizQuestions = shuffle(LESSONS[quizLessonIndex].words);
-    quizPosition = 0;
-    quizScore = 0;
-    $("quizStart").classList.add("hidden");
-    $("quizResult").classList.add("hidden");
-    $("quizPlay").classList.remove("hidden");
-    renderQuizQuestion();
-  };
-
-  const renderQuizQuestion = () => {
-    const question = quizQuestions[quizPosition];
-    $("quizCount").textContent = `第 ${quizPosition + 1} / ${quizQuestions.length} 题`;
-    $("quizProgressBar").style.width = `${((quizPosition + 1) / quizQuestions.length) * 100}%`;
-    $("quizMeaning").textContent = question.meaning;
-    $("quizFeedback").textContent = "";
-    const distractors = shuffle(
-      ALL_WORDS.filter((item) => item.word !== question.word).map((item) => item.word)
-    ).filter((word, index, array) => array.indexOf(word) === index).slice(0, 3);
-    const options = shuffle([question.word, ...distractors]);
-    $("quizOptions").innerHTML = options
-      .map((word) => `<button class="quiz-option" type="button" data-answer="${escapeHtml(word)}">${escapeHtml(word)}</button>`)
-      .join("");
-    document.querySelectorAll(".quiz-option").forEach((button) => {
-      button.addEventListener("click", () => answerQuiz(button, question));
-    });
-  };
-
-  const answerQuiz = (button, question) => {
-    const correct = button.dataset.answer === question.word;
-    document.querySelectorAll(".quiz-option").forEach((option) => {
-      option.disabled = true;
-      if (option.dataset.answer === question.word) option.classList.add("correct");
-    });
-    if (correct) {
-      quizScore += 1;
-      button.classList.add("correct");
-      $("quizFeedback").textContent = "答对了！继续保持 ☀️";
-      if (!state.learnedWords.includes(question.word)) state.learnedWords.push(question.word);
-    } else {
-      button.classList.add("wrong");
-      $("quizFeedback").textContent = `正确答案是 ${question.word}`;
-      if (!state.weakWords.includes(question.word)) state.weakWords.push(question.word);
-    }
-    speak(question.word);
-    setTimeout(() => {
-      quizPosition += 1;
-      if (quizPosition < quizQuestions.length) renderQuizQuestion();
-      else finishQuiz();
-    }, 950);
-  };
-
-  const finishQuiz = () => {
-    $("quizPlay").classList.add("hidden");
-    $("quizResult").classList.remove("hidden");
-    const lesson = LESSONS[quizLessonIndex];
-    const previousBest = Number(state.quizBest[lesson.day] || 0);
-    if (quizScore > previousBest) {
-      state.stars += quizScore - previousBest;
-      state.quizBest[lesson.day] = quizScore;
-    }
-    const total = quizQuestions.length;
-    const ratio = total ? quizScore / total : 0;
-    const rating = Math.max(0, Math.min(5, Math.round(ratio * 5)));
-    $("resultEmoji").textContent = ratio === 1 ? "🏆" : ratio >= 0.7 ? "🌟" : "🌱";
-    $("resultTitle").textContent = ratio === 1 ? "全对，太棒了！" : "闯关完成！";
-    $("resultScore").textContent = `你答对了 ${quizScore} / ${total} 题`;
-    $("resultStars").textContent = `${"★".repeat(rating)}${"☆".repeat(5 - rating)}`;
-    const rewarded = claimReward(`quiz:${lesson.day}`, 2, `完成第${lesson.day}天闯关`);
-    if (!rewarded) saveState();
-  };
-
-  const finishCurrentDay = () => {
-    const lesson = LESSONS[quizLessonIndex];
-    if (!state.completedDays.includes(lesson.day)) state.completedDays.push(lesson.day);
-    const rewarded = claimReward(`complete:${lesson.day}`, 3, `完成第${lesson.day}天学习`);
-    if (!rewarded) {
-      saveState();
-      showToast(`第${lesson.day}天已经完成`);
-    }
-    routeTo("growth");
-  };
-
-  const plantStage = () => {
-    if (state.plant.energy <= 0) return { name: "枯萎休眠", emoji: "🥀", level: 0, next: 15 };
-    const stages = [
-      { xp: 0, name: "勇气种子", emoji: "🌰", level: 1, next: 15 },
-      { xp: 15, name: "英语小芽", emoji: "🌱", level: 2, next: 45 },
-      { xp: 45, name: "活力幼苗", emoji: "🌿", level: 3, next: 90 },
-      { xp: 90, name: "知识盆栽", emoji: "🪴", level: 4, next: 150 },
-      { xp: 150, name: "阳光花朵", emoji: "🌻", level: 5, next: 240 },
-      { xp: 240, name: "智慧大树", emoji: "🌳", level: 6, next: 300 }
-    ];
-    return [...stages].reverse().find((item) => state.plant.xp >= item.xp);
-  };
-
-  const plantMessage = () => {
-    if (state.plant.energy <= 0) return "植物已经枯萎休眠，完成任务并喂养就能重新唤醒。";
-    if (state.plant.energy < 30) return "叶子有些打蔫，它正在等待你回来学习和喂养。";
-    if (state.plant.energy < 60) return "状态一般，再喂一个小太阳会更有精神。";
-    if (state.plant.energy < 90) return "今天精神不错，学习会让它更有活力。";
-    return "活力满满！它正在努力长成更强大的植物。";
-  };
-
-  const renderPlant = () => {
-    const stage = plantStage();
-    const emoji = state.plant.energy < 25 && state.plant.energy > 0 ? "🍂" : stage.emoji;
-    $("homePlant").textContent = emoji;
-    $("growthPlant").textContent = emoji;
-    $("homePlantName").textContent = stage.name;
-    $("plantStageName").textContent = `${stage.name} · 第${stage.level}阶段`;
-    $("homePlantMessage").textContent = plantMessage();
-    $("plantStatusText").textContent = plantMessage();
-    $("homeEnergyBar").style.width = `${state.plant.energy}%`;
-    $("homeEnergyText").textContent = `活力 ${state.plant.energy} / 100`;
-    $("growthEnergyBar").style.width = `${state.plant.energy}%`;
-    $("growthEnergyText").textContent = state.plant.energy;
-    const previousThreshold = stage.level <= 1 ? 0 : [0, 0, 15, 45, 90, 150, 240][stage.level];
-    const xpRange = Math.max(1, stage.next - previousThreshold);
-    const xpProgress = Math.min(100, ((state.plant.xp - previousThreshold) / xpRange) * 100);
-    $("growthXpBar").style.width = `${Math.max(0, xpProgress)}%`;
-    $("growthXpText").textContent = state.plant.xp;
-    $("sunBalanceTop").textContent = state.suns;
-    $("sunBalanceGrowth").textContent = state.suns;
-    $("feedCount").textContent = state.plant.feeds;
-    const signedIn = state.signIns.includes(today());
-    $("checkInButton").disabled = signedIn;
-    $("checkInButton").textContent = signedIn ? "✓ 今日已签到" : "☀️ 今日签到 +2";
-  };
-
-  const feedPlant = () => {
-    if (state.suns < 3) {
-      showToast("小太阳不足，先签到或完成学习任务吧");
-      return;
-    }
-    state.suns -= 3;
-    state.plant.energy = Math.min(100, state.plant.energy + 25);
-    state.plant.xp += 15;
-    state.plant.feeds += 1;
-    state.plant.lastDecayDate = today();
-    markActivity();
-    saveState();
-    renderPlant();
-    showToast("🌱 喂养成功，植物更有活力了");
-  };
-
-  const checkIn = () => {
-    if (state.signIns.includes(today())) {
-      showToast("今天已经签到，继续完成学习任务吧");
-      return;
-    }
-    state.signIns.push(today());
-    claimReward(`checkin:${today()}`, 2, "今日签到成功");
-    renderPlant();
-  };
-
-  const renderAllStats = () => {
-    const next = firstIncompleteLesson();
-    const lesson = LESSONS[next];
-    const completed = state.completedDays.length;
-    $("heroDay").textContent = `DAY ${String(lesson.day).padStart(2, "0")}`;
-    $("heroTitle").textContent = lesson.title;
-    $("heroFocus").textContent = lesson.focus;
-    $("heroProgressBar").style.width = `${(completed / 15) * 100}%`;
-    $("heroProgressText").textContent = `${completed} / 15 天完成`;
-    $("knownWordsStat").textContent = state.learnedWords.length;
-    $("starsStat").textContent = state.stars;
-    $("daysStat").textContent = completed;
-    $("growthDays").innerHTML = `${completed}<small>/15</small>`;
-    $("growthStars").innerHTML = `${state.stars}<small>★</small>`;
-    $("growthWords").innerHTML = `${state.learnedWords.length}<small>个</small>`;
-    $("growthDaysBar").style.width = `${(completed / 15) * 100}%`;
-    $("weakCount").textContent = `${state.weakWords.length}个`;
-    $("weakList").innerHTML = state.weakWords.length
-      ? state.weakWords.map((word) => `<button class="weak-chip" type="button" data-weak-word="${escapeHtml(word)}">🔊 ${escapeHtml(word)}</button>`).join("")
-      : '<div class="empty-state">这里暂时没有单词。答错或选择“再复习”的单词会出现在这里。</div>';
-    document.querySelectorAll("[data-weak-word]").forEach((button) => {
-      button.addEventListener("click", () => speak(button.dataset.weakWord));
-    });
-    $("sunBalanceTop").textContent = state.suns;
-    renderPlant();
-  };
-
-  const resetProgress = () => {
-    const confirmed = window.confirm("确定要清空所有学习记录、小太阳和植物成长吗？此操作不能撤销。");
-    if (!confirmed) return;
-    state = structuredClone(defaultState);
-    state.plant.lastDecayDate = today();
-    saveState();
-    renderPlan();
-    renderFlashcard();
-    showToast("学习记录已经重置");
-  };
-
-  const bindEvents = () => {
-    document.querySelectorAll("[data-route]").forEach((element) => {
-      element.addEventListener("click", (event) => {
-        event.preventDefault();
-        routeTo(element.dataset.route);
-      });
-    });
-    $("continueButton").addEventListener("click", () => openLesson(firstIncompleteLesson()));
-    $("soundToggle").addEventListener("click", () => {
-      state.sound = !state.sound;
-      $("soundToggle").setAttribute("aria-pressed", String(state.sound));
-      $("soundToggle").innerHTML = state.sound ? "<span>🔊</span><span>发音开启</span>" : "<span>🔇</span><span>发音关闭</span>";
-      saveState();
-    });
-    $("speakSentences").addEventListener("click", () => {
-      speak(LESSONS[state.currentLesson].sentences.map((sentence) => sentence.en).join(" "), 0.78);
-    });
-    $("lessonQuizButton").addEventListener("click", () => {
-      quizLessonIndex = state.currentLesson;
-      $("quizDaySelect").value = String(quizLessonIndex);
-      routeTo("quiz");
-      startQuiz();
-    });
-    $("cardDaySelect").addEventListener("change", (event) => {
-      cardLessonIndex = Number(event.target.value);
-      cardIndex = 0;
-      renderFlashcard();
-    });
-    $("flashcard").addEventListener("click", () => $("flashcard").classList.toggle("flipped"));
-    $("prevCard").addEventListener("click", () => moveCard(-1));
-    $("nextCard").addEventListener("click", () => moveCard(1));
-    $("cardSpeak").addEventListener("click", () => speak(LESSONS[cardLessonIndex].words[cardIndex].word));
-    $("cardKnow").addEventListener("click", rememberCurrentWord);
-    $("cardAgain").addEventListener("click", reviewCurrentWord);
-    $("startQuizButton").addEventListener("click", startQuiz);
-    $("retryQuiz").addEventListener("click", startQuiz);
-    $("finishDay").addEventListener("click", finishCurrentDay);
-    $("checkInButton").addEventListener("click", checkIn);
-    $("homeFeedButton").addEventListener("click", feedPlant);
-    $("growthFeedButton").addEventListener("click", feedPlant);
-    $("resetProgress").addEventListener("click", resetProgress);
-  };
-
-  applyPlantDecay();
-  populateSelectors();
-  bindEvents();
-  renderLesson(state.currentLesson);
-  renderPlan();
-  renderFlashcard();
-  renderAllStats();
-  routeTo("home");
-
-  if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register("service-worker.js").catch(() => {});
+  function renderHeader(){
+    $("topSuns").textContent=state.suns;
+    $("topStreak").textContent=streakCount();
   }
+  function streakCount(){
+    let count=0; const d=new Date();
+    for(let i=0;i<365;i+=1){ const key=iso(d); if((state.activity[key]||0)>0 || state.signIns.includes(key)) count+=1; else if(i>0) break; d.setDate(d.getDate()-1); }
+    return count;
+  }
+  function route(view){
+    document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===`view-${view}`));
+    document.querySelectorAll(".main-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===view || (view==="unit"&&b.dataset.view==="courses")));
+    if(view==="home") renderHome();
+    if(view==="courses") renderCourses();
+    if(view==="unit") renderUnit();
+    if(view==="today") renderToday();
+    if(view==="words") renderWords();
+    if(view==="garden") renderGarden();
+    if(view==="report") renderReport();
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+
+  function renderHome(){
+    const book=bookNow(), unit=unitNow(), done=dailyComplete();
+    $("welcomeText").textContent=`当前：${book.label} · Unit ${unit.number} ${unit.title}。今天用20—30分钟完成一个小闭环。`;
+    $("todayBar").style.width=`${done/5*100}%`; $("todayProgressText").textContent=`今日 ${done} / 5 项`;
+    $("statLessons").textContent=state.stageDone.length; $("statWords").textContent=state.mastered.length;
+    $("statAccuracy").textContent=state.quiz.total?`${Math.round(state.quiz.correct/state.quiz.total*100)}%`:"—"; $("statSuns").textContent=state.suns;
+    const plant=plantState(); $("homePlant").textContent=plant.icon; $("plantName").textContent=plant.name; $("plantHint").textContent=`活力 ${state.plant.energy}/100 · 累计成长值 ${state.plant.xp}`;
+    $("homeTasks").innerHTML=tasks.slice(0,3).map(t=>{const done=state.dailyDone.includes(todayKey(t.id));return `<button class="preview-task ${done?"done":""}" data-open-stage="${t.stage}"><span>${done?"✓":t.icon}</span><div><b>${t.title}</b><small>${t.detail}</small></div><em>${done?"已完成":"去学习 →"}</em></button>`}).join("");
+    const unitDone=stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length;
+    $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} · Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/6*100}%"></span></div><small>${unitDone}/6 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
+  }
+
+  function nextStage(){ return stages.find(s=>!state.stageDone.includes(stageKey(s.id))) || stages[5]; }
+
+  function renderCourses(){
+    $("gradeSwitch").innerHTML=[3,4,5,6].map(g=>`<button class="${selectedGrade===g?"active":""}" data-grade="${g}">${g}年级</button>`).join("");
+    $("termSwitch").innerHTML=["上册","下册"].map(t=>`<button class="${selectedTerm===t?"active":""}" data-term="${t}">${t}</button>`).join("");
+    const book=COURSE_BOOKS.find(b=>b.grade===selectedGrade&&b.term===selectedTerm);
+    const done=book.units.filter(u=>stages.every(s=>state.stageDone.includes(`${u.id}:${s.id}`))).length;
+    $("bookSummary").innerHTML=`<div><span>${book.edition}</span><h2>${book.label}</h2><p>${book.units.length}个主题单元 · 每单元6步 · 原创讲解与练习</p></div><div><b>${done}/${book.units.length}</b><small>完成单元</small></div>`;
+    $("unitGrid").innerHTML=book.units.map(u=>{
+      const stepDone=stages.filter(s=>state.stageDone.includes(`${u.id}:${s.id}`)).length;
+      const current=state.bookId===book.id&&state.unitIndex===u.number-1;
+      return `<button class="unit-card ${current?"current":""}" data-unit-book="${book.id}" data-unit-index="${u.number-1}"><span class="unit-icon">${u.icon}</span><span class="unit-no">UNIT ${String(u.number).padStart(2,"0")}</span><h3>${u.title}</h3><p>${u.zh} · ${u.goal}</p><div class="thin-bar"><span style="width:${stepDone/6*100}%"></span></div><small>${stepDone}/6步完成 ${current?"· 正在学习":""}</small></button>`;
+    }).join("");
+  }
+
+  function renderUnit(){
+    const book=bookNow(), u=unitNow();
+    $("unitHero").innerHTML=`<div class="unit-hero-icon">${u.icon}</div><div><span>${book.label} · UNIT ${String(u.number).padStart(2,"0")}</span><h1>${u.title}</h1><h2>${u.zh}</h2><p>${u.goal}</p></div><div class="hero-count"><b>${stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length}/6</b><small>学习步骤</small></div>`;
+    $("lessonTabs").innerHTML=stages.map(s=>`<button class="${state.stage===s.id?"active":""} ${state.stageDone.includes(stageKey(s.id))?"done":""}" data-stage="${s.id}"><span>${state.stageDone.includes(stageKey(s.id))?"✓":s.icon}</span>${s.name}</button>`).join("");
+    renderStage();
+  }
+
+  function completeStage(stage=state.stage){
+    const key=stageKey(stage); if(state.stageDone.includes(key)) return toast("这个学习步骤已经完成");
+    state.stageDone.push(key); if(!state.dailyDone.includes(todayKey(stageTask(stage)))) state.dailyDone.push(todayKey(stageTask(stage)));
+    reward(1,"完成一个学习步骤"); renderUnit();
+  }
+  function stageTask(stage){ return ({overview:"understand",words:"vocab",patterns:"speak",dialogue:"read",reading:"read",practice:"quiz"})[stage]; }
+  function doneButton(label="完成这一步"){ return `<div class="stage-finish"><p>做完后点一下，记录学习进度并领取小太阳。</p><button class="primary" id="completeStageBtn">${state.stageDone.includes(stageKey(state.stage))?"✓ 已完成":label+" +1 ☀️"}</button></div>`; }
+
+  function renderStage(){
+    const u=unitNow(), box=$("lessonContent");
+    if(state.stage==="overview") box.innerHTML=`<div class="content-head"><span>第1步</span><h2>先理解：这一单元到底学什么？</h2><p>不要急着背。先把语言和生活场景连起来。</p></div><div class="objective-list"><article><b>我能听懂</b><p>在“${u.zh}”情境中听出关键词，判断人物在谈论什么。</p></article><article><b>我能开口</b><p>${u.goal}</p></article><article><b>我能读懂</b><p>读一段3—5句的原创短文，找到人物、地点或主要信息。</p></article><article><b>我能写出</b><p>仿照重点句型替换关键词，独立写2—3个句子。</p></article></div><div class="explain-card"><span>${u.icon}</span><div><h3>生活情境</h3><p>想一想：你在真实生活中什么时候会用到“${u.zh}”英语？先用中文说清楚，再尝试说出一个英文关键词。</p><strong>学习秘诀：理解意思 → 看例子 → 自己换词 → 离开提示再说一遍。</strong></div></div>${doneButton()}`;
+    if(state.stage==="words") renderWordStage(box,u);
+    if(state.stage==="patterns") renderPatternStage(box,u);
+    if(state.stage==="dialogue") renderDialogueStage(box,u);
+    if(state.stage==="reading") renderReadingStage(box,u);
+    if(state.stage==="practice") renderPracticeStage(box,u);
+    const complete=$("completeStageBtn"); if(complete) complete.onclick=()=>completeStage();
+  }
+
+  function wordExample(w,index,u){
+    const custom={hello:"Hello, I'm Ben.",friend:"She is my good friend.",family:"I love my family.",school:"Our school is beautiful.",teacher:"My teacher is kind.",healthy:"Fruit is healthy.",winter:"It is cold in winter.",doctor:"The doctor helps me.",future:"I will work hard in the future."};
+    return custom[w.word] || (index%2===0?`I know the word “${w.word}”.`:`We use “${w.word}” when we talk about ${u.title}.`);
+  }
+  function renderWordStage(box,u){
+    const core=u.core.slice(0,Math.min(8,u.core.length)), extra=u.core.slice(8);
+    box.innerHTML=`<div class="content-head"><span>第2步</span><h2>必备单词：会认、会读、懂意思、能放进句子</h2><p>点击卡片听发音。先看图景和中文，再遮住中文主动回忆。</p></div><div class="word-section-title"><h3>⭐ 必备单词</h3><small>本单元必须熟练掌握</small></div><div class="vocab-grid">${core.map((w,i)=>wordCard(w,i,u,"core")).join("")}</div>${extra.length?`<div class="word-section-title"><h3>🚀 拓展单词</h3><small>先会听懂和使用，不要求一次默写</small></div><div class="vocab-grid extra">${extra.map((w,i)=>wordCard(w,i+8,u,"extra")).join("")}</div>`:""}<div class="memory-method"><h3>四次回忆法</h3><ol><li>看英文，说中文</li><li>看中文，说英文</li><li>听发音，拼出单词</li><li>不看提示，说完整例句</li></ol></div>${doneButton("我已完成单词学习")}`;
+    box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
+    box.querySelectorAll("[data-toggle-word]").forEach(b=>b.onclick=()=>b.closest(".vocab-card").classList.toggle("revealed"));
+  }
+  function wordCard(w,i,u,type){ const known=state.mastered.includes(`${u.id}:${w.word}`); return `<article class="vocab-card ${known?"known":""}"><button class="sound" data-say="${esc(w.word)}">🔊</button><small>${type==="core"?"必备":"拓展"} ${i+1}</small><h3>${esc(w.word)}</h3><button class="meaning-cover" data-toggle-word>点击查看意思</button><p class="word-meaning">${esc(w.meaning)}</p><div class="word-example"><b>${esc(wordExample(w,i,u))}</b><span>${esc(w.exampleZh)}</span></div></article>`; }
+
+  function renderPatternStage(box,u){
+    box.innerHTML=`<div class="content-head"><span>第3步</span><h2>重点句型：知道为什么，再学会替换</h2><p>每个句型按“原句—规则—换词—自己说”学习。</p></div><div class="pattern-list">${u.patterns.map((p,i)=>`<article class="pattern-card"><div class="pattern-number">${i+1}</div><div><button class="line-sound" data-say="${esc(p.en)}">🔊 听句子</button><h3>${esc(p.en)}</h3><p>${esc(p.zh)}</p><div class="rule"><b>为什么这样说？</b>${esc(p.rule)}</div><div class="try"><b>替换练习</b><span>先读原句3遍，再把带颜色的关键词换成本单元另一个词。最后合上提示说一遍。</span></div></div></article>`).join("")}</div><div class="mistake-box"><h3>⚠️ 本单元检查清单</h3><ul><li>句子开头是否大写？结尾是否有问号或句号？</li><li>he / she 作主语时，动词是否需要变化？</li><li>时间、日期、星期前的介词是否用对？只检查本句真正出现的规则。</li></ul></div>${doneButton("我已会读并替换")}`;
+    box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
+  }
+
+  function dialogueLines(u){ const p=u.patterns; return [
+    ["A",`Hi! Let's talk about ${u.title}.`],["B",p[0].en],["A",p[1]?.en||"That's interesting."],["B",p[2]?.en||"Let's learn together."],["A","Great! Can you say it again?"],["B","Sure. Let's practise together!"]
+  ]; }
+  function renderDialogueStage(box,u){
+    const lines=dialogueLines(u);
+    box.innerHTML=`<div class="content-head"><span>第4步</span><h2>原创情境对话：把句型真正说出来</h2><p>第一遍听，第二遍跟读，第三遍分别扮演A和B。</p></div><div class="dialogue-card"><div class="scene-label">情境：两位同学在练习“${u.zh}”</div>${lines.map(([role,text])=>`<button class="dialogue-line role-${role.toLowerCase()}" data-say="${esc(text)}"><span>${role}</span><p>${esc(text)}</p><em>🔊</em></button>`).join("")}</div><div class="speaking-challenge"><h3>🎤 开口挑战</h3><p>把对话中的一个关键词换成自己的真实信息，再完整说一遍。能让家长听懂意思，就算过关。</p></div>${doneButton("我已完成角色朗读")}`;
+    box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
+  }
+
+  function renderReadingStage(box,u){
+    const q1=`What is the passage mainly about?`, q2=`Find one word about “${u.zh}”.`, q3="Can you say one true sentence about yourself?";
+    box.innerHTML=`<div class="content-head"><span>第5步</span><h2>原创阅读：先猜，再找证据</h2><p>不要逐字翻译。先找人物、地点、时间和重复出现的词。</p></div><article class="reading-sheet"><span>READING · ${u.title.toUpperCase()}</span><button data-say="${esc(u.story)}">🔊 听全文</button><h3>${u.zh}小故事</h3><p class="english-reading">${esc(u.story)}</p><details><summary>需要帮助？查看中文理解线索</summary><p>这篇短文围绕“${u.zh}”展开。先圈出熟悉的单词，再判断人物做了什么。中文只用于检查理解，不要求逐字对应。</p></details></article><div class="reading-questions"><h3>读后思考</h3>${[[q1,`It is mainly about ${u.title}.`],[q2,`参考答案：${u.core[0].word}。其他符合主题的词也可以。`],[q3,"开放题：用本单元任一重点句型说一个真实句子。"]].map((q,i)=>`<details><summary>${i+1}. ${esc(q[0])}</summary><p>${esc(q[1])}</p></details>`).join("")}</div><div class="reading-method"><b>阅读三遍法</b><span>第一遍看大意；第二遍圈证据；第三遍大声朗读。遇到生词先猜，不要立刻查。</span></div>${doneButton("我已完成阅读")}`;
+    box.querySelector("[data-say]").onclick=()=>speak(u.story);
+  }
+
+  function quizItems(u){
+    const words=u.core.slice(0,5);
+    return words.map((w,i)=>{
+      const wrong=u.core.filter(x=>x.word!==w.word).slice((i+1)%3,(i+1)%3+2).map(x=>x.meaning);
+      return {q:`“${w.word}” 的意思是？`,opts:shuffle([w.meaning,...wrong]),answer:w.meaning,word:w.word};
+    });
+  }
+  function shuffle(a){const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
+  function renderPracticeStage(box,u){
+    const items=quizItems(u);
+    box.innerHTML=`<div class="content-head"><span>第6步</span><h2>分层练习：用小测找到没记牢的地方</h2><p>先自己回答，再看反馈。错题会进入“需要复习”。</p></div><div class="quiz-list">${items.map((item,i)=>`<article class="quiz-item" data-question="${i}"><b>${i+1}. ${esc(item.q)}</b><div>${item.opts.map(o=>`<button data-answer="${esc(o)}">${esc(o)}</button>`).join("")}</div><p></p></article>`).join("")}</div><button class="primary submit-quiz" id="submitQuiz">提交并查看结果</button><div id="quizResult"></div>${doneButton("我已完成本单元")}`;
+    box.querySelectorAll(".quiz-item button").forEach(b=>b.onclick=()=>{const item=b.closest(".quiz-item");item.querySelectorAll("button").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");quizAnswers[item.dataset.question]=b.dataset.answer;});
+    $("submitQuiz").onclick=()=>{
+      let correct=0; items.forEach((item,i)=>{const el=box.querySelector(`[data-question="${i}"]`), chosen=quizAnswers[i]; const ok=chosen===item.answer; if(ok)correct++; el.classList.add(chosen?(ok?"correct":"wrong"):"wrong"); el.querySelector("p").textContent=chosen?(ok?"回答正确！":"正确答案："+item.answer):"还没有作答，正确答案："+item.answer; const key=`${u.id}:${item.word}`; if(ok){if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(x=>x!==key);}else if(!state.weak.includes(key))state.weak.push(key);});
+      state.quiz.correct+=correct;state.quiz.total+=items.length; if(!state.dailyDone.includes(todayKey("quiz")))state.dailyDone.push(todayKey("quiz")); reward(Math.max(1,correct),`答对 ${correct}/${items.length} 题`); $("quizResult").innerHTML=`<div class="quiz-result"><b>${correct}/${items.length}</b><p>${correct===items.length?"全部正确！明天还要再回忆一次。":correct>=3?"基本掌握，去单词本复习错词。":"先别急，回到必备单词再听读一遍。"}</p></div>`;
+    };
+  }
+
+  function renderToday(){
+    const u=unitNow(),done=dailyComplete(); $("todayDate").textContent=new Intl.DateTimeFormat("zh-CN",{month:"long",day:"numeric",weekday:"long"}).format(new Date()); $("todayCourse").textContent=`${bookNow().label} · ${u.title}`; $("circleProgress").textContent=`${done}/5`;
+    $("dailyTasks").innerHTML=tasks.map((t,i)=>{const yes=state.dailyDone.includes(todayKey(t.id));return `<button class="daily-task ${yes?"done":""}" data-daily-stage="${t.stage}"><span>${yes?"✓":i+1}</span><i>${t.icon}</i><div><b>${t.title}</b><small>${t.detail}</small></div><em>${yes?"已完成":"+1 ☀️"}</em></button>`}).join("");
+    const claimed=state.bonuses.includes(`${iso()}:${unitKey()}`); $("claimDailyBonus").disabled=done<5||claimed; $("claimDailyBonus").textContent=claimed?"✓ 今日已领取":"领取全勤奖励"; $("bonusHint").textContent=done<5?`再完成 ${5-done} 项即可领取`:claimed?"明天继续保持":"现在可以领取3个小太阳";
+  }
+
+  function wordPool(){
+    const current=unitNow().core.map(w=>({...w,key:`${unitKey()}:${w.word}`}));
+    if(memoryFilter==="weak") return allWords().filter(w=>state.weak.includes(`${w.unitId}:${w.word}`)).map(w=>({...w,key:`${w.unitId}:${w.word}`}));
+    if(memoryFilter==="mastered") return allWords().filter(w=>state.mastered.includes(`${w.unitId}:${w.word}`)).map(w=>({...w,key:`${w.unitId}:${w.word}`}));
+    return current;
+  }
+  function renderWords(){
+    document.querySelectorAll("[data-word-filter]").forEach(b=>b.classList.toggle("active",b.dataset.wordFilter===memoryFilter)); const pool=wordPool(); memoryIndex=Math.min(memoryIndex,Math.max(0,pool.length-1));
+    if(!pool.length){$("memoryCard").innerHTML=`<div class="empty"><span>🎉</span><h2>这里暂时没有单词</h2><p>${memoryFilter==="weak"?"完成小测后，答错的词会自动来到这里。":"先进入课程学习单词吧。"}</p></div>`;$("wordDots").innerHTML="";return;}
+    const w=pool[memoryIndex]; $("memoryCard").className=`memory-card ${memoryFlipped?"flipped":""}`; $("memoryCard").innerHTML=`<div class="memory-inner" id="flipWord" role="button" tabindex="0"><div class="memory-front"><small>${memoryIndex+1} / ${pool.length}</small><button class="word-audio" data-memory-say aria-label="播放单词发音">🔊</button><h2>${esc(w.word)}</h2><p>先说出中文意思，再点击翻面</p></div><div class="memory-back"><small>答案与记忆钩子</small><h2>${esc(w.meaning)}</h2><p>${esc(w.exampleZh||"把这个词放进本单元情境中说一次。")}</p><b>再大声读：${esc(w.word)}</b></div></div>`; $("wordDots").innerHTML=pool.map((_,i)=>`<button class="${i===memoryIndex?"active":""}" data-word-index="${i}" aria-label="第${i+1}个单词"></button>`).join("");
+    $("flipWord").onclick=(e)=>{if(e.target.closest("[data-memory-say]")){speak(w.word);return;}memoryFlipped=!memoryFlipped;renderWords();};
+  }
+  function moveWord(known){ const pool=wordPool(); if(!pool.length)return; const w=pool[memoryIndex]; if(known){if(!state.mastered.includes(w.key))state.mastered.push(w.key);state.weak=state.weak.filter(x=>x!==w.key);toast("已记住：明天再回忆一次");}else{if(!state.weak.includes(w.key))state.weak.push(w.key);state.mastered=state.mastered.filter(x=>x!==w.key);toast("已加入复习清单，慢慢来");} activity();save();memoryIndex=(memoryIndex+1)%Math.max(1,pool.length);memoryFlipped=false;renderWords(); }
+
+  function plantState(){ const xp=state.plant.xp; if(state.plant.energy<=20)return{icon:"🥀",name:"需要关心的小植物",level:1}; if(xp<15)return{icon:"🌱",name:"英语小芽",level:1}; if(xp<40)return{icon:"🌿",name:"勇气绿苗",level:2}; if(xp<80)return{icon:"🌻",name:"向阳花",level:3}; if(xp<150)return{icon:"🌳",name:"知识树",level:4}; return{icon:"🌳✨",name:"智慧大树",level:5}; }
+  function renderGarden(){ const p=plantState(); $("gardenPlant").textContent=p.icon;$("gardenLevel").textContent=`Lv.${p.level}`;$("gardenPlantName").textContent=p.name;$("energyText").textContent=`${state.plant.energy} / 100`;$("energyBar").style.width=`${state.plant.energy}%`;$("gardenMessage").textContent=state.plant.energy<30?"植物有点没精神，完成一个小任务就能恢复活力。":"它正在因为你的坚持而成长。偶尔漏学没关系，回来继续就好。"; const signed=state.signIns.includes(iso());$("checkInBtn").disabled=signed;$("checkInBtn").textContent=signed?"✓ 今日已签到":"今日签到 +2 ☀️";$("feedBtn").disabled=state.suns<3||state.plant.energy>=100;
+    const levels=[{icon:"🌱",name:"英语小芽",xp:0},{icon:"🌿",name:"勇气绿苗",xp:15},{icon:"🌻",name:"向阳花",xp:40},{icon:"🌳",name:"知识树",xp:80},{icon:"🌳✨",name:"智慧大树",xp:150}]; $("growthRoad").innerHTML=levels.map(l=>`<article class="${state.plant.xp>=l.xp?"unlocked":""}"><span>${l.icon}</span><b>${l.name}</b><small>${l.xp}成长值</small></article>`).join("");
+  }
+
+  function renderReport(){
+    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0; $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article>`;
+    const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const key=iso(d);days.push({name:["日","一","二","三","四","五","六"][d.getDay()],count:state.activity[key]||0,today:i===0});} const max=Math.max(4,...days.map(d=>d.count)); $("weekChart").innerHTML=days.map(d=>`<div class="chart-day"><b>${d.count}</b><span style="height:${Math.max(8,d.count/max*120)}px"></span><small>${d.today?"今天":"周"+d.name}</small></div>`).join("");
+    const advice=[]; if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
+  }
+
+  document.addEventListener("click",e=>{
+    const view=e.target.closest("[data-view]"); if(view){route(view.dataset.view);return;}
+    const grade=e.target.closest("[data-grade]"); if(grade){selectedGrade=Number(grade.dataset.grade);renderCourses();return;}
+    const term=e.target.closest("[data-term]"); if(term){selectedTerm=term.dataset.term;renderCourses();return;}
+    const unit=e.target.closest("[data-unit-book]"); if(unit){state.bookId=unit.dataset.unitBook;state.unitIndex=Number(unit.dataset.unitIndex);state.stage="overview";selectedGrade=bookNow().grade;selectedTerm=bookNow().term;save();quizAnswers={};route("unit");return;}
+    const stage=e.target.closest("[data-stage]"); if(stage){state.stage=stage.dataset.stage;save();quizAnswers={};renderUnit();return;}
+    const open=e.target.closest("[data-open-stage],[data-daily-stage]"); if(open){state.stage=open.dataset.openStage||open.dataset.dailyStage;save();route("unit");return;}
+    const filter=e.target.closest("[data-word-filter]"); if(filter){memoryFilter=filter.dataset.wordFilter;memoryIndex=0;memoryFlipped=false;renderWords();return;}
+    const dot=e.target.closest("[data-word-index]"); if(dot){memoryIndex=Number(dot.dataset.wordIndex);memoryFlipped=false;renderWords();}
+  });
+  $("continueBtn").onclick=()=>{state.stage=nextStage().id;save();route("unit");};
+  $("wordKnow").onclick=()=>moveWord(true); $("wordAgain").onclick=()=>moveWord(false);
+  $("claimDailyBonus").onclick=()=>{const key=`${iso()}:${unitKey()}`;if(dailyComplete()<5||state.bonuses.includes(key))return;state.bonuses.push(key);reward(3,"完成今日全部任务");renderToday();};
+  $("checkInBtn").onclick=()=>{if(state.signIns.includes(iso()))return;state.signIns.push(iso());reward(2,"今日签到成功");renderGarden();};
+  $("feedBtn").onclick=()=>{if(state.suns<3)return toast("小太阳不够，先完成学习任务吧");state.suns-=3;state.plant.energy=Math.min(100,state.plant.energy+18);state.plant.xp+=2;save();toast("植物恢复了活力");renderGarden();};
+
+  carePlant(); renderHeader(); renderHome();
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
 })();
