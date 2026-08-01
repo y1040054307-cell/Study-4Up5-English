@@ -118,7 +118,7 @@
   function playNetworkVoice(text,rate,requestId){
     const chunks=speechChunks(text);let index=0;
     if(!networkVoiceNoticeShown){networkVoiceNoticeShown=true;toast("已自动切换到在线英语语音");}
-    const playNext=()=>{if(requestId!==speechRequestId||index>=chunks.length)return;const chunk=chunks[index],sources=[`https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(chunk)}`,`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(chunk)}&type=2`];let sourceIndex=0;
+    const playNext=()=>{if(requestId!==speechRequestId||index>=chunks.length)return;const chunk=chunks[index],encoded=encodeURIComponent(chunk),sources=[`https://fanyi.baidu.com/gettts?lan=en&text=${encoded}&spd=3&source=web`,`https://dict.youdao.com/dictvoice?audio=${encoded}&type=2`,`https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encoded}`];let sourceIndex=0;
       const trySource=()=>{if(requestId!==speechRequestId)return;const audio=new Audio(sources[sourceIndex]);activeAudio=audio;audio.preload="auto";audio.playbackRate=Math.max(.7,Math.min(1.05,rate+.12));audio.onended=()=>{index+=1;playNext()};audio.onerror=()=>{sourceIndex+=1;if(sourceIndex<sources.length)trySource();else if(requestId===speechRequestId)toast("语音加载失败，请检查网络后再试")};audio.play().catch(()=>{if(requestId===speechRequestId)toast("请再次点击播放按钮")});};trySource();};
     playNext();
   }
@@ -733,5 +733,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=20",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=21",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
