@@ -24,6 +24,7 @@
   let marketTab = "plants";
   let quizAnswers = {};
   let toastTimer;
+  let petActionTimer;
 
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -128,6 +129,7 @@
     $("homeTasks").innerHTML=todayTasks.slice(0,3).map(t=>{const done=state.dailyDone.includes(todayKey(t.id));return `<button class="preview-task ${done?"done":""}" data-open-stage="${t.stage}"><span>${done?"✓":t.icon}</span><div><b>${t.title}</b><small>${t.detail}</small></div><em>${done?"已完成":"去学习 →"}</em></button>`}).join("");
     const unitDone=stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length;
     $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} · Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/6*100}%"></span></div><small>${unitDone}/6 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
+    renderHomePet();
   }
 
   function nextStage(){ return stages.find(s=>!state.stageDone.includes(stageKey(s.id))) || stages[5]; }
@@ -353,36 +355,59 @@
   function catalogPlant(id=state.plant.selected){return GROWTH_CATALOG.plants.find(item=>item.id===id)||GROWTH_CATALOG.plants[0];}
   function catalogPet(id=state.pets.selected){return GROWTH_CATALOG.pets.find(item=>item.id===id)||null;}
   function growthLevel(xp,thresholds){let level=0;thresholds.forEach((value,index)=>{if(xp>=value)level=index;});return level;}
+  function animatedPetMarkup(pet,size="large"){
+    const species=pet.species==="小猫"?"cat":pet.species==="小狗"?"dog":"turtle";
+    const face=`<i class="pet-eye eye-left"></i><i class="pet-eye eye-right"></i><i class="pet-nose"></i><i class="pet-mouth"></i>`;
+    if(species==="turtle")return `<div class="animated-pet pet-turtle breed-${pet.id} size-${size}" data-animated-pet aria-label="会动的${esc(pet.breed)}"><i class="pet-ground-shadow"></i><div class="pet-rig"><i class="pet-leg leg-one"></i><i class="pet-leg leg-two"></i><i class="pet-leg leg-three"></i><i class="pet-leg leg-four"></i><div class="pet-turtle-body"><i class="shell-pattern pattern-one"></i><i class="shell-pattern pattern-two"></i><i class="shell-pattern pattern-three"></i></div><div class="pet-head">${face}</div><i class="pet-tail"></i></div></div>`;
+    return `<div class="animated-pet pet-${species} breed-${pet.id} size-${size}" data-animated-pet aria-label="会动的${esc(pet.breed)}"><i class="pet-ground-shadow"></i><div class="pet-rig"><i class="pet-tail"></i><div class="pet-body"><i class="fur-patch"></i><i class="pet-leg leg-front"></i><i class="pet-leg leg-back"></i></div><div class="pet-head"><i class="pet-ear ear-left"></i><i class="pet-ear ear-right"></i>${face}<i class="pet-muzzle"></i><i class="pet-whisker whisker-left"></i><i class="pet-whisker whisker-right"></i></div></div></div>`;
+  }
+  function renderHomePet(){
+    const host=$("homePetFloat"),pet=catalogPet();
+    if(!host)return;
+    if(!pet||!state.pets.owned.includes(pet.id)){host.hidden=true;host.innerHTML="";return;}
+    const progress=petProgress(),stage=growthLevel(progress.xp,pet.thresholds);
+    host.hidden=false;
+    host.innerHTML=`<div class="home-pet-title"><div><small>我的学习伙伴</small><b>${esc(pet.breed)} · ${esc(pet.forms[stage])}</b></div><button data-view="pets" aria-label="打开动物伙伴页面">详情</button></div><div class="home-pet-playground">${animatedPetMarkup(pet,"home")}<span class="pet-speech">${progress.fullness<25?"我有点饿啦！":"一起学习吧！"}</span></div><div class="pet-actions"><button data-pet-action="pat">🖐️ 摸摸</button><button data-pet-action="jump">⬆️ 跳跃</button><button data-pet-action="walk">🐾 散步</button><button data-pet-feed ${state.foods<2?"disabled":""}>🥣 喂食</button></div>`;
+  }
+  function playPetAction(action){
+    const pets=document.querySelectorAll(".home-pet-float [data-animated-pet], .pet-stage [data-animated-pet]");
+    if(!pets.length)return;
+    clearTimeout(petActionTimer);
+    pets.forEach(node=>{node.classList.remove("action-pat","action-jump","action-walk","action-happy");void node.offsetWidth;node.classList.add(`action-${action}`);});
+    const messages={pat:"它开心地蹭了蹭你的手",jump:"它轻快地跳了起来",walk:"它在学习岛上散了一小圈步",happy:"吃饱啦！它高兴地向你打招呼"};
+    if(messages[action])toast(messages[action]);
+    petActionTimer=setTimeout(()=>pets.forEach(node=>node.classList.remove(`action-${action}`)),action==="walk"?2100:1400);
+  }
   function plantState(){const plant=catalogPlant(),progress=plantProgress(),level=growthLevel(progress.xp,plant.thresholds);return{...plant,level:level+1,stage:level,icon:progress.energy<=0?"🥀":plant.stages[level],name:progress.energy<=0?`${plant.name}（休眠）`:plant.forms[level]};}
   function renderGarden(){
-    const plant=plantState(),progress=plantProgress(),signed=state.signIns.includes(iso()),fed=progress.lastFed===iso();
+    const plant=plantState(),progress=plantProgress(),signed=state.signIns.includes(iso());
     $("gardenPlant").textContent=plant.icon;$("gardenPlant").style.setProperty("--plant-color",plant.color);$("gardenPlant").classList.toggle("ultimate",plant.stage===plant.stages.length-1&&progress.energy>0);$("gardenLevel").textContent=`Lv.${plant.level}`;$("gardenRarity").textContent=`${plant.rarity}植物 · ${catalogPlant().name}`;$("gardenPlantName").textContent=plant.name;$("energyText").textContent=`${progress.energy} / 100`;$("energyBar").style.width=`${progress.energy}%`;
-    $("gardenMessage").textContent=progress.energy<=0?"植物已经休眠。学习不会自动唤醒它，请亲手浇灌恢复活力。":fed?"今天已经亲手浇灌过了。明天再来，长期坚持才能抵达终极形态。":progress.energy<30?"植物有点没精神，需要你亲手浇灌。":"学习获得小太阳后，记得由你亲手完成今天的照顾。";
-    $("checkInBtn").disabled=signed;$("checkInBtn").textContent=signed?"✓ 今日已签到":"今日签到 +2 ☀️";$("feedBtn").disabled=state.suns<2||fed;$("feedBtn").textContent=fed?"✓ 今天已亲手浇灌":"亲手浇灌 −2 ☀️";
+    $("gardenMessage").textContent=progress.energy<=0?"植物已经休眠。学习不会自动唤醒它，请亲手浇灌恢复活力。":progress.energy<30?"植物有点没精神，需要你亲手浇灌；有足够小太阳就可以连续照顾。":"学习获得小太阳后，由你决定浇灌多少次，没有每日次数上限。";
+    $("checkInBtn").disabled=signed;$("checkInBtn").textContent=signed?"✓ 今日已签到":"今日签到 +2 ☀️";$("feedBtn").disabled=state.suns<2;$("feedBtn").textContent="亲手浇灌 −2 ☀️";
     $("growthRoad").innerHTML=catalogPlant().stages.map((icon,index)=>`<article class="${progress.xp>=catalogPlant().thresholds[index]?"unlocked":""}"><span>${icon}</span><b>${esc(catalogPlant().forms[index])}</b><small>${catalogPlant().thresholds[index]}成长值</small></article>`).join("");
     $("ownedPlantGrid").innerHTML=state.plant.owned.map(id=>{const item=catalogPlant(id),data=plantProgress(id),level=growthLevel(data.xp,item.thresholds);return `<button class="owned-plant ${id===state.plant.selected?"active":""}" data-select-plant="${id}"><span>${data.energy<=0?"🥀":item.stages[level]}</span><div><b>${esc(item.name)}</b><small>${esc(item.forms[level])} · ${data.xp}成长值</small></div><em>${id===state.plant.selected?"正在照顾":"选择"}</em></button>`;}).join("");
   }
 
   function renderMarket(){
     $("marketSuns").textContent=state.suns;$("marketFoods").textContent=state.foods;document.querySelectorAll("[data-market-tab]").forEach(button=>button.classList.toggle("active",button.dataset.marketTab===marketTab));
-    if(marketTab==="plants"){$("marketNote").innerHTML=`<b>10种植物 · 越稀有越难兑换</b><span>兑换只是开始；每株植物仍要每天手动浇灌，最高形态需要500成长值。</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.plants.map((item,index)=>{const owned=state.plant.owned.includes(item.id),selected=state.plant.selected===item.id;return `<article class="market-card rarity-${index}"><div class="market-preview" style="--accent:${item.color}"><span>${item.stages.at(-1)}</span><small>终极形态</small></div><div class="market-copy"><em>${esc(item.rarity)}</em><h2>${esc(item.name)}</h2><p>${esc(item.description)}</p><div class="form-road">${item.stages.map(icon=>`<span>${icon}</span>`).join("→")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-plant="${item.id}"`:`data-buy-plant="${item.id}"`} ${selected?"disabled":""}>${selected?"✓ 正在照顾":owned?"选择这株植物":item.price?`${item.price} ☀️ 兑换`:"初始赠送"}</button></article>`;}).join("");}
-    else{$("marketNote").innerHTML=`<b>3类动物 · 每类3个常见品种</b><span>使用小太阳领养；领养后要靠任务粮食每天手动投喂，约70次照顾达到终极形态。</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.pets.map((item,index)=>{const owned=state.pets.owned.includes(item.id),selected=state.pets.selected===item.id;return `<article class="market-card pet-product rarity-${Math.min(9,index+1)}"><div class="market-preview" style="--accent:${item.color}"><span>${item.stages.at(-1)}</span><small>${esc(item.species)}终极形态</small></div><div class="market-copy"><em>${esc(item.species)}</em><h2>${esc(item.breed)}</h2><p>${esc(item.description)}</p><div class="form-road">${item.stages.map(icon=>`<span>${icon}</span>`).join("→")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-pet="${item.id}"`:`data-buy-pet="${item.id}"`} ${selected?"disabled":""}>${selected?"✓ 当前伙伴":owned?"选择这只动物":`${item.price} ☀️ 领养`}</button></article>`;}).join("");}
+    if(marketTab==="plants"){$("marketNote").innerHTML=`<b>10种植物 · 越稀有越难兑换</b><span>兑换只是开始；有多少小太阳就能浇灌多少次，最高形态需要500成长值。</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.plants.map((item,index)=>{const owned=state.plant.owned.includes(item.id),selected=state.plant.selected===item.id;return `<article class="market-card rarity-${index}"><div class="market-preview" style="--accent:${item.color}"><span>${item.stages.at(-1)}</span><small>终极形态</small></div><div class="market-copy"><em>${esc(item.rarity)}</em><h2>${esc(item.name)}</h2><p>${esc(item.description)}</p><div class="form-road">${item.stages.map(icon=>`<span>${icon}</span>`).join("→")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-plant="${item.id}"`:`data-buy-plant="${item.id}"`} ${selected?"disabled":""}>${selected?"✓ 正在照顾":owned?"选择这株植物":item.price?`${item.price} ☀️ 兑换`:"初始赠送"}</button></article>`;}).join("");}
+    else{$("marketNote").innerHTML=`<b>3类动物 · 每类3个常见品种</b><span>使用小太阳领养；只要粮食充足就能连续手动投喂，约70次照顾达到终极形态。</span>`;$("marketGrid").innerHTML=GROWTH_CATALOG.pets.map((item,index)=>{const owned=state.pets.owned.includes(item.id),selected=state.pets.selected===item.id;return `<article class="market-card pet-product rarity-${Math.min(9,index+1)}"><div class="market-preview pet-market-preview" style="--accent:${item.color}">${animatedPetMarkup(item,"shop")}<small>${esc(item.species)}动态伙伴</small></div><div class="market-copy"><em>${esc(item.species)}</em><h2>${esc(item.breed)}</h2><p>${esc(item.description)}</p><div class="form-road">${item.stages.map(icon=>`<span>${icon}</span>`).join("→")}</div></div><button class="${owned?"soft":"primary"}" ${owned?`data-select-pet="${item.id}"`:`data-buy-pet="${item.id}"`} ${selected?"disabled":""}>${selected?"✓ 当前伙伴":owned?"选择这只动物":`${item.price} ☀️ 领养`}</button></article>`;}).join("");}
   }
 
   function carePets(){let changed=false;state.pets.owned.forEach(id=>{const progress=petProgress(id),last=progress.lastUpdate||iso(),days=daysBetween(last,iso());if(days>0){progress.fullness=Math.max(0,progress.fullness-days*4);progress.lastUpdate=iso();changed=true;}});if(changed)save();}
   function renderPets(){
     carePets();const pet=catalogPet();
     if(!pet){$("petCare").innerHTML=`<section class="panel pet-empty"><span>🐾</span><h2>还没有动物伙伴</h2><p>去成长商城选择小猫、小狗或小乌龟。领养后，任务获得的粮食就能派上用场。</p><button class="primary" data-open-market="animals">去动物领养区</button></section>`;$("ownedPetGrid").innerHTML="";return;}
-    const progress=petProgress(),stage=growthLevel(progress.xp,pet.thresholds),fed=progress.lastFed===iso(),next=pet.thresholds[stage+1];
-    $("petCare").innerHTML=`<section class="pet-stage" style="--pet-color:${pet.color}"><span class="pet-avatar ${stage===pet.stages.length-1?"ultimate":""}">${progress.fullness<=0?"💤":pet.stages[stage]}</span><small>${esc(pet.species)} · ${esc(pet.breed)}</small><h2>${esc(pet.forms[stage])}</h2><p>${progress.fullness<=0?"伙伴饿得没有精神了，请亲手投喂。":fed?"今天已经吃饱啦，明天再来照顾。":"它正在等你使用任务粮食亲手投喂。"}</p></section><section class="panel pet-stats"><div class="pet-wallet">🥣 粮食 <b>${state.foods}</b></div><div class="energy-row"><span>饱食度</span><b>${progress.fullness}/100</b></div><div class="energy-bar"><span style="width:${progress.fullness}%"></span></div><div class="energy-row"><span>成长值</span><b>${progress.xp}${next?` / ${next}`:" · 已达终极"}</b></div><div class="energy-bar pet-xp"><span style="width:${next?Math.min(100,progress.xp/next*100):100}%"></span></div><button class="primary" id="feedPetBtn" ${state.foods<2||fed?"disabled":""}>${fed?"✓ 今天已投喂":"亲手投喂 −2 🥣"}</button><small>每天最多投喂一次，每次 +6 成长值；终极形态需420成长值，至少坚持70天。</small></section>`;
+    const progress=petProgress(),stage=growthLevel(progress.xp,pet.thresholds),next=pet.thresholds[stage+1];
+    $("petCare").innerHTML=`<section class="pet-stage" style="--pet-color:${pet.color}">${animatedPetMarkup(pet,"large")}<small>${esc(pet.species)} · ${esc(pet.breed)}</small><h2>${esc(pet.forms[stage])}</h2><p>${progress.fullness<=0?"伙伴饿得没有精神了，请亲手投喂。":"它会呼吸、眨眼和摇尾巴，点下面的按钮与它互动吧。"}</p><div class="pet-actions care-actions"><button data-pet-action="pat">🖐️ 摸摸</button><button data-pet-action="jump">⬆️ 跳跃</button><button data-pet-action="walk">🐾 散步</button></div></section><section class="panel pet-stats"><div class="pet-wallet">🥣 粮食 <b>${state.foods}</b></div><div class="energy-row"><span>饱食度</span><b>${progress.fullness}/100</b></div><div class="energy-bar"><span style="width:${progress.fullness}%"></span></div><div class="energy-row"><span>成长值</span><b>${progress.xp}${next?` / ${next}`:" · 已达终极"}</b></div><div class="energy-bar pet-xp"><span style="width:${next?Math.min(100,progress.xp/next*100):100}%"></span></div><button class="primary" id="feedPetBtn" ${state.foods<2?"disabled":""}>亲手投喂 −2 🥣</button><small>每次 +6 成长值；没有每日次数上限，有多少粮食就能投喂多少次。终极形态需要420成长值。</small></section>`;
     $("feedPetBtn").onclick=feedPet;
-    $("ownedPetGrid").innerHTML=state.pets.owned.map(id=>{const item=catalogPet(id),data=petProgress(id),level=growthLevel(data.xp,item.thresholds);return `<button class="owned-pet ${id===state.pets.selected?"active":""}" data-select-pet="${id}"><span>${item.stages[level]}</span><div><b>${esc(item.breed)}</b><small>${esc(item.forms[level])} · ${data.xp}/420</small></div><em>${id===state.pets.selected?"当前伙伴":"选择"}</em></button>`;}).join("");
+    $("ownedPetGrid").innerHTML=state.pets.owned.map(id=>{const item=catalogPet(id),data=petProgress(id),level=growthLevel(data.xp,item.thresholds);return `<button class="owned-pet ${id===state.pets.selected?"active":""}" data-select-pet="${id}">${animatedPetMarkup(item,"mini")}<div><b>${esc(item.breed)}</b><small>${esc(item.forms[level])} · ${data.xp}/420</small></div><em>${id===state.pets.selected?"当前伙伴":"选择"}</em></button>`;}).join("");
   }
-  function feedPet(){const progress=petProgress();if(progress.lastFed===iso())return toast("今天已经投喂过了，明天再来");if(state.foods<2)return toast("粮食不足，完成学习任务可以获得粮食");state.foods-=2;progress.fullness=Math.min(100,progress.fullness+20);progress.xp+=6;progress.lastFed=iso();progress.lastUpdate=iso();save();toast("🥣 你亲手完成了今天的投喂，动物成长值 +6");renderPets();}
-  function buyPlant(id){const item=catalogPlant(id);if(state.plant.owned.includes(id))return selectPlant(id);if(state.suns<item.price)return toast(`还需要 ${item.price-state.suns} 个小太阳，坚持完成任务吧`);state.suns-=item.price;state.plant.owned.push(id);state.plant.selected=id;plantProgress(id);state.plant.lastDate=iso();save();toast(`成功兑换 ${item.name}，请每天亲手浇灌`);renderMarket();}
+  function feedPet(){const pet=catalogPet();if(!pet)return;if(state.foods<2)return toast("粮食不足，完成学习任务可以获得粮食");const progress=petProgress();state.foods-=2;progress.fullness=Math.min(100,progress.fullness+20);progress.xp+=6;progress.lastFed=iso();progress.lastUpdate=iso();save();renderHomePet();if($("view-pets").classList.contains("active"))renderPets();if($("view-market").classList.contains("active"))renderMarket();playPetAction("happy");}
+  function buyPlant(id){const item=catalogPlant(id);if(state.plant.owned.includes(id))return selectPlant(id);if(state.suns<item.price)return toast(`还需要 ${item.price-state.suns} 个小太阳，坚持完成任务吧`);state.suns-=item.price;state.plant.owned.push(id);state.plant.selected=id;plantProgress(id);state.plant.lastDate=iso();save();toast(`成功兑换 ${item.name}，有小太阳就可以亲手浇灌`);renderMarket();}
   function selectPlant(id){if(!state.plant.owned.includes(id))return;state.plant.selected=id;state.plant.lastDate=iso();plantProgress(id);save();toast(`已选择 ${catalogPlant(id).name}`);renderGarden();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
   function buyPet(id){const item=GROWTH_CATALOG.pets.find(pet=>pet.id===id);if(!item)return;if(state.pets.owned.includes(id))return selectPet(id);if(state.suns<item.price)return toast(`还需要 ${item.price-state.suns} 个小太阳才能领养`);state.suns-=item.price;state.pets.owned.push(id);state.pets.selected=id;state.pets.progress[id]={fullness:70,xp:0,lastFed:"",lastUpdate:iso()};save();toast(`成功领养 ${item.breed}，记得用任务粮食亲手投喂`);renderMarket();}
-  function selectPet(id){if(!state.pets.owned.includes(id))return;state.pets.selected=id;petProgress(id);save();toast(`已选择 ${catalogPet(id).breed} 作为当前伙伴`);renderPets();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
+  function selectPet(id){if(!state.pets.owned.includes(id))return;state.pets.selected=id;petProgress(id);save();toast(`已选择 ${catalogPet(id).breed} 作为当前伙伴`);renderPets();renderHomePet();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
 
   function renderReport(){
     const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0; $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🥣</span><b>${state.foods}</b><small>粮食库存</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
@@ -406,6 +431,8 @@
     const selectPlantButton=e.target.closest("[data-select-plant]"); if(selectPlantButton){selectPlant(selectPlantButton.dataset.selectPlant);return;}
     const buyPetButton=e.target.closest("[data-buy-pet]"); if(buyPetButton){buyPet(buyPetButton.dataset.buyPet);return;}
     const selectPetButton=e.target.closest("[data-select-pet]"); if(selectPetButton){selectPet(selectPetButton.dataset.selectPet);return;}
+    const petAction=e.target.closest("[data-pet-action]"); if(petAction){playPetAction(petAction.dataset.petAction);return;}
+    const petFeed=e.target.closest("[data-pet-feed]"); if(petFeed){feedPet();return;}
     const dictionaryTab=e.target.closest("[data-dictionary-section]"); if(dictionaryTab){dictionarySection=dictionaryTab.dataset.dictionarySection;dictionaryLetter="all";dictionaryQuery="";dictionaryLimit=48;renderDictionary();return;}
     const dictionaryLetterButton=e.target.closest("[data-dictionary-letter]"); if(dictionaryLetterButton){dictionaryLetter=dictionaryLetterButton.dataset.dictionaryLetter;dictionaryLimit=48;renderDictionary();return;}
     const filter=e.target.closest("[data-word-filter]"); if(filter){memoryFilter=filter.dataset.wordFilter;memoryIndex=0;memoryFlipped=false;renderWords();return;}
@@ -419,8 +446,8 @@
   $("wordKnow").onclick=()=>moveWord(true); $("wordAgain").onclick=()=>moveWord(false);
   $("claimDailyBonus").onclick=()=>{const key=`${iso()}:${unitKey()}`,todayTasks=activeTasks();if(dailyComplete()<todayTasks.length||state.bonuses.includes(key))return;state.bonuses.push(key);reward(3,"完成今日全部任务",2);renderToday();};
   $("checkInBtn").onclick=()=>{if(state.signIns.includes(iso()))return;state.signIns.push(iso());reward(2,"今日签到成功");renderGarden();};
-  $("feedBtn").onclick=()=>{const progress=plantProgress();if(progress.lastFed===iso())return toast("今天已经亲手浇灌过了，明天再来");if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 你亲手完成了今天的浇灌，植物成长值 +5");renderGarden();};
+  $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=8",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=9",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
