@@ -2,9 +2,18 @@
   "name": "向阳英语成长岛｜闽教版三至六年级",
   "short_name": "向阳英语",
   "description": "面向小学三至六年级的闽教版英语长期自学与成长工具",
-  "start_url": "./",
+  "id": "./",
+  "start_url": "./?source=app",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#f4f9f5",
   "theme_color": "#26795a",
-  "lang": "zh-CN"
+  "lang": "zh-CN",
+  "orientation": "any",
+  "categories": ["education", "kids"],
+  "icons": [
+    {"src":"assets/app-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"assets/app-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
 }

@@ -4,12 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#2f8f68">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="向阳英语">
   <meta name="description" content="面向福建小学三至六年级的闽教版英语长期自学平台：同步主题课程、单词记忆、句型理解、原创阅读、分层练习和电子植物成长。">
   <meta property="og:type" content="website">
   <meta property="og:title" content="向阳英语成长岛｜闽教版三至六年级">
   <meta property="og:description" content="每天20分钟，真正听懂、读懂、会说、会用。">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="apple-touch-icon" href="assets/app-icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
+  <link rel="stylesheet" href="styles.css?v=18">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -62,6 +68,13 @@
           <div><span class="eyebrow">MY LEARNING PLANT</span><h2 id="plantName">英语小芽</h2><p id="plantHint">完成任务获得小太阳，照顾它健康成长。</p></div>
         </article>
       </div>
+
+      <section class="install-card" id="installCard" hidden>
+        <img src="assets/app-icon-192.png" alt="向阳英语应用图标">
+        <div><small>免下载 · 手机和平板快速进入</small><h2>把“向阳英语”放到主屏幕</h2><p>添加后会出现独立应用图标，可像普通App一样全屏打开；学习记录仍保存在当前设备。</p></div>
+        <button class="primary" id="installAppButton">添加到主屏幕</button>
+        <button class="install-dismiss" id="dismissInstallCard" aria-label="暂时关闭安装提示">×</button>
+      </section>
 
       <div class="stats-grid">
         <article><span>📖</span><div><b id="statLessons">0</b><small>完成课时</small></div></article>
@@ -205,6 +218,14 @@
     </section>
   </main>
 
+  <dialog class="app-install-dialog" id="appInstallDialog" aria-labelledby="appInstallTitle">
+    <button class="profile-dialog-close" id="closeInstallDialog" aria-label="关闭安装说明">×</button>
+    <div class="app-install-head"><img src="assets/app-icon-192.png" alt="向阳英语应用图标"><div><small>NO DOWNLOAD NEEDED</small><h2 id="appInstallTitle">添加“向阳英语”到主屏幕</h2><p id="installDeviceHint">只需一次设置，以后点击图标即可快速学习。</p></div></div>
+    <div class="install-steps" id="installSteps"></div>
+    <button class="primary install-dialog-action" id="nativeInstallButton" hidden>立即添加到主屏幕</button>
+    <p class="profile-storage-note">提示：这是网页应用，不需要进入应用商店。不同浏览器的学习数据不会自动同步，请固定使用同一个浏览器打开。</p>
+  </dialog>
+
   <dialog class="profile-dialog" id="profileDialog" aria-labelledby="profileDialogTitle">
     <button class="profile-dialog-close" id="closeProfileDialog" aria-label="关闭身份选择">×</button>
     <div class="profile-dialog-head"><span>👨‍👩‍👧‍👦</span><div><small>FIVE INDEPENDENT LEARNERS</small><h2 id="profileDialogTitle">选择今天的学习身份</h2><p>每个身份拥有独立的课程进度、错词、签到、小太阳、粮食、植物和动物。切换不会覆盖其他人的记录。</p></div></div>
@@ -218,10 +239,10 @@
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
-  <script src="curriculum.js?v=17"></script>
-  <script src="dictionary.js?v=17"></script>
-  <script src="growth.js?v=17"></script>
-  <script src="grammar.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <script src="curriculum.js?v=18"></script>
+  <script src="dictionary.js?v=18"></script>
+  <script src="growth.js?v=18"></script>
+  <script src="grammar.js?v=18"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>
