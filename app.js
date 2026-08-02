@@ -60,7 +60,7 @@
   let localAudioAbort = null;
   let speechRequestId = 0;
   let networkVoiceNoticeShown = false;
-  const AUDIO_PACK_CACHE = "sunny-audio-pack-v23";
+  const AUDIO_PACK_CACHE = "sunny-audio-pack-v24";
 
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -95,6 +95,8 @@
       ["/p/","pen","/pen/","双唇闭合后送气，声带不振动","p, pp"],["/b/","bag","/bæɡ/","双唇闭合后放开，声带振动","b, bb"],["/t/","tea","/tiː/","舌尖碰上齿龈后送气","t, tt"],["/d/","dog","/dɒɡ/","舌尖碰上齿龈，声带振动","d, dd"],["/k/","cat","/kæt/","舌后部抬起再送气","c, k, ck"],["/g/","go","/ɡəʊ/","舌后部抬起，声带振动","g, gg"],["/f/","fish","/fɪʃ/","上齿轻触下唇，气流摩擦","f, ph"],["/v/","van","/væn/","上齿轻触下唇，声带振动","v"],["/θ/","three","/θriː/","舌尖轻放上下齿间，送气不振动","th"],["/ð/","this","/ðɪs/","舌尖轻放齿间，声带振动","th"],["/s/","sun","/sʌn/","舌尖靠近齿龈，窄缝送气","s, c"],["/z/","zoo","/zuː/","口型像 /s/，声带振动","z, s"]]},
     consonants:{name:"其他辅音",tip:"先把音发清楚，再放进单词；不要在辅音后面多加“呃”。",items:[
       ["/ʃ/","ship","/ʃɪp/","嘴唇略圆，舌面靠近上腭送气","sh"],["/ʒ/","vision","/ˈvɪʒən/","口型像 /ʃ/，声带振动","s, si"],["/h/","hat","/hæt/","张嘴自然呼气，不摩擦喉咙","h"],["/tʃ/","chair","/tʃeə/","先堵住气流再摩擦放出","ch, tch"],["/dʒ/","jump","/dʒʌmp/","像 /tʃ/，但声带振动","j, g, dge"],["/m/","map","/mæp/","双唇闭合，声音从鼻腔出来","m, mm"],["/n/","nose","/nəʊz/","舌尖顶齿龈，声音走鼻腔","n, nn"],["/ŋ/","sing","/sɪŋ/","舌后部抬起，声音走鼻腔","ng"],["/l/","leg","/leɡ/","舌尖顶上齿龈，两侧出气","l, ll"],["/r/","red","/red/","舌尖略卷但不碰上腭","r, rr"],["/j/","yes","/jes/","舌前部抬高，快速滑向元音","y"],["/w/","we","/wiː/","双唇收圆后迅速展开","w, wh"]]}
+    ,clusters:{name:"教材组合音",tip:"参考国内常用48音标表学习。这四组在现代语音学中也常按辅音组合来分析。",items:[
+      ["/tr/","tree","/triː/","先发 /t/，舌尖迅速后移并连到 /r/，中间不要加元音","tr"],["/dr/","dress","/dres/","先发浊音 /d/，立即连到 /r/，声带保持振动","dr"],["/ts/","cats","/kæts/","/t/ 和 /s/ 紧密相连，一次送气完成","ts"],["/dz/","beds","/bedz/","/d/ 和 /z/ 紧密相连，声带振动","ds, dz"]]}
   };
   const MINIMAL_PAIRS=[["ship","/ʃɪp/","sheep","/ʃiːp/"],["full","/fʊl/","fool","/fuːl/"],["bed","/bed/","bad","/bæd/"],["fan","/fæn/","van","/væn/"],["three","/θriː/","tree","/triː/"],["rice","/raɪs/","rise","/raɪz/"]];
   const BASIC_MEANINGS={
@@ -113,6 +115,13 @@
     light:{pos:"名词 / 形容词 / 动词",forms:"名词单数 light；复数 lights；形容词无单复数"},in:{pos:"介词 / 副词 / 形容词",forms:"无单复数变化"},right:{pos:"名词 / 形容词 / 副词",forms:"名词单数 right；复数 rights"},left:{pos:"名词 / 形容词 / 副词 / leave的过去式",forms:"名词单数 left；复数 lefts（少用）"},kind:{pos:"形容词 / 名词",forms:"名词单数 kind；复数 kinds"},watch:{pos:"动词 / 名词",forms:"名词单数 watch；复数 watches；动词三单 watches"},play:{pos:"动词 / 名词",forms:"名词单数 play；复数 plays；动词三单 plays"},call:{pos:"动词 / 名词",forms:"名词单数 call；复数 calls；动词三单 calls"},change:{pos:"动词 / 名词",forms:"名词单数 change；复数 changes；动词三单 changes"},fit:{pos:"动词 / 形容词",forms:"无名词单复数；动词三单 fits"},orange:{pos:"名词 / 形容词",forms:"名词单数 orange；复数 oranges"},fish:{pos:"名词 / 动词",forms:"名词单数 fish；复数 fish（常用）/ fishes（种类）"},water:{pos:"不可数名词 / 动词",forms:"通常无复数；动词三单 waters"},work:{pos:"不可数名词 / 动词",forms:"表示工作时通常无复数；动词三单 works"},rest:{pos:"名词 / 动词",forms:"名词单数 rest；复数 rests；动词三单 rests"},plan:{pos:"名词 / 动词",forms:"名词单数 plan；复数 plans；动词三单 plans"},train:{pos:"名词 / 动词",forms:"名词单数 train；复数 trains；动词三单 trains"},book:{pos:"名词 / 动词",forms:"名词单数 book；复数 books；动词三单 books"},class:{pos:"名词",forms:"单数 class；复数 classes"},present:{pos:"名词 / 形容词 / 动词",forms:"名词单数 present；复数 presents"},spring:{pos:"名词 / 动词",forms:"名词单数 spring；复数 springs"},park:{pos:"名词 / 动词",forms:"名词单数 park；复数 parks；动词三单 parks"},show:{pos:"动词 / 名词",forms:"名词单数 show；复数 shows；动词三单 shows"},matter:{pos:"名词 / 动词",forms:"名词单数 matter；复数 matters；动词三单 matters"},dream:{pos:"名词 / 动词",forms:"名词单数 dream；复数 dreams；动词三单 dreams"},miss:{pos:"动词 / 名词",forms:"动词三单 misses；名词 Miss 用于未婚女性称谓"},wish:{pos:"名词 / 动词",forms:"名词单数 wish；复数 wishes；动词三单 wishes"},help:{pos:"名词 / 动词",forms:"作“帮助”时通常不可数；动词三单 helps"},cook:{pos:"名词 / 动词",forms:"名词单数 cook；复数 cooks；动词三单 cooks"},dance:{pos:"名词 / 动词",forms:"名词单数 dance；复数 dances；动词三单 dances"},exercise:{pos:"名词 / 动词",forms:"名词单数 exercise；复数 exercises；动词三单 exercises"},race:{pos:"名词 / 动词",forms:"名词单数 race；复数 races；动词三单 races"},floor:{pos:"名词",forms:"单数 floor；复数 floors"},date:{pos:"名词 / 动词",forms:"名词单数 date；复数 dates；动词三单 dates"},view:{pos:"名词 / 动词",forms:"名词单数 view；复数 views；动词三单 views"},space:{pos:"名词",forms:"表示空间时可数或不可数；复数 spaces"}
   };
   const PHONEME_VOICE={"/ɪ/":"ih","/e/":"eh","/æ/":"aah","/ʌ/":"uh","/ɒ/":"aw","/ʊ/":"uuh","/ə/":"uh","/iː/":"eee","/ɑː/":"ahh","/ɔː/":"aw","/uː/":"ooo","/ɜː/":"err","/eɪ/":"ay","/aɪ/":"eye","/ɔɪ/":"oy","/əʊ/":"oh","/aʊ/":"ow","/ɪə/":"ear","/eə/":"air","/ʊə/":"oor","/p/":"puh","/b/":"buh","/t/":"tuh","/d/":"duh","/k/":"kuh","/g/":"guh","/f/":"fff","/v/":"vvv","/θ/":"thh","/ð/":"thuh","/s/":"sss","/z/":"zzz","/ʃ/":"shh","/ʒ/":"zhh","/h/":"hhh","/tʃ/":"ch","/dʒ/":"juh","/m/":"mmm","/n/":"nnn","/ŋ/":"ng","/l/":"lll","/r/":"rrr","/j/":"yuh","/w/":"wuh"};
+  const XDF_PHONEME_AUDIO={
+    "/iː/":"496fa8c5b185e9d155d7.mp3","/ɪ/":"9eeb45ac15980f053465.mp3","/e/":"51f575eab8eb20b5fbf7.mp3","/æ/":"0d692636a009ea99b9f9.mp3","/ɜː/":"2b2c11bd1dcf81f786f0.mp3","/ə/":"04c02a21344cc0750a68.mp3","/ʌ/":"1c0775f0ef22273a7e85.mp3","/uː/":"45f67d333cfcb525cd4f.mp3","/ʊ/":"ef8b714cea50701066b8.mp3","/ɔː/":"bdd75c97619e90b5035d.mp3","/ɒ/":"9bf1a8bbcfc0c68ee326.mp3","/ɑː/":"db4b962669f0c8e54737.mp3",
+    "/eɪ/":"28dc047b815750a6c5ee.mp3","/aɪ/":"a83bc6c3a61e526de4ba.mp3","/ɔɪ/":"c037f2e2fa30fc2711b8.mp3","/aʊ/":"8088e9346a7f75cb9b3c.mp3","/əʊ/":"eae06d0db4f09c8f142c.mp3","/ɪə/":"6ff61b12d4e985c668ac.mp3","/eə/":"f4eac5545f36dce272b8.mp3","/ʊə/":"1c01bd93c34338ca2081.mp3",
+    "/p/":"de1d50e7127182f7704d.mp3","/t/":"5df0fde0b4fd99cee219.mp3","/k/":"2d9c9b3d1ecdf33d659a.mp3","/f/":"a4209e9d9fd9709a1e76.mp3","/s/":"9b0599891bade0c04c46.mp3","/ʃ/":"c4a898ad851940132475.mp3","/θ/":"d994b922bc7ec82646ff.mp3","/h/":"fc7ee36388f605e0a8c6.mp3","/tʃ/":"a8bd1716350ce6be0735.mp3","/tr/":"4fad2aa8319f96b7034c.mp3","/ts/":"b854e5495600f691d169.mp3",
+    "/b/":"f80e74ce936868ba6237.mp3","/d/":"9a351a93fddb04c95162.mp3","/g/":"9f1f33f7bd448e4b2262.mp3","/v/":"1ee6a0a833eb5f5c40b4.mp3","/z/":"21d839e770c9a38de14a.mp3","/ʒ/":"69df71ab3487efcb6bfa.mp3","/ð/":"ab9c619dfb987add2069.mp3","/r/":"b6c52369def91ab36852.mp3","/dʒ/":"70e57979284156031990.mp3","/dr/":"f981507e87b07895a224.mp3","/dz/":"a9879c494d9159bdd679.mp3","/m/":"01ef4567a1aa014ae30a.mp3","/n/":"7f9f8679b25155de6b47.mp3","/ŋ/":"9f10d5b95482af1e9815.mp3","/l/":"a4c2272a2e766194a4a1.mp3","/j/":"fe61e7decb7acb2e0d8b.mp3","/w/":"4e6d33cbf2ba6dfb91b7.mp3"
+  };
+  const XDF_PHONEME_BASE="https://www.xdf.cn/zhuanti/bd-phonetic-alphabet-card/";
 
   const save = () => { const snapshot={...state};if(TEST_MODE){snapshot.suns=persistedEconomy.suns;snapshot.foods=persistedEconomy.foods;}localStorage.setItem(profileStoreKey(activeUserId), JSON.stringify(snapshot)); renderHeader(); };
   const toast = (msg) => { const el=$("toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2200); };
@@ -229,17 +238,22 @@
     if(!phonemeAudioPackBlob){const response=await fetch(pack.url,{cache:"force-cache"});if(!response.ok)throw new Error(`phoneme-audio-${response.status}`);phonemeAudioPackBlob=await response.blob();}
     return new Uint8Array(await phonemeAudioPackBlob.slice(start,start+length).arrayBuffer());
   }
-  function speakPhoneme(symbol){
-    const pack=window.PHONEM_AUDIO_PACK,entry=pack?.entries?.[symbol];if(!entry){toast("标准音素录音暂未加载，请刷新后重试");return;}
-    stopVoice();const requestId=speechRequestId;
-    try{const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(!AudioContextClass)throw new Error("no-audio-context");if(!phonemeAudioContext)phonemeAudioContext=new AudioContextClass({sampleRate:pack.sampleRate});phonemeAudioContext.resume?.();}
-    catch{toast("当前浏览器无法播放标准音素录音");return;}
+  function playLocalPhoneme(symbol,requestId){
+    const pack=window.PHONEM_AUDIO_PACK,entry=pack?.entries?.[symbol];if(!entry){if(requestId===speechRequestId)toast("标准音素录音暂未加载，请刷新后重试");return;}
     (async()=>{try{
       const pcm=await phonemeAudioBytes(entry);if(requestId!==speechRequestId)return;
       const samples=Math.floor(pcm.length/2),buffer=phonemeAudioContext.createBuffer(1,samples,pack.sampleRate),channel=buffer.getChannelData(0),view=new DataView(pcm.buffer,pcm.byteOffset,pcm.byteLength);
       for(let i=0;i<samples;i++)channel[i]=view.getInt16(i*2,true)/32768;
       const source=phonemeAudioContext.createBufferSource();source.buffer=buffer;source.connect(phonemeAudioContext.destination);activeLocalSource=source;source.onended=()=>{if(activeLocalSource===source)activeLocalSource=null;};source.start(0);
-    }catch(error){if(error?.name!=="AbortError"&&requestId===speechRequestId)toast("标准音素录音加载失败，请刷新后重试");}})();
+    }catch(error){if(error?.name!=="AbortError"&&requestId===speechRequestId)toast("音素录音加载失败，请刷新后重试");}})();
+  }
+  function speakPhoneme(symbol){
+    const pack=window.PHONEM_AUDIO_PACK;stopVoice();const requestId=speechRequestId;
+    try{const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(AudioContextClass){if(!phonemeAudioContext)phonemeAudioContext=new AudioContextClass({sampleRate:pack?.sampleRate||16000});phonemeAudioContext.resume?.();}}catch{}
+    const file=XDF_PHONEME_AUDIO[symbol];if(!file||!phonemeAudioContext){playLocalPhoneme(symbol,requestId);return;}
+    const player=voicePlayer();let settled=false;activeAudio=player;
+    const fallback=()=>{if(settled||requestId!==speechRequestId)return;settled=true;player.pause();player.removeAttribute("src");playLocalPhoneme(symbol,requestId);};
+    player.onended=()=>{settled=true;if(activeAudio===player)activeAudio=null;};player.onerror=fallback;player.src=XDF_PHONEME_BASE+file;player.playbackRate=1;player.load();const started=player.play();if(started?.catch)started.catch(fallback);
   }
   const daysBetween = (a,b) => Math.floor((new Date(`${b}T00:00:00`)-new Date(`${a}T00:00:00`))/86400000);
   const plantProgress = (id=state.plant.selected) => {if(!state.plant.progress[id])state.plant.progress[id]={energy:70,xp:0,lastFed:""};return state.plant.progress[id];};
@@ -711,9 +725,9 @@
   function moveWord(known){ const pool=wordPool(); if(!pool.length)return; const w=pool[memoryIndex]; if(known){if(!state.mastered.includes(w.key))state.mastered.push(w.key);state.weak=state.weak.filter(x=>x!==w.key);toast("已记住：明天再回忆一次");}else{if(!state.weak.includes(w.key))state.weak.push(w.key);state.mastered=state.mastered.filter(x=>x!==w.key);toast("已加入复习清单，慢慢来");} activity();save();memoryIndex=(memoryIndex+1)%Math.max(1,pool.length);memoryFlipped=false;renderWords(); }
 
   function renderPhonics(){
-    const icons={short:"🟡",long:"🟢",diph:"🌈",stops:"💨",consonants:"👄"},groups=Object.entries(PHONICS_GROUPS),total=groups.reduce((sum,[,item])=>sum+item.items.length,0),done=state.phonicsDone.length,group=PHONICS_GROUPS[phonicsGroup];
+    const icons={short:"🟡",long:"🟢",diph:"🌈",stops:"💨",consonants:"👄",clusters:"🔗"},groups=Object.entries(PHONICS_GROUPS),total=groups.reduce((sum,[,item])=>sum+item.items.length,0),done=state.phonicsDone.length,group=PHONICS_GROUPS[phonicsGroup];
     $("phonicsGroups").innerHTML=`<div class="phonics-progress"><div><b>音标学习进度</b><span>${done} / ${total} 个音</span></div><i><em style="width:${Math.min(100,done/total*100)}%"></em></i></div><div class="phonics-group-buttons">${groups.map(([id,item])=>`<button class="${id===phonicsGroup?"active":""}" data-phonics-group="${id}">${icons[id]} ${item.name}<small>${item.items.length}个</small></button>`).join("")}</div>`;
-    $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>本组学习目标</small><h2>${group.name}</h2><p>${group.tip}</p><p><b>发音已校正：</b>“标准音素”播放英式音素编码；“示范词”播放完整单词，两种声音不再混用。</p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="播放标准音素 ${esc(symbol)}">🔊 标准音素</button><button data-say="${esc(word)}" aria-label="播放示例词 ${esc(word)}">🎧 示范单词</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>👄 发音方法：</b>${esc(tip)}</p><p><b>🔤 常见字母：</b>${esc(spelling)}</p><ol><li>听标准音素</li><li>听完整示范词</li><li>对照口型慢速跟读3遍</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"✓ 已学会":"我已听、看、读3遍 +1 ☀️"}</button></article>`}).join("")}`;
+    $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>本组学习目标</small><h2>${group.name}</h2><p>${group.tip}</p><p><b>发音已校正：</b>主按钮按<a href="https://www.xdf.cn/zhuanti/bd-phonetic-alphabet-card/index.html" target="_blank" rel="noopener noreferrer">新东方48音标卡</a>对照播放；“示范单词”播放完整单词。网络不可用时自动切换到本地音素包。</p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="播放标准音素 ${esc(symbol)}">🔊 标准音素</button><button data-say="${esc(word)}" aria-label="播放示例词 ${esc(word)}">🎧 示范单词</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>👄 发音方法：</b>${esc(tip)}</p><p><b>🔤 常见字母：</b>${esc(spelling)}</p><ol><li>听标准音素</li><li>听完整示范词</li><li>对照口型慢速跟读3遍</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"✓ 已学会":"我已听、看、读3遍 +1 ☀️"}</button></article>`}).join("")}`;
     $("minimalGrid").innerHTML=MINIMAL_PAIRS.map(([a,aIpa,b,bIpa])=>`<article><div><button data-say="${esc(a)}">🔊 ${esc(a)}</button><span>${esc(aIpa)}</span></div><b>VS</b><div><button data-say="${esc(b)}">🔊 ${esc(b)}</button><span>${esc(bIpa)}</span></div><p>先听两遍，再注意两个词中不同的音。</p></article>`).join("");
     document.querySelectorAll("[data-phonics-group]").forEach(button=>button.onclick=()=>{phonicsGroup=button.dataset.phonicsGroup;renderPhonics();});
     document.querySelectorAll("#view-phonics [data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
@@ -870,5 +884,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();setupAudioPack();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=23",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=24",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();

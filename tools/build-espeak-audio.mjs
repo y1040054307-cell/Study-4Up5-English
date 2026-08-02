@@ -15,7 +15,8 @@ const PHONEMES = {
   "/eɪ/":"eI", "/aɪ/":"aI", "/ɔɪ/":"OI", "/əʊ/":"oU", "/aʊ/":"aU", "/ɪə/":"I@", "/eə/":"E@", "/ʊə/":"U@",
   "/p/":"p", "/b/":"b", "/t/":"t", "/d/":"d", "/k/":"k", "/g/":"g", "/f/":"f", "/v/":"v",
   "/θ/":"T", "/ð/":"D", "/s/":"s", "/z/":"z", "/ʃ/":"S", "/ʒ/":"Z", "/h/":"h", "/tʃ/":"tS", "/dʒ/":"dZ",
-  "/m/":"m", "/n/":"n", "/ŋ/":"N", "/l/":"l", "/r/":"r", "/j/":"j", "/w/":"w"
+  "/m/":"m", "/n/":"n", "/ŋ/":"N", "/l/":"l", "/r/":"r", "/j/":"j", "/w/":"w",
+  "/tr/":"tr", "/dr/":"dr", "/ts/":"ts", "/dz/":"dz"
 };
 
 function wavData(file) {
@@ -67,7 +68,7 @@ function writePhonemes() {
   }
   fs.mkdirSync(path.join(root, "assets"), { recursive:true });
   fs.writeFileSync(path.join(root, "assets", "phoneme-pack.bin"), Buffer.concat(chunks));
-  fs.writeFileSync(path.join(root, "phoneme-audio.js"), `window.PHONEM_AUDIO_PACK=${JSON.stringify({version:23,url:"assets/phoneme-pack.bin?v=23",sampleRate:16000,bits:16,bytes:offset,clips:Object.keys(entries).length,engine:"eSpeak NG 1.52 · en-GB · phoneme input",entries})};\n`);
+  fs.writeFileSync(path.join(root, "phoneme-audio.js"), `window.PHONEM_AUDIO_PACK=${JSON.stringify({version:24,url:"assets/phoneme-pack.bin?v=24",sampleRate:16000,bits:16,bytes:offset,clips:Object.keys(entries).length,engine:"eSpeak NG 1.52 · en-GB · phoneme input",entries})};\n`);
   console.log(`phonemes: ${Object.keys(entries).length}, bytes: ${offset}`);
 }
 
@@ -81,7 +82,7 @@ function writeCoursePack() {
     if ((index + 1) % 200 === 0) console.log(`${index + 1}/${items.length}`);
   });
   fs.writeFileSync(path.join(root, "assets", "audio-pack.bin"), Buffer.concat(chunks));
-  fs.writeFileSync(path.join(root, "audio-index.js"), `window.LOCAL_AUDIO_PACK=${JSON.stringify({version:23,url:"assets/audio-pack.bin?v=23",sampleRate:8000,bits:8,bytes:offset,clips:items.length,engine:"eSpeak NG 1.52 · en-GB",entries})};\n`);
+  fs.writeFileSync(path.join(root, "audio-index.js"), `window.LOCAL_AUDIO_PACK=${JSON.stringify({version:24,url:"assets/audio-pack.bin?v=24",sampleRate:8000,bits:8,bytes:offset,clips:items.length,engine:"eSpeak NG 1.52 · en-GB",entries})};\n`);
   console.log(`course clips: ${items.length}, bytes: ${offset}`);
 }
 
