@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
-const version = 26;
+const version = 28;
 const maxPartBytes = 20 * 1024 * 1024;
 const concurrency = 4;
 const courseDir = path.join(root, "assets", "audio");
@@ -47,7 +47,7 @@ async function fetchBuffer(source, attempts = 3) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await fetch(source.url, { redirect:"follow", signal:controller.signal, headers:{ "User-Agent":"Mozilla/5.0 SunnyEnglish/26", Referer:source.referer, Accept:"audio/mpeg,audio/*;q=0.9,*/*;q=0.2" } });
+      const response = await fetch(source.url, { redirect:"follow", signal:controller.signal, headers:{ "User-Agent":`Mozilla/5.0 SunnyEnglish/${version}`, Referer:source.referer, Accept:"audio/mpeg,audio/*;q=0.9,*/*;q=0.2" } });
       const buffer = Buffer.from(await response.arrayBuffer());
       if (!response.ok || !looksLikeAudio(buffer, response.headers.get("content-type") || "")) throw new Error(`${response.status} ${response.headers.get("content-type") || "unknown"} ${buffer.length}B`);
       return buffer;

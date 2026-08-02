@@ -54,13 +54,14 @@
   let activeAudio = null;
   let activeLocalSource = null;
   let localAudioContext = null;
-  let localAudioPackBlob = null;
+  const localAudioPartBlobs = new Map();
+  let localAudioPackReady = false;
   let phonemeAudioContext = null;
   let phonemeAudioPackBlob = null;
   let localAudioAbort = null;
   let speechRequestId = 0;
   let networkVoiceNoticeShown = false;
-  const AUDIO_PACK_CACHE = "sunny-audio-pack-v24";
+  const AUDIO_PACK_CACHE = "sunny-audio-pack-v28";
 
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -131,33 +132,37 @@
     return chunks.length?chunks:[String(text||"").trim()];
   };
   const audioKey = text => String(text||"").trim().replace(/[“”]/g,'"').replace(/[’]/g,"'").replace(/\s+/g," ").toLowerCase();
-  const audioPack = () => window.LOCAL_AUDIO_PACK||null;
+  const audioPack = () => window.LOCAL_AUDIO_PACK?.codec==="mp3"?window.LOCAL_AUDIO_PACK:null;
+  const audioPackParts = pack => Array.isArray(pack?.parts)&&pack.parts.length?pack.parts:[pack?.url?{url:pack.url,bytes:pack.bytes}:null].filter(Boolean);
   async function localAudioBytes(entry){
-    const pack=audioPack(),start=Number(entry[0]),length=Number(entry[1]);if(!pack||!length)throw new Error("missing-local-audio");
-    if(localAudioPackBlob)return new Uint8Array(await localAudioPackBlob.slice(start,start+length).arrayBuffer());
+    const pack=audioPack(),multipart=Array.isArray(pack?.parts)&&entry?.length>=3,partIndex=multipart?Number(entry[0]):0,start=Number(entry?.[multipart?1:0]),length=Number(entry?.[multipart?2:1]),part=audioPackParts(pack)[partIndex];
+    if(!pack||!part?.url||!length)throw new Error("missing-local-audio");
+    const memoryBlob=localAudioPartBlobs.get(part.url);if(memoryBlob)return new Uint8Array(await memoryBlob.slice(start,start+length).arrayBuffer());
     if("caches" in window){
-      const cache=await caches.open(AUDIO_PACK_CACHE),stored=await cache.match(pack.url);
-      if(stored){localAudioPackBlob=await stored.blob();return new Uint8Array(await localAudioPackBlob.slice(start,start+length).arrayBuffer());}
+      const cache=await caches.open(AUDIO_PACK_CACHE),stored=await cache.match(part.url);
+      if(stored){const blob=await stored.blob();localAudioPartBlobs.set(part.url,blob);return new Uint8Array(await blob.slice(start,start+length).arrayBuffer());}
     }
     localAudioAbort?.abort();localAudioAbort=new AbortController();
-    const response=await fetch(pack.url,{headers:{Range:`bytes=${start}-${start+length-1}`},cache:"no-store",signal:localAudioAbort.signal});
+    const response=await fetch(part.url,{headers:{Range:`bytes=${start}-${start+length-1}`},cache:"no-store",signal:localAudioAbort.signal});
     if(!response.ok)throw new Error(`local-audio-${response.status}`);
     const buffer=await response.arrayBuffer();
     if(response.status===206)return new Uint8Array(buffer);
-    localAudioPackBlob=new Blob([buffer],{type:"application/octet-stream"});return new Uint8Array(await localAudioPackBlob.slice(start,start+length).arrayBuffer());
+    const blob=new Blob([buffer],{type:"application/octet-stream"});localAudioPartBlobs.set(part.url,blob);return new Uint8Array(await blob.slice(start,start+length).arrayBuffer());
   }
   function playLocalVoice(text,rate,requestId,fallback){
+    if(!localAudioPackReady)return false;
     const pack=audioPack(),entry=pack?.entries?.[audioKey(text)];if(!entry)return false;
     try{
       const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(!AudioContextClass)return false;
-      if(!localAudioContext)localAudioContext=new AudioContextClass({sampleRate:pack.sampleRate});
+      if(!localAudioContext)localAudioContext=pack.sampleRate?new AudioContextClass({sampleRate:pack.sampleRate}):new AudioContextClass();
       localAudioContext.resume?.();
     }catch{return false;}
     (async()=>{
       try{
-        const pcm=await localAudioBytes(entry);if(requestId!==speechRequestId)return;
-        const buffer=localAudioContext.createBuffer(1,pcm.length,pack.sampleRate),channel=buffer.getChannelData(0);
-        for(let i=0;i<pcm.length;i++)channel[i]=(pcm[i]-128)/128;
+        const bytes=await localAudioBytes(entry);if(requestId!==speechRequestId)return;
+        let buffer;
+        if(pack.codec==="mp3")buffer=await localAudioContext.decodeAudioData(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+        else{buffer=localAudioContext.createBuffer(1,bytes.length,pack.sampleRate);const channel=buffer.getChannelData(0);for(let i=0;i<bytes.length;i++)channel[i]=(bytes[i]-128)/128;}
         const source=localAudioContext.createBufferSource();source.buffer=buffer;source.playbackRate.value=Math.max(.92,Math.min(1.06,rate+.2));source.connect(localAudioContext.destination);activeLocalSource=source;
         source.onended=()=>{if(activeLocalSource===source)activeLocalSource=null;};source.start(0);
       }catch(error){if(error?.name!=="AbortError"&&requestId===speechRequestId)fallback();}
@@ -179,33 +184,35 @@
   }
   function playDeviceVoice(content,rate,requestId,allowNetworkFallback=true){
     if(!("speechSynthesis" in window)||typeof SpeechSynthesisUtterance==="undefined"){
-      if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else if(requestId===speechRequestId)toast("语音暂时无法播放，请检查网络后重试");
+      if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else if(!playLocalVoice(content,rate,requestId,()=>toast("语音暂时无法播放，请检查网络后重试"))&&requestId===speechRequestId)toast("语音暂时无法播放，请检查网络后重试");
       return;
     }
     try{
       const utterance=new SpeechSynthesisUtterance(content),voices=window.speechSynthesis.getVoices?.()||[];
       utterance.lang="en-US";utterance.rate=rate;utterance.pitch=1;utterance.voice=voices.find(voice=>voice.lang==="en-US")||voices.find(voice=>String(voice.lang).startsWith("en"))||null;
       let started=false,fellBack=false;
-      const fallback=()=>{if(fellBack||started||requestId!==speechRequestId)return;fellBack=true;if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else toast("语音暂时无法播放，请检查网络后重试");};
+      const fallback=()=>{if(fellBack||started||requestId!==speechRequestId)return;fellBack=true;if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else if(!playLocalVoice(content,rate,requestId,()=>toast("语音暂时无法播放，请检查网络后重试")))toast("语音暂时无法播放，请检查网络后重试");};
       utterance.onstart=()=>{started=true};
       utterance.onerror=event=>{if(["canceled","interrupted"].includes(event.error))return;fallback();};
       window.speechSynthesis.resume?.();window.speechSynthesis.speak(utterance);
       setTimeout(()=>{if(!started&&!window.speechSynthesis.speaking&&!window.speechSynthesis.pending)fallback();},1200);
-    }catch{if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else if(requestId===speechRequestId)toast("语音暂时无法播放，请检查网络后重试");}
+    }catch{if(allowNetworkFallback)playNetworkVoice(content,rate,requestId,false);else if(!playLocalVoice(content,rate,requestId,()=>toast("语音暂时无法播放，请检查网络后重试"))&&requestId===speechRequestId)toast("语音暂时无法播放，请检查网络后重试");}
   }
   function playNetworkVoice(text,rate,requestId,allowDeviceFallback=true){
     const chunks=speechChunks(text),player=voicePlayer();let index=0;
     activeAudio=player;
-    if(!networkVoiceNoticeShown){networkVoiceNoticeShown=true;toast("正在使用稳定的在线整句发音");}
+    if(!networkVoiceNoticeShown){networkVoiceNoticeShown=true;toast("正在使用自然人声发音");}
     const playNext=()=>{
       if(requestId!==speechRequestId)return;
       if(index>=chunks.length)return;
       const chunk=chunks[index],plain=chunk.replace(/[^A-Za-z0-9' -]/g," ").replace(/\s+/g," ").trim()||chunk;
       const encoded=encodeURIComponent(chunk),plainEncoded=encodeURIComponent(plain);
-      const sources=[
+      const sources=/\s/.test(plain)?[
         `https://fanyi.baidu.com/gettts?lan=en&text=${encoded}&spd=3&source=web`,
-        `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encoded}`,
         `https://dict.youdao.com/dictvoice?audio=${plainEncoded}&type=2`
+      ]:[
+        `https://dict.youdao.com/dictvoice?audio=${plainEncoded}&type=2`,
+        `https://fanyi.baidu.com/gettts?lan=en&text=${encoded}&spd=3&source=web`
       ];
       let sourceIndex=0;
       const trySource=()=>{
@@ -229,21 +236,22 @@
   }
   function speak(text,rate=.78){
     const content=String(text||"").trim();if(!content)return;stopVoice();const requestId=speechRequestId;
-    const fallback=()=>{/\s/.test(content)?playNetworkVoice(content,rate,requestId,true):playDeviceVoice(content,rate,requestId,true);};
-    if(!playLocalVoice(content,rate,requestId,fallback))fallback();
+    if(!playLocalVoice(content,rate,requestId,()=>playNetworkVoice(content,rate,requestId,true)))playNetworkVoice(content,rate,requestId,true);
   }
   async function phonemeAudioBytes(entry){
     const pack=window.PHONEM_AUDIO_PACK,start=Number(entry?.[0]),length=Number(entry?.[1]);if(!pack||!length)throw new Error("missing-standard-phoneme");
+    if(pack.codec!=="mp3")throw new Error("legacy-mechanical-phoneme-disabled");
     if(!phonemeAudioPackBlob&&"caches" in window){const stored=await caches.match(pack.url);if(stored)phonemeAudioPackBlob=await stored.blob();}
-    if(!phonemeAudioPackBlob){const response=await fetch(pack.url,{cache:"force-cache"});if(!response.ok)throw new Error(`phoneme-audio-${response.status}`);phonemeAudioPackBlob=await response.blob();}
+    if(!phonemeAudioPackBlob){const response=await fetch(pack.url,{cache:"force-cache"});if(!response.ok)throw new Error(`phoneme-audio-${response.status}`);if("caches" in window){const cache=await caches.open(AUDIO_PACK_CACHE);await cache.put(pack.url,response.clone());}phonemeAudioPackBlob=await response.blob();}
     return new Uint8Array(await phonemeAudioPackBlob.slice(start,start+length).arrayBuffer());
   }
   function playLocalPhoneme(symbol,requestId){
     const pack=window.PHONEM_AUDIO_PACK,entry=pack?.entries?.[symbol];if(!entry){if(requestId===speechRequestId)toast("标准音素录音暂未加载，请刷新后重试");return;}
     (async()=>{try{
-      const pcm=await phonemeAudioBytes(entry);if(requestId!==speechRequestId)return;
-      const samples=Math.floor(pcm.length/2),buffer=phonemeAudioContext.createBuffer(1,samples,pack.sampleRate),channel=buffer.getChannelData(0),view=new DataView(pcm.buffer,pcm.byteOffset,pcm.byteLength);
-      for(let i=0;i<samples;i++)channel[i]=view.getInt16(i*2,true)/32768;
+      const bytes=await phonemeAudioBytes(entry);if(requestId!==speechRequestId)return;
+      let buffer;
+      if(pack.codec==="mp3")buffer=await phonemeAudioContext.decodeAudioData(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+      else{const samples=Math.floor(bytes.length/2),view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);buffer=phonemeAudioContext.createBuffer(1,samples,pack.sampleRate);const channel=buffer.getChannelData(0);for(let i=0;i<samples;i++)channel[i]=view.getInt16(i*2,true)/32768;}
       const source=phonemeAudioContext.createBufferSource();source.buffer=buffer;source.connect(phonemeAudioContext.destination);activeLocalSource=source;source.onended=()=>{if(activeLocalSource===source)activeLocalSource=null;};source.start(0);
     }catch(error){if(error?.name!=="AbortError"&&requestId===speechRequestId)toast("音素录音加载失败，请刷新后重试");}})();
   }
@@ -331,25 +339,32 @@
     $("audioPackCard").classList.toggle("ready",ready);
   }
   async function downloadAudioPack(){
-    const pack=audioPack(),button=$("downloadAudioPack");if(!pack||!("caches" in window))return toast("当前浏览器不支持离线语音包，请使用最新版浏览器");
+    const pack=audioPack(),parts=audioPackParts(pack),button=$("downloadAudioPack");if(!pack||!parts.length||!("caches" in window))return toast("当前浏览器不支持离线语音包，请使用最新版浏览器");
     updateAudioPackCard(`准备下载：${audioPackLabel()}`,1,false);button.disabled=true;
     try{
-      const response=await fetch(pack.url,{cache:"no-store"});if(!response.ok)throw new Error(`audio-pack-${response.status}`);
-      let blob;
-      if(response.body?.getReader){
-        const reader=response.body.getReader(),chunks=[];let received=0;
-        while(true){const {done,value}=await reader.read();if(done)break;chunks.push(value);received+=value.length;updateAudioPackCard(`正在下载 ${Math.min(pack.bytes,received)/1048576|0} / ${Math.ceil(pack.bytes/1048576)} MB`,received/pack.bytes*100,false);button.disabled=true;}
-        blob=new Blob(chunks,{type:"application/octet-stream"});
-      }else blob=await response.blob();
-      if(blob.size<pack.bytes*.98)throw new Error("audio-pack-incomplete");
-      const cache=await caches.open(AUDIO_PACK_CACHE);await cache.put(pack.url,new Response(blob,{headers:{"Content-Type":"application/octet-stream","Content-Length":String(blob.size)}}));localAudioPackBlob=blob;
-      updateAudioPackCard(`已保存在本机：${audioPackLabel()}。断网后也能播放。`,100,true);toast("离线语音包下载完成");
+      const cache=await caches.open(AUDIO_PACK_CACHE);let receivedTotal=0;
+      for(let partIndex=0;partIndex<parts.length;partIndex+=1){
+        const part=parts[partIndex],response=await fetch(part.url,{cache:"no-store"});if(!response.ok)throw new Error(`audio-pack-${response.status}`);
+        let blob;
+        if(response.body?.getReader){
+          const reader=response.body.getReader(),chunks=[];let received=0;
+          while(true){const {done,value}=await reader.read();if(done)break;chunks.push(value);received+=value.length;updateAudioPackCard(`正在下载第 ${partIndex+1}/${parts.length} 包 · ${(receivedTotal+received)/1048576|0} / ${Math.ceil(pack.bytes/1048576)} MB`,(receivedTotal+received)/pack.bytes*100,false);button.disabled=true;}
+          blob=new Blob(chunks,{type:"application/octet-stream"});
+        }else blob=await response.blob();
+        if(part.bytes&&blob.size<part.bytes*.98)throw new Error("audio-pack-incomplete");
+        await cache.put(part.url,new Response(blob,{headers:{"Content-Type":"application/octet-stream","Content-Length":String(blob.size)}}));localAudioPartBlobs.set(part.url,blob);receivedTotal+=blob.size;
+      }
+      const phonemePack=window.PHONEM_AUDIO_PACK;if(phonemePack?.codec==="mp3"&&phonemePack.url){const response=await fetch(phonemePack.url,{cache:"no-store"});if(!response.ok)throw new Error(`phoneme-pack-${response.status}`);await cache.put(phonemePack.url,response.clone());phonemeAudioPackBlob=await response.blob();}
+      localAudioPackReady=true;
+      updateAudioPackCard(`自然人声包已保存在本机：${audioPackLabel()}。断网后也能播放。`,100,true);toast("自然人声离线包下载完成");
     }catch{button.disabled=false;updateAudioPackCard("下载未完成，请连接稳定的 Wi-Fi 后重试。",0,false);toast("语音包下载失败，请稍后重试");}
   }
   async function setupAudioPack(){
-    const pack=audioPack();if(!pack){updateAudioPackCard("语音包索引未加载，请刷新网页。",0,false);return;}
-    $("audioPackMeta").textContent=`网站本地发音 · ${audioPackLabel()} · 不依赖境外语音接口`;
-    try{const stored="caches" in window?await (await caches.open(AUDIO_PACK_CACHE)).match(pack.url):null;if(stored)updateAudioPackCard(`已保存在本机：${audioPackLabel()}。断网后也能播放。`,100,true);else updateAudioPackCard("未下载时按需播放；下载后可完全离线使用。",0,false);}catch{updateAudioPackCard("未下载时按需播放；下载后可完全离线使用。",0,false);}
+    const rawPack=window.LOCAL_AUDIO_PACK,pack=audioPack();
+    if(!rawPack){updateAudioPackCard("语音包索引未加载，请刷新网页。",0,false);return;}
+    if(!pack){updateAudioPackCard("检测到旧版语音包，请更新网页资源后重试。",0,false);return;}
+    const parts=audioPackParts(pack);$("audioPackMeta").textContent=`国内自然语音 · ${audioPackLabel()} · 可断网播放`;
+    try{const cache="caches" in window?await caches.open(AUDIO_PACK_CACHE):null,stored=cache?await Promise.all(parts.map(part=>cache.match(part.url))):[];localAudioPackReady=Boolean(stored.length&&stored.every(Boolean));if(localAudioPackReady)updateAudioPackCard(`自然人声离线包已保存在本机，共 ${parts.length} 个分包。`,100,true);else updateAudioPackCard("联网时直接播放自然语音；下载后可在断网时继续学习。",0,false);}catch{localAudioPackReady=false;updateAudioPackCard("联网时直接播放自然语音；下载后可在断网时继续学习。",0,false);}
   }
   function streakCount(){
     let count=0; const d=new Date();

@@ -23,6 +23,8 @@ jobs:
           node-version: 22
       - name: Build domestic natural voice packs
         run: node tools/build-natural-audio.mjs
+      - name: Validate generated audio packs
+        run: node tools/validate-audio-pack.mjs
       - name: Commit generated natural audio
         run: |
           git config user.name "Sunny English Audio Builder"

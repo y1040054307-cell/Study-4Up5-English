@@ -37,7 +37,7 @@
 
 v26 起，课程离线包不再使用 eSpeak 机械合成音。单词和词典词条优先采用有道词典自然英语语音，句子、对话和故事优先采用百度翻译自然英语语音；在线自然语音失败时再使用设备英语语音。48 个音标示范音参照并注明来源于[新东方48音标卡](https://www.xdf.cn/zhuanti/bd-phonetic-alphabet-card/index.html)。
 
-离线包由 GitHub Actions 运行 `tools/build-natural-audio.mjs` 分包生成，方便手机和平板在国内网络下下载。网站只接受 v26 自然语音 MP3 包作为离线播放源，旧机械语音包会被忽略。
+离线包由 GitHub Actions 运行 `tools/build-natural-audio.mjs` 分包生成，方便手机和平板在国内网络下下载。网站只接受带 `codec: "mp3"` 标识的自然语音包作为离线播放源，旧机械语音包会被忽略。
 
 ## 使用
 
