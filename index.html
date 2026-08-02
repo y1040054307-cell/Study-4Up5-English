@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=31">
+  <link rel="stylesheet" href="styles.css?v=32">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -38,6 +38,7 @@
   <nav class="main-tabs" aria-label="主要功能">
     <button class="active" data-view="home"><span>🏠</span>学习首页</button>
     <button data-view="courses"><span>📚</span>课程</button>
+      <button data-view="papers"><span>📝</span>真题考卷</button>
       <button data-view="abilities"><span>🎯</span>能力中心</button>
       <button data-view="today"><span>✅</span>每日任务</button>
       <button data-view="words"><span>🔤</span>单词本</button>
@@ -130,6 +131,29 @@
       <div class="unit-hero" id="unitHero"></div>
       <div class="lesson-tabs" id="lessonTabs"></div>
       <div class="lesson-content" id="lessonContent"></div>
+    </section>
+
+    <section class="view" id="view-papers">
+      <div class="page-title paper-page-title"><span class="eyebrow">UNIT EXAM &amp; CUMULATIVE REVIEW</span><h1>单元考卷中心</h1><p>每个单元固定6份标准试卷：2份本单元卷、3份过往知识累计卷、1份福建公开真题题型组合卷。每卷30题，全部在站内完成并立即查看解析。</p></div>
+      <section class="paper-safety-note">
+        <span>📚</span>
+        <div><b>不提前考未来知识，真正形成“学习—检测—复习”闭环</b><p>单元卷只考当前单元；累计卷只从当前单元之前的内容抽题。福建组合卷参考公开学校试卷的题型结构重新编排，不直接复制第三方整卷。</p></div>
+      </section>
+      <section class="paper-dashboard" id="paperDashboard"></section>
+      <section class="paper-filter-panel">
+        <div class="paper-filter-row"><b>选择年级</b><div class="grade-switch" id="paperGradeSwitch"></div></div>
+        <div class="paper-filter-row"><b>选择学期</b><div class="term-switch" id="paperTermSwitch"></div></div>
+        <div class="paper-filter-row paper-unit-row"><b>选择单元</b><div class="paper-unit-switch" id="paperUnitSwitch"></div></div>
+      </section>
+      <section class="paper-unit-summary" id="paperUnitSummary"></section>
+      <div class="paper-grid" id="paperGrid"></div>
+      <section class="paper-exam-workspace" id="paperExamWorkspace" hidden></section>
+      <section class="paper-use-guide">
+        <div><span>1</span><b>独立作答</b><p>先不翻单词表，每题都主动回忆。</p></div>
+        <div><span>2</span><b>一次交卷</b><p>30题全部完成后才能提交。</p></div>
+        <div><span>3</span><b>逐题订正</b><p>看正确答案和解释，说出错因。</p></div>
+        <div><span>4</span><b>间隔重做</b><p>建议隔1天、3天和7天再练。</p></div>
+      </section>
     </section>
 
     <section class="view" id="view-abilities">
@@ -254,12 +278,12 @@
 
   <div class="toast" id="toast" role="status"></div>
   <audio id="voicePlayer" preload="auto" playsinline hidden></audio>
-  <script src="curriculum.js?v=31"></script>
-  <script src="dictionary.js?v=31"></script>
-  <script src="growth.js?v=31"></script>
-  <script src="grammar.js?v=31"></script>
-  <script src="audio-index.js?v=31"></script>
-  <script src="phoneme-audio.js?v=31"></script>
-  <script src="app.js?v=31"></script>
+  <script src="curriculum.js?v=32"></script>
+  <script src="dictionary.js?v=32"></script>
+  <script src="growth.js?v=32"></script>
+  <script src="grammar.js?v=32"></script>
+  <script src="audio-index.js?v=32"></script>
+  <script src="phoneme-audio.js?v=32"></script>
+  <script src="app.js?v=32"></script>
 </body>
 </html>
