@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -74,6 +74,12 @@
         <div><small>免下载 · 手机和平板快速进入</small><h2>把“向阳英语”放到主屏幕</h2><p>添加后会出现独立应用图标，可像普通App一样全屏打开；学习记录仍保存在当前设备。</p></div>
         <button class="primary" id="installAppButton">添加到主屏幕</button>
         <button class="install-dismiss" id="dismissInstallCard" aria-label="暂时关闭安装提示">×</button>
+      </section>
+
+      <section class="audio-pack-card" id="audioPackCard">
+        <div class="audio-pack-icon">🔊</div>
+        <div class="audio-pack-copy"><small>国内可用 · 本地音频优先</small><h2>课程离线语音包</h2><p id="audioPackMeta">网站本地发音，不依赖境外语音接口</p><div class="audio-pack-progress"><span id="audioPackBar"></span></div><em id="audioPackStatus">正在检查语音包……</em></div>
+        <button class="primary" id="downloadAudioPack">下载离线语音包</button>
       </section>
 
       <div class="stats-grid">
@@ -240,10 +246,12 @@
 
   <div class="toast" id="toast" role="status"></div>
   <audio id="voicePlayer" preload="auto" playsinline hidden></audio>
-  <script src="curriculum.js?v=22"></script>
-  <script src="dictionary.js?v=22"></script>
-  <script src="growth.js?v=22"></script>
-  <script src="grammar.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="curriculum.js?v=23"></script>
+  <script src="dictionary.js?v=23"></script>
+  <script src="growth.js?v=23"></script>
+  <script src="grammar.js?v=23"></script>
+  <script src="audio-index.js?v=23"></script>
+  <script src="phoneme-audio.js?v=23"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>

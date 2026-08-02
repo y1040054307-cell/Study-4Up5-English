@@ -52,8 +52,15 @@
   let petActionTimer;
   let deferredInstallPrompt = null;
   let activeAudio = null;
+  let activeLocalSource = null;
+  let localAudioContext = null;
+  let localAudioPackBlob = null;
+  let phonemeAudioContext = null;
+  let phonemeAudioPackBlob = null;
+  let localAudioAbort = null;
   let speechRequestId = 0;
   let networkVoiceNoticeShown = false;
+  const AUDIO_PACK_CACHE = "sunny-audio-pack-v23";
 
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -114,6 +121,40 @@
     parts.forEach(part=>{let rest=part.trim();while(rest.length>150){let cut=rest.lastIndexOf(" ",150);if(cut<50)cut=150;chunks.push(rest.slice(0,cut));rest=rest.slice(cut).trim();}if(rest)chunks.push(rest);});
     return chunks.length?chunks:[String(text||"").trim()];
   };
+  const audioKey = text => String(text||"").trim().replace(/[“”]/g,'"').replace(/[’]/g,"'").replace(/\s+/g," ").toLowerCase();
+  const audioPack = () => window.LOCAL_AUDIO_PACK||null;
+  async function localAudioBytes(entry){
+    const pack=audioPack(),start=Number(entry[0]),length=Number(entry[1]);if(!pack||!length)throw new Error("missing-local-audio");
+    if(localAudioPackBlob)return new Uint8Array(await localAudioPackBlob.slice(start,start+length).arrayBuffer());
+    if("caches" in window){
+      const cache=await caches.open(AUDIO_PACK_CACHE),stored=await cache.match(pack.url);
+      if(stored){localAudioPackBlob=await stored.blob();return new Uint8Array(await localAudioPackBlob.slice(start,start+length).arrayBuffer());}
+    }
+    localAudioAbort?.abort();localAudioAbort=new AbortController();
+    const response=await fetch(pack.url,{headers:{Range:`bytes=${start}-${start+length-1}`},cache:"no-store",signal:localAudioAbort.signal});
+    if(!response.ok)throw new Error(`local-audio-${response.status}`);
+    const buffer=await response.arrayBuffer();
+    if(response.status===206)return new Uint8Array(buffer);
+    localAudioPackBlob=new Blob([buffer],{type:"application/octet-stream"});return new Uint8Array(await localAudioPackBlob.slice(start,start+length).arrayBuffer());
+  }
+  function playLocalVoice(text,rate,requestId,fallback){
+    const pack=audioPack(),entry=pack?.entries?.[audioKey(text)];if(!entry)return false;
+    try{
+      const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(!AudioContextClass)return false;
+      if(!localAudioContext)localAudioContext=new AudioContextClass({sampleRate:pack.sampleRate});
+      localAudioContext.resume?.();
+    }catch{return false;}
+    (async()=>{
+      try{
+        const pcm=await localAudioBytes(entry);if(requestId!==speechRequestId)return;
+        const buffer=localAudioContext.createBuffer(1,pcm.length,pack.sampleRate),channel=buffer.getChannelData(0);
+        for(let i=0;i<pcm.length;i++)channel[i]=(pcm[i]-128)/128;
+        const source=localAudioContext.createBufferSource();source.buffer=buffer;source.playbackRate.value=Math.max(.92,Math.min(1.06,rate+.2));source.connect(localAudioContext.destination);activeLocalSource=source;
+        source.onended=()=>{if(activeLocalSource===source)activeLocalSource=null;};source.start(0);
+      }catch(error){if(error?.name!=="AbortError"&&requestId===speechRequestId)fallback();}
+    })();
+    return true;
+  }
   const voicePlayer = () => {
     let player=$("voicePlayer");
     if(!player){player=document.createElement("audio");player.id="voicePlayer";player.hidden=true;player.preload="auto";player.setAttribute("playsinline","");document.body.appendChild(player);}
@@ -123,6 +164,8 @@
   function stopVoice(){
     speechRequestId+=1;
     try{window.speechSynthesis?.cancel();}catch{}
+    localAudioAbort?.abort();localAudioAbort=null;
+    if(activeLocalSource){try{activeLocalSource.stop();}catch{}activeLocalSource=null;}
     if(activeAudio){activeAudio.onended=null;activeAudio.onerror=null;activeAudio.pause();activeAudio.removeAttribute("src");try{activeAudio.load();}catch{}activeAudio=null;}
   }
   function playDeviceVoice(content,rate,requestId,allowNetworkFallback=true){
@@ -177,10 +220,27 @@
   }
   function speak(text,rate=.78){
     const content=String(text||"").trim();if(!content)return;stopVoice();const requestId=speechRequestId;
-    if(/\s/.test(content))playNetworkVoice(content,rate,requestId,true);
-    else playDeviceVoice(content,rate,requestId,true);
+    const fallback=()=>{/\s/.test(content)?playNetworkVoice(content,rate,requestId,true):playDeviceVoice(content,rate,requestId,true);};
+    if(!playLocalVoice(content,rate,requestId,fallback))fallback();
   }
-  const speakPhoneme = (symbol) => speak(PHONEME_VOICE[symbol]||symbol,.48);
+  async function phonemeAudioBytes(entry){
+    const pack=window.PHONEM_AUDIO_PACK,start=Number(entry?.[0]),length=Number(entry?.[1]);if(!pack||!length)throw new Error("missing-standard-phoneme");
+    if(!phonemeAudioPackBlob&&"caches" in window){const stored=await caches.match(pack.url);if(stored)phonemeAudioPackBlob=await stored.blob();}
+    if(!phonemeAudioPackBlob){const response=await fetch(pack.url,{cache:"force-cache"});if(!response.ok)throw new Error(`phoneme-audio-${response.status}`);phonemeAudioPackBlob=await response.blob();}
+    return new Uint8Array(await phonemeAudioPackBlob.slice(start,start+length).arrayBuffer());
+  }
+  function speakPhoneme(symbol){
+    const pack=window.PHONEM_AUDIO_PACK,entry=pack?.entries?.[symbol];if(!entry){toast("标准音素录音暂未加载，请刷新后重试");return;}
+    stopVoice();const requestId=speechRequestId;
+    try{const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(!AudioContextClass)throw new Error("no-audio-context");if(!phonemeAudioContext)phonemeAudioContext=new AudioContextClass({sampleRate:pack.sampleRate});phonemeAudioContext.resume?.();}
+    catch{toast("当前浏览器无法播放标准音素录音");return;}
+    (async()=>{try{
+      const pcm=await phonemeAudioBytes(entry);if(requestId!==speechRequestId)return;
+      const samples=Math.floor(pcm.length/2),buffer=phonemeAudioContext.createBuffer(1,samples,pack.sampleRate),channel=buffer.getChannelData(0),view=new DataView(pcm.buffer,pcm.byteOffset,pcm.byteLength);
+      for(let i=0;i<samples;i++)channel[i]=view.getInt16(i*2,true)/32768;
+      const source=phonemeAudioContext.createBufferSource();source.buffer=buffer;source.connect(phonemeAudioContext.destination);activeLocalSource=source;source.onended=()=>{if(activeLocalSource===source)activeLocalSource=null;};source.start(0);
+    }catch(error){if(error?.name!=="AbortError"&&requestId===speechRequestId)toast("标准音素录音加载失败，请刷新后重试");}})();
+  }
   const daysBetween = (a,b) => Math.floor((new Date(`${b}T00:00:00`)-new Date(`${a}T00:00:00`))/86400000);
   const plantProgress = (id=state.plant.selected) => {if(!state.plant.progress[id])state.plant.progress[id]={energy:70,xp:0,lastFed:""};return state.plant.progress[id];};
   const petProgress = (id=state.pets.selected) => {if(!state.pets.progress[id])state.pets.progress[id]={fullness:60,xp:0,lastFed:""};return state.pets.progress[id];};
@@ -249,6 +309,33 @@
     const card=$("installCard");card.hidden=installedAsApp()||sessionStorage.getItem(`${STORE}:hide-install`)===iso()||!mobileOrTablet();
     window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();deferredInstallPrompt=event;if(!installedAsApp())card.hidden=false;});
     window.addEventListener("appinstalled",()=>{deferredInstallPrompt=null;card.hidden=true;closeInstallDialog();toast("向阳英语已成功添加到主屏幕");});
+  }
+  function audioPackLabel(){const pack=audioPack();return pack?`${(pack.bytes/1048576).toFixed(1)} MB · ${pack.clips} 段发音`:"本地语音包";}
+  function updateAudioPackCard(message,progress=-1,ready=false){
+    const status=$("audioPackStatus"),bar=$("audioPackBar"),button=$("downloadAudioPack");if(!status||!bar||!button)return;
+    status.textContent=message;bar.style.width=progress<0?"0%":`${Math.max(0,Math.min(100,progress))}%`;button.textContent=ready?"✓ 已下载，可离线播放":`下载离线语音包（${audioPackLabel().split(" · ")[0]}）`;button.disabled=ready;
+    $("audioPackCard").classList.toggle("ready",ready);
+  }
+  async function downloadAudioPack(){
+    const pack=audioPack(),button=$("downloadAudioPack");if(!pack||!("caches" in window))return toast("当前浏览器不支持离线语音包，请使用最新版浏览器");
+    updateAudioPackCard(`准备下载：${audioPackLabel()}`,1,false);button.disabled=true;
+    try{
+      const response=await fetch(pack.url,{cache:"no-store"});if(!response.ok)throw new Error(`audio-pack-${response.status}`);
+      let blob;
+      if(response.body?.getReader){
+        const reader=response.body.getReader(),chunks=[];let received=0;
+        while(true){const {done,value}=await reader.read();if(done)break;chunks.push(value);received+=value.length;updateAudioPackCard(`正在下载 ${Math.min(pack.bytes,received)/1048576|0} / ${Math.ceil(pack.bytes/1048576)} MB`,received/pack.bytes*100,false);button.disabled=true;}
+        blob=new Blob(chunks,{type:"application/octet-stream"});
+      }else blob=await response.blob();
+      if(blob.size<pack.bytes*.98)throw new Error("audio-pack-incomplete");
+      const cache=await caches.open(AUDIO_PACK_CACHE);await cache.put(pack.url,new Response(blob,{headers:{"Content-Type":"application/octet-stream","Content-Length":String(blob.size)}}));localAudioPackBlob=blob;
+      updateAudioPackCard(`已保存在本机：${audioPackLabel()}。断网后也能播放。`,100,true);toast("离线语音包下载完成");
+    }catch{button.disabled=false;updateAudioPackCard("下载未完成，请连接稳定的 Wi-Fi 后重试。",0,false);toast("语音包下载失败，请稍后重试");}
+  }
+  async function setupAudioPack(){
+    const pack=audioPack();if(!pack){updateAudioPackCard("语音包索引未加载，请刷新网页。",0,false);return;}
+    $("audioPackMeta").textContent=`网站本地发音 · ${audioPackLabel()} · 不依赖境外语音接口`;
+    try{const stored="caches" in window?await (await caches.open(AUDIO_PACK_CACHE)).match(pack.url):null;if(stored)updateAudioPackCard(`已保存在本机：${audioPackLabel()}。断网后也能播放。`,100,true);else updateAudioPackCard("未下载时按需播放；下载后可完全离线使用。",0,false);}catch{updateAudioPackCard("未下载时按需播放；下载后可完全离线使用。",0,false);}
   }
   function streakCount(){
     let count=0; const d=new Date();
@@ -626,7 +713,7 @@
   function renderPhonics(){
     const icons={short:"🟡",long:"🟢",diph:"🌈",stops:"💨",consonants:"👄"},groups=Object.entries(PHONICS_GROUPS),total=groups.reduce((sum,[,item])=>sum+item.items.length,0),done=state.phonicsDone.length,group=PHONICS_GROUPS[phonicsGroup];
     $("phonicsGroups").innerHTML=`<div class="phonics-progress"><div><b>音标学习进度</b><span>${done} / ${total} 个音</span></div><i><em style="width:${Math.min(100,done/total*100)}%"></em></i></div><div class="phonics-group-buttons">${groups.map(([id,item])=>`<button class="${id===phonicsGroup?"active":""}" data-phonics-group="${id}">${icons[id]} ${item.name}<small>${item.items.length}个</small></button>`).join("")}</div>`;
-    $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>本组学习目标</small><h2>${group.name}</h2><p>${group.tip}</p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="单独播放音标 ${esc(symbol)}">🔊 单独听音</button><button data-say="${esc(word)}" aria-label="播放示例词 ${esc(word)}">🎧 听示范词</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>👄 发音方法：</b>${esc(tip)}</p><p><b>🔤 常见字母：</b>${esc(spelling)}</p><ol><li>单独听音</li><li>听示范词</li><li>慢速跟读3遍</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"✓ 已学会":"我已听、看、读3遍 +1 ☀️"}</button></article>`}).join("")}`;
+    $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>本组学习目标</small><h2>${group.name}</h2><p>${group.tip}</p><p><b>发音已校正：</b>“标准音素”播放英式音素编码；“示范词”播放完整单词，两种声音不再混用。</p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="播放标准音素 ${esc(symbol)}">🔊 标准音素</button><button data-say="${esc(word)}" aria-label="播放示例词 ${esc(word)}">🎧 示范单词</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>👄 发音方法：</b>${esc(tip)}</p><p><b>🔤 常见字母：</b>${esc(spelling)}</p><ol><li>听标准音素</li><li>听完整示范词</li><li>对照口型慢速跟读3遍</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"✓ 已学会":"我已听、看、读3遍 +1 ☀️"}</button></article>`}).join("")}`;
     $("minimalGrid").innerHTML=MINIMAL_PAIRS.map(([a,aIpa,b,bIpa])=>`<article><div><button data-say="${esc(a)}">🔊 ${esc(a)}</button><span>${esc(aIpa)}</span></div><b>VS</b><div><button data-say="${esc(b)}">🔊 ${esc(b)}</button><span>${esc(bIpa)}</span></div><p>先听两遍，再注意两个词中不同的音。</p></article>`).join("");
     document.querySelectorAll("[data-phonics-group]").forEach(button=>button.onclick=()=>{phonicsGroup=button.dataset.phonicsGroup;renderPhonics();});
     document.querySelectorAll("#view-phonics [data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
@@ -771,6 +858,7 @@
   $("closeInstallDialog").onclick=closeInstallDialog;
   $("appInstallDialog").addEventListener("click",event=>{if(event.target===$("appInstallDialog"))closeInstallDialog();});
   $("dismissInstallCard").onclick=()=>{sessionStorage.setItem(`${STORE}:hide-install`,iso());$("installCard").hidden=true;};
+  $("downloadAudioPack").onclick=downloadAudioPack;
   $("continueBtn").onclick=()=>{state.stage=nextStage().id;save();route("unit");};
   $("dictionarySearch").addEventListener("input",event=>{dictionaryQuery=event.target.value;dictionaryLetter="all";dictionaryLimit=48;renderDictionary();$("dictionarySearch").focus();});
   $("dictionaryMore").onclick=()=>{dictionaryLimit+=48;renderDictionary();};
@@ -781,6 +869,6 @@
   $("checkInBtn").onclick=()=>{if(state.signIns.includes(iso()))return;state.signIns.push(iso());reward(2,"今日签到成功");renderGarden();};
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
-  carePlant();carePets();renderHeader();renderHome();setupAppInstall();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=22",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  carePlant();carePets();renderHeader();renderHome();setupAppInstall();setupAudioPack();
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=23",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();

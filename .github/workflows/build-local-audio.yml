@@ -1,0 +1,34 @@
+name: Build local audio pack
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/audio-list.json"
+      - "tools/build-espeak-audio.mjs"
+      - ".github/workflows/build-local-audio.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install standard British English phoneme engine
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build course and phoneme packs
+        run: node tools/build-espeak-audio.mjs --all
+      - name: Commit generated local audio
+        run: |
+          git config user.name "Sunny English Audio Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add assets/audio-pack.bin assets/phoneme-pack.bin audio-index.js phoneme-audio.js
+          git diff --cached --quiet || git commit -m "Build local British English audio pack"
+          git push
