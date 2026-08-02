@@ -17,7 +17,7 @@
   const TEST_BALANCE = 99999;
   let persistedEconomy = {suns:0,foods:0};
   const iso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, grammar:{completed:[],quizBest:{},attempts:{}}, abilities:{diagnostic:null,phonicsCompleted:[],listeningCompleted:[],speakingCompleted:[],rewarded:[]}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
+  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, grammar:{completed:[],quizBest:{},attempts:{}}, abilities:{diagnostic:null,phonicsCompleted:[],listeningCompleted:[],speakingCompleted:[],rewarded:[]}, papers:{scores:{},attempts:{}}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
   const load = (profileId=activeUserId) => { try {
     const key=profileStoreKey(profileId);
     if(!localStorage.getItem(key)&&profileId===USER_PROFILES[0].id&&localStorage.getItem(STORE))localStorage.setItem(key,localStorage.getItem(STORE));
@@ -31,7 +31,8 @@
     const pets={...defaultState.pets,...legacyPets,selected:petSelected,owned:petOwned,progress:petProgressMerged};
     const rawGrammar=raw.grammar||{},grammar={...defaultState.grammar,...rawGrammar,completed:[...(rawGrammar.completed||[])],quizBest:{...(rawGrammar.quizBest||{})},attempts:{...(rawGrammar.attempts||{})}};
     const rawAbilities=raw.abilities||{},abilities={...defaultState.abilities,...rawAbilities,phonicsCompleted:[...(rawAbilities.phonicsCompleted||[])],listeningCompleted:[...(rawAbilities.listeningCompleted||[])],speakingCompleted:[...(rawAbilities.speakingCompleted||[])],rewarded:[...(rawAbilities.rewarded||[])]};
-    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})},grammar,abilities};
+    const rawPapers=raw.papers||{},papers={...defaultState.papers,...rawPapers,scores:{...(rawPapers.scores||{})},attempts:{...(rawPapers.attempts||{})}};
+    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})},grammar,abilities,papers};
   } catch { persistedEconomy={suns:0,foods:0};const fresh=structuredClone(defaultState);fresh.suns=TEST_MODE?TEST_BALANCE:0;fresh.foods=TEST_MODE?TEST_BALANCE:0;return fresh; } };
   let state = load(activeUserId);
   let selectedGrade = Number(state.bookId[1]) || 4;
@@ -62,6 +63,12 @@
   let speakingStream = null;
   let speakingChunks = [];
   let speakingRecordedKeys = new Set();
+  let paperGrade = selectedGrade;
+  let paperTerm = selectedTerm;
+  let paperUnitIndex = state.unitIndex;
+  let paperActiveId = "";
+  let paperAnswers = {};
+  let paperChecked = false;
   let toastTimer;
   let petActionTimer;
   let deferredInstallPrompt = null;
@@ -97,6 +104,21 @@
     {id:"zh2en",icon:"✍️",title:"看中文写英文",detail:"完成本单元5个词的英文默写，注意拼写",stage:"words"},
     {id:"en2zh",icon:"🀄",title:"看英文写中文",detail:"写出5个英文单词的准确中文意思",stage:"words"},
     {id:"review",icon:"🔁",title:"复习过往单词",detail:"只从已经学过的单元中随机抽取，不提前出现未来词汇",stage:"review"}
+  ];
+  const PAPER_TYPES = [
+    {id:"unit-basic",icon:"🌱",kind:"本单元专项",title:"单元基础卷",level:"基础",minutes:30,desc:"按听力、词汇、句型和综合理解四部分检查本单元基础。"},
+    {id:"unit-advanced",icon:"🚀",kind:"本单元专项",title:"单元提高卷",level:"提高",minutes:35,desc:"增加例句填词、语境理解和容易混淆的选项。"},
+    {id:"review-a",icon:"🔁",kind:"过往知识累计",title:"累计复习 A 卷",level:"巩固",minutes:35,desc:"随机回顾当前单元之前学过的词汇与句型。"},
+    {id:"review-b",icon:"🧭",kind:"过往知识累计",title:"累计复习 B 卷",level:"综合",minutes:40,desc:"换一组题序和干扰项，检查是否真正记牢。"},
+    {id:"review-c",icon:"🏆",kind:"过往知识累计",title:"累计挑战 C 卷",level:"挑战",minutes:40,desc:"把过往知识放进完整句子，训练理解与运用。"},
+    {id:"fujian-combo",icon:"🏫",kind:"公开真题题型",title:"福建学校真题组合卷",level:"实战",minutes:45,desc:"参考福建多地学校公开卷结构，重新编写30道同类型题。"}
+  ];
+  const PUBLIC_PAPER_REFERENCES = [
+    {area:"莆田",school:"麟峰小学",label:"六年级上学期期中阶段性评价",url:"https://zy.21cnjy.com/23958482"},
+    {area:"泉州",school:"台商投资区小学",label:"五年级下学期期末质量抽测",url:"https://zy.21cnjy.com/23325412"},
+    {area:"福州",school:"福州市小学",label:"2024年小升初英语试卷",url:"https://zy.21cnjy.com/21382786"},
+    {area:"漳州",school:"诏安县桥东片区",label:"三年级上学期过程性评价",url:"https://www.xxsj.org/sjdetail/2551.html"},
+    {area:"福建",school:"闽教版公开资源",label:"三年级上册Unit 3练习题",url:"https://www.tthaoke.com/shijuan_44837.html"}
   ];
 
   const ABILITY_TABS = [
@@ -422,7 +444,7 @@
   function switchProfile(profileId){
     const nextId=validProfileId(profileId);if(nextId===activeUserId){closeProfileDialog();return;}
     save();activeUserId=nextId;localStorage.setItem(ACTIVE_PROFILE_STORE,activeUserId);state=load(activeUserId);
-    selectedGrade=Number(state.bookId[1])||4;selectedTerm=state.bookId.endsWith("a")?"上册":"下册";memoryFilter="current";memoryIndex=0;memoryFlipped=false;quizAnswers={};grammarAnswers={};grammarResult=null;diagnosticAnswers={};diagnosticPage=0;abilityListeningAnswers={};abilityListeningChecked=false;abilityPhonicsAnswers={};abilityPhonicsChecked=false;speakingRecordedKeys=new Set();
+    selectedGrade=Number(state.bookId[1])||4;selectedTerm=state.bookId.endsWith("a")?"上册":"下册";paperGrade=selectedGrade;paperTerm=selectedTerm;paperUnitIndex=state.unitIndex;paperActiveId="";paperAnswers={};paperChecked=false;memoryFilter="current";memoryIndex=0;memoryFlipped=false;quizAnswers={};grammarAnswers={};grammarResult=null;diagnosticAnswers={};diagnosticPage=0;abilityListeningAnswers={};abilityListeningChecked=false;abilityPhonicsAnswers={};abilityPhonicsChecked=false;speakingRecordedKeys=new Set();
     carePlant();carePets();renderHeader();closeProfileDialog();route("home");toast(`已切换到${USER_PROFILES.find(item=>item.id===activeUserId).name}，学习记录互不混用`);
   }
   const installedAsApp = () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone===true;
@@ -493,6 +515,7 @@
     document.querySelectorAll(".main-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===view || (view==="unit"&&b.dataset.view==="courses")));
     if(view==="home") renderHome();
     if(view==="courses") renderCourses();
+    if(view==="papers") renderPapers();
     if(view==="abilities") renderAbilities();
     if(view==="unit") renderUnit();
     if(view==="today") renderToday();
@@ -533,6 +556,71 @@
       const current=state.bookId===book.id&&state.unitIndex===u.number-1;
       return `<button class="unit-card ${current?"current":""}" data-unit-book="${book.id}" data-unit-index="${u.number-1}"><span class="unit-icon">${u.icon}</span><span class="unit-no">UNIT ${String(u.number).padStart(2,"0")}</span><h3>${u.title}</h3><p>${u.zh} · ${u.goal}</p><div class="unit-materials"><span>3课时</span><span>${u.core.length}词</span><span>${u.patterns.length}句型</span><span>句式填词</span></div><div class="thin-bar"><span style="width:${stepDone/stages.length*100}%"></span></div><small>${stepDone}/${stages.length}步完成 ${current?"· 正在学习":""}</small><strong class="unit-cta">${stepDone?"继续单元教材":"进入单元教材"} →</strong></button>`;
     }).join("");
+  }
+
+  function paperSelection(){
+    const book=COURSE_BOOKS.find(item=>item.grade===paperGrade&&item.term===paperTerm)||COURSE_BOOKS[0];
+    paperUnitIndex=Math.max(0,Math.min(paperUnitIndex,book.units.length-1));
+    return {book,unit:book.units[paperUnitIndex]};
+  }
+  const paperHash=value=>[...String(value)].reduce((sum,char)=>((sum*33)+char.charCodeAt(0))>>>0,11);
+  const paperShuffle=(items,seed)=>[...items].sort((a,b)=>paperHash(`${seed}:${JSON.stringify(a)}`)-paperHash(`${seed}:${JSON.stringify(b)}`));
+  const paperUnique=items=>[...new Set(items.filter(Boolean).map(item=>String(item).trim()).filter(Boolean))];
+  function paperOptions(answer,pool,seed){
+    const alternatives=paperShuffle(paperUnique(pool).filter(item=>item!==answer),seed).slice(0,2);
+    return paperShuffle([answer,...alternatives],`${seed}:options`);
+  }
+  function paperPreviousUnits(book,unitIndex){
+    const bookIndex=COURSE_BOOKS.findIndex(item=>item.id===book.id);
+    return [...COURSE_BOOKS.slice(0,bookIndex).flatMap(item=>item.units),...book.units.slice(0,unitIndex)];
+  }
+  function paperSourceUnits(book,unitIndex,type){
+    const current=book.units[unitIndex];
+    if(type.id.startsWith("unit-"))return [current];
+    const previous=paperPreviousUnits(book,unitIndex);
+    if(type.id==="fujian-combo")return [...previous,current];
+    return previous.length?previous:[current];
+  }
+  function paperQuestionPool(book,unitIndex,type){
+    const units=paperSourceUnits(book,unitIndex,type),allCourseWords=COURSE_BOOKS.flatMap(item=>item.units.flatMap(unit=>unit.core)),allCoursePatterns=COURSE_BOOKS.flatMap(item=>item.units.flatMap(unit=>unit.patterns));
+    const seed=`${book.id}:${unitIndex}:${type.id}`,words=paperShuffle(units.flatMap(unit=>unit.core.map(item=>({...item,origin:`Unit ${unit.number} ${unit.title}`}))),`${seed}:words`),patterns=paperShuffle(units.flatMap(unit=>unit.patterns.map(item=>({...item,origin:`Unit ${unit.number} ${unit.title}`}))),`${seed}:patterns`);
+    const meanings=paperUnique([...words.map(item=>item.meaning),...allCourseWords.map(item=>item.meaning)]),spellings=paperUnique([...words.map(item=>item.word),...allCourseWords.map(item=>item.word)]),patternZh=paperUnique([...patterns.map(item=>item.zh),...allCoursePatterns.map(item=>item.zh)]),patternEn=paperUnique([...patterns.map(item=>item.en),...allCoursePatterns.map(item=>item.en)]),exampleEn=paperUnique([...words.map(item=>item.example),...allCourseWords.map(item=>item.example)]),questions=[];
+    const wordAt=index=>words[index%words.length],patternAt=index=>patterns[index%patterns.length];
+    for(let index=0;index<5;index+=1){const item=wordAt(index);questions.push({section:"第一部分　听力辨义",type:"Listen and choose",audio:item.word,q:"点击播放按钮，选择你听到的单词意思。",options:paperOptions(item.meaning,meanings,`${seed}:listen:${index}`),answer:item.meaning,why:`你听到的是 ${item.word}，常见意思是“${item.meaning}”。知识来源：${item.origin}。`});}
+    for(let index=0;index<5;index+=1){const item=wordAt(index+5);questions.push({section:"第二部分　词汇基础",type:"英译中",q:`“${item.word}”在本课程中的常见意思是？`,options:paperOptions(item.meaning,meanings,`${seed}:meaning:${index}`),answer:item.meaning,why:`${item.word} 的常见意思是“${item.meaning}”。知识来源：${item.origin}。`});}
+    for(let index=0;index<5;index+=1){const item=wordAt(index+10);questions.push({section:"第二部分　词汇基础",type:"中译英",q:`选择“${item.meaning}”对应的英文。`,options:paperOptions(item.word,spellings,`${seed}:spelling:${index}`),answer:item.word,why:`“${item.meaning}”对应 ${item.word}。拼写时要注意每个字母的顺序。`});}
+    for(let index=0;index<6;index+=1){const item=wordAt(index+15),escaped=String(item.word).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),blank=String(item.example||`I can say ${item.word}.`).replace(new RegExp(escaped,"i"),"____");questions.push({section:"第三部分　句型运用",type:"句子填词",q:`选择合适的单词补全句子：${blank}`,options:paperOptions(item.word,spellings,`${seed}:fill:${index}`),answer:item.word,why:`完整句子：${item.example||`I can say ${item.word}.`}${item.exampleZh?`；意思：${item.exampleZh}`:""}`});}
+    for(let index=0;index<3;index+=1){const item=patternAt(index);questions.push({section:"第三部分　句型运用",type:"情境表达",q:`哪一句最适合表达“${item.zh}”？`,options:paperOptions(item.en,patternEn,`${seed}:expression:${index}`),answer:item.en,why:`正确表达是：${item.en}。${item.rule||"注意句子结构和语序。"}`});}
+    {const item=wordAt(20),answer=item.example||`I can say ${item.word}.`;questions.push({section:"第三部分　句型运用",type:"词语运用",q:`哪一个句子正确使用了单词“${item.word}”（${item.meaning}）？`,options:paperOptions(answer,exampleEn,`${seed}:usage`),answer,why:`正确例句：${answer}${item.exampleZh?`；意思：${item.exampleZh}`:""}`});}
+    for(let index=0;index<3;index+=1){const item=patternAt(index+4);questions.push({section:"第四部分　综合理解",type:"句意理解",q:`“${item.en}”的意思是？`,options:paperOptions(item.zh,patternZh,`${seed}:sentence:${index}`),answer:item.zh,why:`句子意思：${item.zh}。${item.rule||"先抓住句中的关键词，再理解整句。"}`});}
+    for(let index=0;index<2;index+=1){const item=wordAt(index+21),sentence=item.example||`I can say ${item.word}.`;questions.push({section:"第四部分　综合理解",type:"语境理解",q:`在句子“${sentence}”中，${item.word} 最接近的意思是？`,options:paperOptions(item.meaning,meanings,`${seed}:context:${index}`),answer:item.meaning,why:`在这个句子中，${item.word} 表示“${item.meaning}”。${item.exampleZh?`整句可理解为：${item.exampleZh}`:""}`});}
+    return questions;
+  }
+  const paperScoreKey=(book,unit,typeId)=>`${unit.id}:${typeId}`;
+  function renderPapers(){
+    const {book,unit}=paperSelection(),passScore=18,completedTotal=Object.values(state.papers.scores).filter(score=>Number(score)>=passScore).length,scores=Object.values(state.papers.scores).map(Number).filter(Number.isFinite),average=scores.length?Math.round(scores.reduce((sum,value)=>sum+value,0)/scores.length/30*100):0,currentDone=PAPER_TYPES.filter(type=>Number(state.papers.scores[paperScoreKey(book,unit,type.id)]||0)>=passScore).length;
+    $("paperDashboard").innerHTML=`<article><span>📚</span><div><b>52</b><small>课程单元</small></div></article><article><span>📝</span><div><b>312</b><small>完整试卷</small></div></article><article><span>✍️</span><div><b>9360</b><small>总练习题量</small></div></article><article><span>✅</span><div><b>${completedTotal}</b><small>本身份已通过</small></div></article><article><span>🎯</span><div><b>${scores.length?average+"%":"—"}</b><small>平均正确率</small></div></article>`;
+    $("paperGradeSwitch").innerHTML=[3,4,5,6].map(grade=>`<button class="${paperGrade===grade?"active":""}" data-paper-grade="${grade}">${grade}年级</button>`).join("");
+    $("paperTermSwitch").innerHTML=["上册","下册"].map(term=>`<button class="${paperTerm===term?"active":""}" data-paper-term="${term}">${term}</button>`).join("");
+    $("paperUnitSwitch").innerHTML=book.units.map((item,index)=>`<button class="${paperUnitIndex===index?"active":""}" data-paper-unit="${index}"><span>${item.icon}</span>Unit ${item.number}<small>${esc(item.zh)}</small></button>`).join("");
+    $("paperUnitSummary").innerHTML=`<div><span>${unit.icon}</span><div><small>${esc(book.label)} · UNIT ${unit.number}</small><h2>${esc(unit.title)} <i>${esc(unit.zh)}</i></h2><p>本单元共6卷、180题；累计卷只覆盖课程顺序中已经出现过的内容。</p></div></div><aside><b>${currentDone}/6</b><small>达到18/30即通过</small><div><span style="width:${currentDone/6*100}%"></span></div></aside>`;
+    $("paperGrid").innerHTML=PAPER_TYPES.map(type=>{const key=paperScoreKey(book,unit,type.id),score=Number(state.papers.scores[key]||0),attempts=Number(state.papers.attempts[key]||0),passed=score>=passScore,historyCount=paperPreviousUnits(book,paperUnitIndex).length;return `<article class="paper-card ${passed?"passed":""} ${type.id==="fujian-combo"?"public-combo":""}"><div class="paper-card-top"><span>${type.icon}</span><div><small>${esc(type.kind)}</small><h3>${esc(type.title)}</h3></div><em>${esc(type.level)}</em></div><p>${esc(type.desc)}</p><div class="paper-card-facts"><span>30题</span><span>${type.minutes}分钟</span><span>${type.id.startsWith("review-")?`${historyCount||1}个历史单元`:type.id==="fujian-combo"?"5个公开来源":"当前单元"}</span></div>${attempts?`<div class="paper-best"><b>最高 ${score}/30</b><small>已作答 ${attempts} 次</small></div>`:`<div class="paper-best empty"><b>尚未作答</b><small>完成全部30题后交卷</small></div>`}<button class="${passed?"soft":"primary"}" data-paper-start="${type.id}">${passed?"再次练习":"开始答卷"} →</button></article>`;}).join("");
+    const workspace=$("paperExamWorkspace");
+    if(!paperActiveId){workspace.hidden=true;workspace.innerHTML="";return;}
+    const type=PAPER_TYPES.find(item=>item.id===paperActiveId);if(!type){paperActiveId="";workspace.hidden=true;return;}
+    workspace.hidden=false;renderPaperExam(book,unit,type);
+  }
+  function renderPaperExam(book,unit,type){
+    const questions=paperQuestionPool(book,paperUnitIndex,type),answered=Object.keys(paperAnswers).length,score=paperChecked?questions.filter((item,index)=>paperAnswers[index]===item.answer).length:0,key=paperScoreKey(book,unit,type.id),best=Number(state.papers.scores[key]||0),passed=score>=18,history=paperPreviousUnits(book,paperUnitIndex);
+    const refs=type.id==="fujian-combo"?`<section class="paper-reference-box"><div><b>公开卷参考范围</b><p>参考福建学校公开卷的题型结构重新编写，题目内容仍严格匹配当前及过往课程，不复制第三方整卷。</p></div><div class="paper-reference-links">${PUBLIC_PAPER_REFERENCES.map(item=>`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"><span>${esc(item.area)}</span><b>${esc(item.school)}</b><small>${esc(item.label)} ↗</small></a>`).join("")}</div></section>`:"";
+    const questionMarkup=(item,index)=>{const selected=paperAnswers[index],correct=selected===item.answer;return `<article class="paper-question ${paperChecked?(correct?"correct":"wrong"):""}"><div class="paper-question-title"><span>${index+1}</span><div><small>${esc(item.type)}</small><h3>${esc(item.q)}</h3>${item.audio?`<button class="paper-audio-button" data-paper-say="${esc(item.audio)}">▶ 播放听力</button>`:""}</div></div><div class="paper-options">${item.options.map(option=>`<button class="${selected===option?"selected":""} ${paperChecked&&option===item.answer?"answer":""}" data-paper-answer="${index}" data-paper-value="${esc(option)}" ${paperChecked?"disabled":""}>${esc(option)}</button>`).join("")}</div>${paperChecked?`<div class="paper-explanation"><b>${correct?"✓ 回答正确":`正确答案：${esc(item.answer)}`}</b><p>${esc(item.why)}</p></div>`:""}</article>`;};
+    const sections=[...new Set(questions.map(item=>item.section))].map(section=>{const indexed=questions.map((item,index)=>({item,index})).filter(entry=>entry.item.section===section);return `<section class="paper-question-section"><header><div><small>STANDARD PRIMARY ENGLISH PAPER</small><h3>${esc(section)}</h3></div><b>${indexed[0].index+1}—${indexed.at(-1).index+1}题</b></header><div class="paper-question-list">${indexed.map(entry=>questionMarkup(entry.item,entry.index)).join("")}</div></section>`;}).join("");
+    $("paperExamWorkspace").innerHTML=`<header class="paper-exam-head"><button class="paper-exam-close" data-paper-close aria-label="关闭试卷">×</button><div><small>${esc(book.label)} · Unit ${unit.number} · ${esc(type.kind)}</small><h2>${type.icon} ${esc(type.title)}</h2><p>${type.id.startsWith("review-")?`知识范围：${history.length?`当前单元之前的${history.length}个单元`:`Unit 1 起点知识`}`:type.id==="fujian-combo"?`知识范围：当前及过往单元 · 福建公开卷题型结构`:`知识范围：${esc(unit.title)}（${esc(unit.zh)}）`} · 建议限时${type.minutes}分钟</p></div><aside><b>${paperChecked?`${score}/30`:`${answered}/30`}</b><small>${paperChecked?(passed?"已通过":"需要订正"):"已作答"}</small></aside></header>${refs}${sections}<footer class="paper-submit-row">${paperChecked?`<div><b>${passed?"🎉 本卷通过":"📌 还需继续巩固"}</b><p>本次 ${score}/30，历史最高 ${Math.max(best,score)}/30。${passed?"建议隔3天再做一次。":"请先阅读错题解析，再重新答卷。"}</p></div><button class="soft" data-paper-retry>重新答卷</button>`:`<div><b>答题进度 ${answered}/30</b><p>必须完成全部30题后才能交卷，避免漏题。</p></div><button class="primary" data-paper-submit ${answered<30?"disabled":""}>${answered<30?`还需完成 ${30-answered} 题`:"提交并查看解析"}</button>`}</footer>`;
+  }
+  function submitPaper(){
+    const {book,unit}=paperSelection(),type=PAPER_TYPES.find(item=>item.id===paperActiveId),questions=type?paperQuestionPool(book,paperUnitIndex,type):[];if(!type||Object.keys(paperAnswers).length<questions.length)return toast("请先完成本卷全部30题");
+    const key=paperScoreKey(book,unit,type.id),score=questions.filter((item,index)=>paperAnswers[index]===item.answer).length,previous=Number(state.papers.scores[key]||0),firstPass=previous<18&&score>=18;paperChecked=true;state.papers.scores[key]=Math.max(previous,score);state.papers.attempts[key]=Number(state.papers.attempts[key]||0)+1;
+    if(firstPass)reward(2,`通过${type.title}`,1);else save();renderPapers();setTimeout(()=>$("paperExamWorkspace")?.scrollIntoView({behavior:"smooth",block:"start"}),30);
   }
 
   function lessonPlan(u){
@@ -1055,6 +1143,15 @@
   document.addEventListener("click",e=>{
     const view=e.target.closest("[data-view]"); if(view){route(view.dataset.view);return;}
     const profileChoice=e.target.closest("[data-profile-id]");if(profileChoice){switchProfile(profileChoice.dataset.profileId);return;}
+    const paperGradeButton=e.target.closest("[data-paper-grade]");if(paperGradeButton){paperGrade=Number(paperGradeButton.dataset.paperGrade);paperUnitIndex=0;paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
+    const paperTermButton=e.target.closest("[data-paper-term]");if(paperTermButton){paperTerm=paperTermButton.dataset.paperTerm;paperUnitIndex=0;paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
+    const paperUnitButton=e.target.closest("[data-paper-unit]");if(paperUnitButton){paperUnitIndex=Number(paperUnitButton.dataset.paperUnit);paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
+    const paperStart=e.target.closest("[data-paper-start]");if(paperStart){paperActiveId=paperStart.dataset.paperStart;paperAnswers={};paperChecked=false;renderPapers();setTimeout(()=>$("paperExamWorkspace")?.scrollIntoView({behavior:"smooth",block:"start"}),30);return;}
+    const paperSay=e.target.closest("[data-paper-say]");if(paperSay){speak(paperSay.dataset.paperSay);return;}
+    const paperAnswer=e.target.closest("[data-paper-answer]");if(paperAnswer&&!paperChecked){paperAnswers[Number(paperAnswer.dataset.paperAnswer)]=paperAnswer.dataset.paperValue;renderPapers();return;}
+    const paperSubmit=e.target.closest("[data-paper-submit]");if(paperSubmit){submitPaper();return;}
+    const paperRetry=e.target.closest("[data-paper-retry]");if(paperRetry){paperAnswers={};paperChecked=false;renderPapers();setTimeout(()=>$("paperExamWorkspace")?.scrollIntoView({behavior:"smooth",block:"start"}),30);return;}
+    const paperClose=e.target.closest("[data-paper-close]");if(paperClose){paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
     const abilityTabButton=e.target.closest("[data-ability-tab]");if(abilityTabButton){abilityTab=abilityTabButton.dataset.abilityTab;renderAbilities();return;}
     const diagnosticAnswer=e.target.closest("[data-diagnostic-answer]");if(diagnosticAnswer&&!state.abilities.diagnostic){diagnosticAnswers[Number(diagnosticAnswer.dataset.diagnosticAnswer)]=diagnosticAnswer.dataset.answerValue;renderAbilities();return;}
     const diagnosticPageButton=e.target.closest("[data-diagnostic-page]");if(diagnosticPageButton){diagnosticPage=Number(diagnosticPageButton.dataset.diagnosticPage);renderAbilities();return;}
@@ -1114,5 +1211,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();setupAudioPack();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=31",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=32",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
