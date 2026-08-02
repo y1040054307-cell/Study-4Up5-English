@@ -196,11 +196,11 @@
   ];
   const BRIDGE_PAPER_TYPE={id:"bridge-mock",icon:"🎓",kind:"六年级专属",title:"小升初综合强化卷",level:"衔接",minutes:75,count:60,pass:48,desc:"原创组卷：在50题单元卷基础上增加时态、主谓一致、语序和综合阅读衔接题。"};
   const PUBLIC_PAPER_REFERENCES = [
-    {area:"莆田",school:"麟峰小学",label:"六年级上学期期中阶段性评价",url:"https://zy.21cnjy.com/23958482"},
-    {area:"泉州",school:"台商投资区小学",label:"五年级下学期期末质量抽测",url:"https://zy.21cnjy.com/23325412"},
-    {area:"福州",school:"福州市小学",label:"2024年小升初英语试卷",url:"https://zy.21cnjy.com/21382786"},
-    {area:"漳州",school:"诏安县桥东片区",label:"三年级上学期过程性评价",url:"https://www.xxsj.org/sjdetail/2551.html"},
-    {area:"福建",school:"闽教版公开资源",label:"三年级上册Unit 3练习题",url:"https://www.tthaoke.com/shijuan_44837.html"}
+    {area:"莆田",school:"第三方页面标注：麟峰小学",label:"六年级上学期期中阶段性评价",url:"https://zy.21cnjy.com/23958482"},
+    {area:"泉州",school:"第三方页面标注：台商投资区小学",label:"五年级下学期期末质量抽测",url:"https://zy.21cnjy.com/23325412"},
+    {area:"福州",school:"第三方页面标注：福州市小学",label:"2024年小升初英语试卷",url:"https://zy.21cnjy.com/21382786"},
+    {area:"漳州",school:"第三方页面标注：诏安县桥东片区",label:"三年级上学期过程性评价",url:"https://www.xxsj.org/sjdetail/2551.html"},
+    {area:"福建",school:"第三方公开页面",label:"三年级上册 Unit 3 练习页面",url:"https://www.tthaoke.com/shijuan_44837.html"}
   ];
 
   const ABILITY_TABS = [
@@ -672,7 +672,7 @@
     const rawPack=window.LOCAL_AUDIO_PACK,pack=audioPack();
     if(!rawPack){updateAudioPackCard("语音包索引未加载，请刷新网页。",0,false);return;}
     if(!pack){updateAudioPackCard("检测到旧版语音包，请更新网页资源后重试。",0,false);return;}
-    const parts=audioPackParts(pack);$("audioPackMeta").textContent=`国内自然语音 · ${audioPackLabel()} · 可断网播放`;
+    const parts=audioPackParts(pack);$("audioPackMeta").textContent=`第三方自然语音来源 · ${audioPackLabel()} · 可断网播放`;
     try{const cache="caches" in window?await caches.open(AUDIO_PACK_CACHE):null,stored=cache?await Promise.all(parts.map(part=>cache.match(part.url))):[];localAudioPackReady=Boolean(stored.length&&stored.every(Boolean));if(localAudioPackReady)updateAudioPackCard(`自然人声离线包已保存在本机，共 ${parts.length} 个分包。`,100,true);else updateAudioPackCard("联网时直接播放自然语音；下载后可在断网时继续学习。",0,false);}catch{localAudioPackReady=false;updateAudioPackCard("联网时直接播放自然语音；下载后可在断网时继续学习。",0,false);}
   }
   function streakCount(){
@@ -789,7 +789,7 @@
   function uCorePreview(unit,limit=5){return unit.core.slice(0,limit).map(item=>`<em>${esc(item.word)}</em>`).join("、");}
   function renderOutline(){
     const book=COURSE_BOOKS.find(item=>item.grade===outlineGrade&&item.term===outlineTerm)||COURSE_BOOKS[0],completed=book.units.filter(unit=>stages.every(stage=>state.stageDone.includes(`${unit.id}:${stage.id}`))).length;
-    $("outlineOverview").innerHTML=`<div class="outline-root"><span>🌳</span><small>闽教版三至六年级</small><b>英语学习知识树</b><em>8册 · 52单元</em></div><div class="outline-trunk"></div><div class="outline-grade-branches">${[3,4,5,6].map(grade=>{const books=COURSE_BOOKS.filter(item=>item.grade===grade);return `<article class="${outlineGrade===grade?"active":""}"><button data-outline-grade="${grade}"><span>${grade}</span><b>${grade}年级</b><small>${books.reduce((sum,item)=>sum+item.units.length,0)}个单元</small></button><div>${books.map(item=>`<button class="${book.id===item.id?"active":""}" data-outline-book="${item.id}">${item.term}<small>${item.units.length}单元</small></button>`).join("")}</div></article>`;}).join("")}</div>`;
+    $("outlineOverview").innerHTML=`<div class="outline-root"><span>🌳</span><small>参考闽教版主题 · 非官方</small><b>英语学习知识树</b><em>8册 · 52单元</em></div><div class="outline-trunk"></div><div class="outline-grade-branches">${[3,4,5,6].map(grade=>{const books=COURSE_BOOKS.filter(item=>item.grade===grade);return `<article class="${outlineGrade===grade?"active":""}"><button data-outline-grade="${grade}"><span>${grade}</span><b>${grade}年级</b><small>${books.reduce((sum,item)=>sum+item.units.length,0)}个单元</small></button><div>${books.map(item=>`<button class="${book.id===item.id?"active":""}" data-outline-book="${item.id}">${item.term}<small>${item.units.length}单元</small></button>`).join("")}</div></article>`;}).join("")}</div>`;
     $("outlineGradeSwitch").innerHTML=[3,4,5,6].map(grade=>`<button class="${outlineGrade===grade?"active":""}" data-outline-grade="${grade}">${grade}年级</button>`).join("");
     $("outlineTermSwitch").innerHTML=["上册","下册"].map(term=>`<button class="${outlineTerm===term?"active":""}" data-outline-term="${term}">${term}</button>`).join("");
     $("outlineBookHead").innerHTML=`<div><div class="book-version-line">${versionBadge(book)}<strong>${esc(book.version.statusLabel)}</strong></div><h2>${esc(book.label)}知识分支</h2><p>从 Unit 1 依次向后学习；每个单元都完成“理解—词汇—句型—对话—阅读—练习”。</p><p class="outline-version-note">${esc(book.version.note)}</p></div><aside><b>${completed}/${book.units.length}</b><small>完整单元已完成</small></aside>`;
@@ -898,7 +898,7 @@
   }
   function renderPaperExam(book,unit,type){
     const questions=paperQuestionPool(book,paperUnitIndex,type),total=questions.length,answered=Object.keys(paperAnswers).length,score=paperChecked?questions.filter((item,index)=>paperAnswers[index]===item.answer).length:0,key=paperScoreKey(book,unit,type.id),best=Number(state.papers.scores[key]||0),passed=score>=type.pass,history=paperPreviousUnits(book,paperUnitIndex);
-    const refs=type.id==="fujian-unit"?`<section class="paper-reference-box"><div><b>题型依据与版权说明</b><p>本卷只借鉴福建小学公开试卷常见的听力、词汇、情境、句子和阅读结构；所有题干、选项与解析均为本站重新编写，不是学校原卷，也不代表官方命题。</p></div><div class="paper-reference-links">${PUBLIC_PAPER_REFERENCES.map(item=>`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"><span>${esc(item.area)}</span><b>${esc(item.school)}</b><small>${esc(item.label)} ↗</small></a>`).join("")}</div></section>`:"";
+    const refs=type.id==="fujian-unit"?`<section class="paper-reference-box"><div><b>题型依据与版权说明</b><p>本卷只借鉴福建小学公开试卷常见的听力、词汇、情境、句子和阅读结构；所有题干、选项与解析均为本站重新编写，不是学校原卷，也不代表官方命题。下方仅为第三方页面链接，本站不复制、存储或保证其授权状态，学校名称也仅复述页面标注。</p><button type="button" data-open-legal>查看完整版权与外链说明</button></div><div class="paper-reference-links">${PUBLIC_PAPER_REFERENCES.map(item=>`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"><span>${esc(item.area)}</span><b>${esc(item.school)}</b><small>${esc(item.label)} ↗</small></a>`).join("")}</div></section>`:"";
     const questionMarkup=(item,index)=>{const selected=paperAnswers[index],correct=selected===item.answer,questionGlossary=paperChecked?paperGlossaryMarkup(item.q,"题干中的英文词"):"",audioGlossary=paperChecked&&item.audio?paperGlossaryMarkup(item.audio,"听力原词"):"";return `<article class="paper-question ${paperChecked?(correct?"correct":"wrong"):""}"><div class="paper-question-title"><span>${index+1}</span><div><small>${esc(item.type)}${item.difficultyTag?`<em class="paper-trap-badge">${esc(item.difficultyTag)}</em>`:""}</small><h3>${paperChecked?paperAnnotatedTextMarkup(item.q):esc(item.q)}</h3>${item.audio?`<button class="paper-audio-button" data-paper-say="${esc(item.audio)}">▶ 播放听力</button>`:""}${questionGlossary}${audioGlossary}</div></div><div class="paper-options">${item.options.map(option=>{const isAnswer=option===item.answer,isSelected=selected===option,glossary=paperChecked?paperGlossaryMarkup(option,"选项中的英文词"):"",reason=paperChecked?(isAnswer?`这是正确答案。${item.why}`:paperWrongReason(item,option)):"";return `<div class="paper-option-review ${paperChecked?(isAnswer?"correct-option":"wrong-option"):""} ${paperChecked&&isSelected?"chosen-option":""}"><button class="${isSelected?"selected":""} ${paperChecked&&isAnswer?"answer":""}" data-paper-answer="${index}" data-paper-value="${esc(option)}" ${paperChecked?"disabled":""}><span>${paperChecked?paperAnnotatedTextMarkup(option):esc(option)}</span>${paperChecked?`<em>${isAnswer?"✓ 正确选项":isSelected?"✗ 你的选择":"不选"}</em>`:""}</button>${glossary}${paperChecked?`<p class="paper-choice-reason"><b>${isAnswer?"为什么正确":"为什么不选"}</b>${esc(reason)}</p>`:""}</div>`;}).join("")}</div>${paperChecked?`<div class="paper-explanation"><header><b>${correct?"✓ 本题回答正确":`✗ 本题回答错误 · 正确答案：${esc(item.answer)}`}</b><span>${correct?"继续说明自己为什么这样选":"先看正确原因，再比较自己的选项"}</span></header><section><b>正确答案为什么正确</b><p>${esc(item.why)}</p></section>${!correct?`<section class="selected-wrong-reason"><b>你选择的“${esc(selected)}”为什么错误</b><p>${esc(paperWrongReason(item,selected))}</p></section>`:""}<section><b>订正方法</b><p>${item.type.includes("听")||item.type==="Listen and choose"?"重新播放两遍：第一遍只辨认声音，第二遍说出英文和中文，再朗读正确词。":"先读题干，再逐个比较选项的中文意思；最后把正确答案放回完整句子朗读一遍。"}</p></section></div>`:""}</article>`;};
     const sections=[...new Set(questions.map(item=>item.section))].map(section=>{const indexed=questions.map((item,index)=>({item,index})).filter(entry=>entry.item.section===section);return `<section class="paper-question-section"><header><div><small>STANDARD PRIMARY ENGLISH PAPER</small><h3>${esc(section)}</h3></div><b>${indexed[0].index+1}—${indexed.at(-1).index+1}题</b></header><div class="paper-question-list">${indexed.map(entry=>questionMarkup(entry.item,entry.index)).join("")}</div></section>`;}).join("");
     const scopeText=type.id==="bridge-mock"?`知识范围：当前及此前${history.length}个单元 · 小升初综合衔接`:`知识范围：${esc(unit.title)}（${esc(unit.zh)}）· 福建公开卷常见题型`;
@@ -1409,7 +1409,7 @@
   function renderPhonics(){
     const icons={short:"🟡",long:"🟢",diph:"🌈",stops:"💨",consonants:"👄",clusters:"🔗"},groups=Object.entries(PHONICS_GROUPS),total=groups.reduce((sum,[,item])=>sum+item.items.length,0),done=state.phonicsDone.length,group=PHONICS_GROUPS[phonicsGroup];
     $("phonicsGroups").innerHTML=`<div class="phonics-progress"><div><b>音标学习进度</b><span>${done} / ${total} 个音</span></div><i><em style="width:${Math.min(100,done/total*100)}%"></em></i></div><div class="phonics-group-buttons">${groups.map(([id,item])=>`<button class="${id===phonicsGroup?"active":""}" data-phonics-group="${id}">${icons[id]} ${item.name}<small>${item.items.length}个</small></button>`).join("")}</div>`;
-    $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>本组学习目标</small><h2>${group.name}</h2><p>${group.tip}</p><p><b>发音已校正：</b>主按钮按<a href="https://www.xdf.cn/zhuanti/bd-phonetic-alphabet-card/index.html" target="_blank" rel="noopener noreferrer">新东方48音标卡</a>对照播放；“示范单词”播放完整单词。网络不可用时自动切换到本地音素包。</p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="播放标准音素 ${esc(symbol)}">🔊 标准音素</button><button data-say="${esc(word)}" aria-label="播放示例词 ${esc(word)}">🎧 示范单词</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>👄 发音方法：</b>${esc(tip)}</p><p><b>🔤 常见字母：</b>${esc(spelling)}</p><ol><li>听标准音素</li><li>听完整示范词</li><li>对照口型慢速跟读3遍</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"✓ 已学会":"我已听、看、读3遍 +1 ☀️"}</button></article>`}).join("")}`;
+    $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>本组学习目标</small><h2>${group.name}</h2><p>${group.tip}</p><p><b>来源识别：</b>主按钮参照<a href="https://www.xdf.cn/zhuanti/bd-phonetic-alphabet-card/index.html" target="_blank" rel="noopener noreferrer">新东方48音标公开页面</a>的示范音；相关名称、网页与音频权益归权利人，本站与其无关联。仅限家庭跟读，禁止提取和再传播。<button type="button" data-open-legal>查看授权提示</button></p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="播放标准音素 ${esc(symbol)}">🔊 标准音素</button><button data-say="${esc(word)}" aria-label="播放示例词 ${esc(word)}">🎧 示范单词</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>👄 发音方法：</b>${esc(tip)}</p><p><b>🔤 常见字母：</b>${esc(spelling)}</p><ol><li>听标准音素</li><li>听完整示范词</li><li>对照口型慢速跟读3遍</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"✓ 已学会":"我已听、看、读3遍 +1 ☀️"}</button></article>`}).join("")}`;
     $("minimalGrid").innerHTML=MINIMAL_PAIRS.map(([a,aIpa,b,bIpa])=>`<article><div><button data-say="${esc(a)}">🔊 ${esc(a)}</button><span>${esc(aIpa)}</span></div><b>VS</b><div><button data-say="${esc(b)}">🔊 ${esc(b)}</button><span>${esc(bIpa)}</span></div><p>先听两遍，再注意两个词中不同的音。</p></article>`).join("");
     document.querySelectorAll("[data-phonics-group]").forEach(button=>button.onclick=()=>{phonicsGroup=button.dataset.phonicsGroup;renderPhonics();});
     document.querySelectorAll("#view-beginner [data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
@@ -1520,6 +1520,7 @@
   }
 
   document.addEventListener("click",e=>{
+    const legal=e.target.closest("[data-open-legal]");if(legal){const dialog=$("legalDialog");dialog.showModal?.();dialog.classList.add("open");return;}
     const view=e.target.closest("[data-view]"); if(view){const more=$("moreMenuDialog");if(more?.open||more?.classList.contains("open")){more.close?.();more.classList.remove("open");}route(view.dataset.view);return;}
     const profileChoice=e.target.closest("[data-profile-id]");if(profileChoice){switchProfile(profileChoice.dataset.profileId);return;}
     const bridgeWeekButton=e.target.closest("[data-bridge-week]");if(bridgeWeekButton){state.bridge.week=Number(bridgeWeekButton.dataset.bridgeWeek);save();renderBridge();return;}
@@ -1584,6 +1585,8 @@
     const dot=e.target.closest("[data-word-index]"); if(dot){memoryIndex=Number(dot.dataset.wordIndex);memoryFlipped=false;renderWords();}
   });
   $("profileButton").onclick=openProfileDialog;
+  $("closeLegalDialog").onclick=()=>{const dialog=$("legalDialog");dialog.close?.();dialog.classList.remove("open");};
+  $("legalDialog").addEventListener("click",event=>{if(event.target===$("legalDialog"))$("closeLegalDialog").click();});
   $("closeProfileDialog").onclick=closeProfileDialog;
   $("profileDialog").addEventListener("click",event=>{if(event.target===$("profileDialog"))closeProfileDialog();});
   $("openParentManager").onclick=openParentDialog;
@@ -1616,5 +1619,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();setupAudioPack();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=42",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=43",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();

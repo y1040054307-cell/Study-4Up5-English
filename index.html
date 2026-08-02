@@ -8,21 +8,23 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="向阳英语">
-  <meta name="description" content="面向福建小学三至六年级的英语长期自学平台：按闽教版主题编写原创课件，并逐册标注版本核对状态。">
+  <meta name="description" content="个人家庭使用的福建小学英语主题自学工具：参考闽教版主题编写原创课件，非出版社官方产品。">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+  <meta name="googlebot" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="向阳英语成长岛｜闽教版三至六年级">
-  <meta property="og:description" content="每天20分钟，真正听懂、读懂、会说、会用。">
+  <meta property="og:title" content="向阳英语成长岛｜家庭英语主题自学工具">
+  <meta property="og:description" content="个人家庭自制、非官方、禁止商用与对外转发。">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=42">
-  <title>向阳英语成长岛｜闽教版三至六年级</title>
+  <link rel="stylesheet" href="styles.css?v=43">
+  <title>向阳英语成长岛｜福建小学英语主题自学</title>
 </head>
 <body>
   <header class="topbar">
     <button class="brand" data-view="home" aria-label="返回学习首页">
       <span class="brand-mark">芽</span>
-      <span><strong>向阳英语成长岛</strong><small>闽教版主题原创课件 · 逐册标版本</small></span>
+      <span><strong>向阳英语成长岛</strong><small>参考闽教版主题编写 · 非官方课件</small></span>
     </button>
       <div class="top-stats">
         <button class="profile-pill" id="profileButton" type="button" aria-label="切换学习身份">
@@ -82,7 +84,7 @@
 
       <section class="audio-pack-card" id="audioPackCard">
         <div class="audio-pack-icon">🔊</div>
-        <div class="audio-pack-copy"><small>国内自然语音 · 支持断网</small><h2>课程自然人声离线包</h2><p id="audioPackMeta">单词、句子和故事都可下载到本机</p><div class="audio-pack-progress"><span id="audioPackBar"></span></div><em id="audioPackStatus">正在检查语音包……</em><small class="audio-network-warning">完整包约32.3 MB，建议连接 Wi‑Fi；音标包可单独下载。</small></div>
+        <div class="audio-pack-copy"><small>第三方语音来源 · 支持断网</small><h2>课程自然人声离线包</h2><p id="audioPackMeta">单词、句子和故事都可下载到本机</p><div class="audio-pack-progress"><span id="audioPackBar"></span></div><em id="audioPackStatus">正在检查语音包……</em><small class="audio-network-warning">完整包约32.3 MB，建议连接 Wi‑Fi；仅限当前家庭学习，不得提取、转载或再分发。<button type="button" data-open-legal>查看来源与授权提示</button></small></div>
         <div class="audio-pack-actions"><button class="soft" id="testAudioButton">先试听</button><button class="soft" id="downloadPhonemePack">仅下载音标包（2.0 MB）</button><button class="primary" id="downloadAudioPack">下载完整自然人声包</button></div>
       </section>
 
@@ -288,7 +290,22 @@
 
   <footer class="site-legal-note" aria-label="网站使用声明">
     <small>本页面仅为个人家庭学习自制工具，未与对应教材出版社关联，禁止商用与对外转发分享</small>
+    <button type="button" data-open-legal>查看教材、版权、试卷、音频与隐私说明</button>
   </footer>
+
+  <dialog class="legal-dialog" id="legalDialog" aria-labelledby="legalDialogTitle">
+    <button class="profile-dialog-close" id="closeLegalDialog" aria-label="关闭版权与隐私说明">×</button>
+    <header><small>RIGHTS · SOURCES · PRIVACY</small><h2 id="legalDialogTitle">教材、版权、试卷、音频与隐私说明</h2><p>以下说明用于清楚区分自编内容、第三方名称和第三方素材，不构成法律意见，也不能替代权利人的正式授权。</p></header>
+    <div class="legal-grid">
+      <section><span>📚</span><div><h3>教材名称与版本</h3><p>“闽教版”、教材册次和单元主题仅用于说明学习参照范围，不表示福建教育出版社或其他教材权利人对本站授权、合作、推荐或认可。本站不是教材电子版，不提供教材封面、扫描页、原版插图、课文全文或出版社配套音视频。目录、词表、页码和版本均以学校发放的正式纸质教材为准。</p></div></section>
+      <section><span>✍️</span><div><h3>自编课程与测评</h3><p>站内讲解、例句、情境对话、阅读、练习、模拟题及解析按学习主题自行编写，不冒充教材原文、官方课件或学校原卷。“福建公开卷题型参考”只表示研究常见题型结构；外部试卷页面由第三方提供，本站不复制、存储或保证其授权状态。</p></div></section>
+      <section class="legal-warning"><span>🔊</span><div><h3>音频来源与剩余风险</h3><p>部分单词和句子发音来自有道词典、百度翻译等公开语音接口，部分音标示范参照新东方公开音标页面；相关服务名称、网页和音频权益归相应权利人，本站与其无关联。来源标注不等于取得公开再传播或商业授权，音频只可在本家庭学习工具内辅助跟读，禁止提取、复制、转载、打包传播或商用。公开部署前应优先替换为自录或具有明确再分发许可的音频。</p></div></section>
+      <section><span>🔐</span><div><h3>儿童数据与录音</h3><p>网站不要求注册，不设置真实姓名、学校、电话或地址字段。学习进度和家长码只保存在当前浏览器；跟读录音只在当前页面临时回放，不上传服务器，刷新或离开后不保留音频文件。请由监护人陪同使用，不要在备份文件中加入真实身份信息；清除浏览器数据即可删除本机记录。</p></div></section>
+      <section><span>🖼️</span><div><h3>图片、图标与玩法</h3><p>界面图标、动植物形象和成长玩法不得使用第三方游戏、动漫、教材或商业素材的名称、标志、角色造型和原图。本站只主张对自行创作部分依法享有的权利；任何第三方名称或素材仍归原权利人。</p></div></section>
+      <section><span>📮</span><div><h3>权利联系与处理</h3><p>如权利人认为站内存在不当使用，请通过项目仓库联系维护者并说明具体页面、素材及权利依据；核实后应及时下架、断开链接或更换。禁止将本站内容整体复制后另行公开发布。</p><a href="https://github.com/y1040054307-cell/Study-4Up5-English/issues" target="_blank" rel="noopener noreferrer">前往项目 Issues 联系维护者 ↗</a></div></section>
+    </div>
+    <div class="legal-authorities"><b>规则参考</b><a href="https://www.ncac.gov.cn/xxfb/flfg/flfg_532/202103/t20210309_50530.html" target="_blank" rel="noopener noreferrer">《中华人民共和国著作权法》</a><a href="https://www.cac.gov.cn/2021-08/20/c_1631050028355286.htm" target="_blank" rel="noopener noreferrer">《中华人民共和国个人信息保护法》</a><a href="https://www.cac.gov.cn/2019-08/23/c_1124913903.htm" target="_blank" rel="noopener noreferrer">《儿童个人信息网络保护规定》</a></div>
+  </dialog>
 
   <dialog class="app-install-dialog" id="appInstallDialog" aria-labelledby="appInstallTitle">
     <button class="profile-dialog-close" id="closeInstallDialog" aria-label="关闭安装说明">×</button>
@@ -332,14 +349,14 @@
 
   <div class="toast" id="toast" role="status"></div>
   <audio id="voicePlayer" preload="auto" playsinline hidden></audio>
-  <script src="curriculum.js?v=42"></script>
-  <script src="quality-g3a.js?v=42"></script>
-  <script src="dictionary.js?v=42"></script>
-  <script src="growth.js?v=42"></script>
-  <script src="grammar.js?v=42"></script>
-  <script src="audio-index.js?v=42"></script>
-  <script src="phoneme-audio.js?v=42"></script>
-  <script src="bridge-content.js?v=42"></script>
-  <script src="app.js?v=42"></script>
+  <script src="curriculum.js?v=43"></script>
+  <script src="quality-g3a.js?v=43"></script>
+  <script src="dictionary.js?v=43"></script>
+  <script src="growth.js?v=43"></script>
+  <script src="grammar.js?v=43"></script>
+  <script src="audio-index.js?v=43"></script>
+  <script src="phoneme-audio.js?v=43"></script>
+  <script src="bridge-content.js?v=43"></script>
+  <script src="app.js?v=43"></script>
 </body>
 </html>
