@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=34">
+  <link rel="stylesheet" href="styles.css?v=35">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -42,6 +42,7 @@
     <button data-view="today"><span>✅</span>每日任务</button>
     <button data-view="abilities"><span>🎯</span>能力中心</button>
     <button data-view="grammar"><span>🧠</span>语法课堂</button>
+    <button data-view="bridge"><span>🎓</span>小升初强化</button>
     <button data-view="papers"><span>📝</span>真题考卷</button>
     <button data-view="words"><span>🔤</span>单词本</button>
     <button data-view="beginner"><span>🌈</span>英语启蒙</button>
@@ -71,6 +72,8 @@
           <div><span class="eyebrow">MY LEARNING PLANT</span><h2 id="plantName">英语小芽</h2><p id="plantHint">完成任务获得小太阳，照顾它健康成长。</p></div>
         </article>
       </div>
+
+      <section class="junior-bridge-slot" id="homeBridgeBanner" hidden></section>
 
       <section class="install-card" id="installCard" hidden>
         <img src="assets/app-icon-192.png" alt="向阳英语应用图标">
@@ -115,6 +118,7 @@
 
     <section class="view" id="view-courses">
       <div class="page-title"><span class="eyebrow">CURRICULUM LIBRARY</span><h1>三至六年级课程库</h1><p>先选年级和学期，再进入单元。每单元包含理解、单词、句型、对话、阅读和练习。</p></div>
+      <section class="junior-bridge-slot" id="courseBridgeBanner" hidden></section>
       <div class="version-note"><span>📌</span><p><strong>教材版本提示</strong>　新版教材正在分年级启用，各校进度可能不同。这里按闽教版主题编排原创学习内容；请先对照学校发放课本的单元名称。</p></div>
       <div class="library-stats">
         <article><b>8</b><span>册课程教材</span></article><article><b>52</b><span>个完整单元</span></article><article><b>518</b><span>必备与拓展词条</span></article><article><b>416+</b><span>句型学习例句</span></article>
@@ -131,6 +135,7 @@
 
     <section class="view" id="view-outline">
       <div class="page-title outline-page-title"><span class="eyebrow">COMPLETE LEARNING MAP</span><h1>三至六年级学习总纲</h1><p>先看清整条学习路线，再快速进入任一册、任一单元。每个单元都整理学习目标、必备词、重点句型与学习任务。</p></div>
+      <section class="junior-bridge-slot" id="outlineBridgeBanner" hidden></section>
       <section class="outline-overview" id="outlineOverview"></section>
       <section class="outline-controls">
         <div><b>选择年级</b><div class="grade-switch" id="outlineGradeSwitch"></div></div>
@@ -148,13 +153,15 @@
 
     <section class="view" id="view-unit">
       <button class="back" data-view="courses">← 返回课程库</button>
+      <section class="junior-bridge-slot" id="unitBridgeBanner" hidden></section>
       <div class="unit-hero" id="unitHero"></div>
       <div class="lesson-tabs" id="lessonTabs"></div>
       <div class="lesson-content" id="lessonContent"></div>
     </section>
 
     <section class="view" id="view-papers">
-      <div class="page-title paper-page-title"><span class="eyebrow">UNIT EXAM &amp; CUMULATIVE REVIEW</span><h1>单元考卷中心</h1><p>每个单元固定6份标准试卷：2份本单元卷、3份过往知识累计卷、1份福建公开真题题型组合卷。每卷30题，全部在站内完成并立即查看解析。</p></div>
+      <div class="page-title paper-page-title"><span class="eyebrow">UNIT EXAM &amp; CUMULATIVE REVIEW</span><h1>单元考卷中心</h1><p>三至五年级每单元6份标准卷；六年级额外增加1份小升初综合模拟卷，共7份、210题。全部在站内完成并立即查看逐题解析。</p></div>
+      <section class="junior-bridge-slot" id="paperBridgeBanner" hidden></section>
       <section class="paper-safety-note">
         <span>📚</span>
         <div><b>不提前考未来知识，真正形成“学习—检测—复习”闭环</b><p>单元卷只考当前单元；累计卷只从当前单元之前的内容抽题。福建组合卷参考公开学校试卷的题型结构重新编排，不直接复制第三方整卷。</p></div>
@@ -178,6 +185,7 @@
 
     <section class="view" id="view-abilities">
       <div class="page-title ability-page-title"><span class="eyebrow">LEARNING ABILITY CENTER</span><h1>英语学习能力中心</h1><p>先找到真实起点，再用自然拼读、听力和口语训练，把“认识单词”变成“听得懂、读得出、说得来”。</p></div>
+      <section class="junior-bridge-slot" id="abilityBridgeBanner" hidden></section>
       <section class="ability-summary" id="abilitySummary"></section>
       <div class="ability-tabs" id="abilityTabs" aria-label="能力训练模块"></div>
       <section class="ability-workspace" id="abilityWorkspace"></section>
@@ -185,6 +193,7 @@
 
     <section class="view" id="view-today">
       <div class="page-title"><span class="eyebrow">DAILY LEARNING</span><h1>每日学习任务</h1><p>建议每天20—30分钟。按顺序完成，比一次学很多更有效。</p></div>
+      <section class="junior-bridge-slot" id="todayBridgeBanner" hidden></section>
       <div class="daily-layout">
         <section class="panel"><div class="daily-heading"><div><b id="todayDate"></b><span id="todayCourse"></span></div><div class="circle-progress" id="circleProgress">0/7</div></div><div id="dailyTasks" class="daily-tasks"></div></section>
         <aside class="panel reward-panel"><span class="big-sun">☀️</span><h2>今日奖励</h2><p>学习任务奖励小太阳和粮食<br>全部完成再奖励 3☀️ + 2🥣</p><button class="primary" id="claimDailyBonus">领取全勤奖励</button><small id="bonusHint"></small></aside>
@@ -194,7 +203,8 @@
 
     <section class="view" id="view-words">
       <div class="page-title"><span class="eyebrow">SMART REVIEW</span><h1>我的单词本</h1><p>不会的词进入“需要复习”，会的词按间隔复习再次出现。</p></div>
-      <div class="word-controls"><button class="active" data-word-filter="current">本单元</button><button data-word-filter="weak">需要复习</button><button data-word-filter="mastered">已经掌握</button></div>
+      <section class="junior-bridge-slot" id="wordsBridgeBanner" hidden></section>
+      <div class="word-controls"><button class="active" data-word-filter="current">本单元</button><button data-word-filter="bridge">🎓 六年级重点</button><button data-word-filter="weak">需要复习</button><button data-word-filter="mastered">已经掌握</button></div>
       <div class="memory-card" id="memoryCard"></div>
       <div class="memory-actions"><button class="danger-soft" id="wordAgain">还不熟</button><button class="primary" id="wordKnow">我记住了</button></div>
       <div class="word-dots" id="wordDots"></div>
@@ -202,6 +212,7 @@
 
     <section class="view" id="view-dictionary">
       <div class="page-title"><span class="eyebrow">WORD LIBRARY</span><h1>单词词典库</h1><p>按学习阶段分开查词。点击单词可以听发音，搜索时不会影响每日任务。</p></div>
+      <section class="junior-bridge-slot" id="dictionaryBridgeBanner" hidden></section>
       <div class="dictionary-tabs" id="dictionaryTabs">
         <button class="active" data-dictionary-section="primary">🎒 小学必备单词库</button>
         <button data-dictionary-section="gaokao">🎓 高考必备单词库</button>
@@ -225,6 +236,7 @@
 
     <section class="view" id="view-grammar">
       <div class="page-title grammar-page-title"><span class="eyebrow">CLEAR GRAMMAR</span><h1>英语语法成长课堂</h1><p>不死背术语：先看懂规则，再比较例句，最后独立选择。8个主题从三年级基础逐步学到六年级衔接。</p></div>
+      <section class="junior-bridge-slot" id="grammarBridgeBanner" hidden></section>
       <section class="grammar-progress-panel">
         <div><span>语法学习进度</span><b id="grammarProgressText">0 / 8 个主题</b></div>
         <div class="grammar-progress-bar"><span id="grammarProgressBar"></span></div>
@@ -234,6 +246,19 @@
         <aside class="grammar-topic-nav" id="grammarTopicNav" aria-label="语法主题"></aside>
         <section class="grammar-classroom" id="grammarClassroom"></section>
       </div>
+    </section>
+
+    <section class="view" id="view-bridge">
+      <div class="page-title bridge-page-title"><span class="eyebrow">PRIMARY TO JUNIOR HIGH · 12-WEEK PATH</span><h1>六年级小升初强化中心</h1><p>用12周完成“基础整理—专项突破—综合运用—模拟冲刺”，每天40分钟，真正把小学知识带进初中。</p></div>
+      <section class="bridge-dashboard" id="bridgeDashboard"></section>
+      <section class="bridge-daily-method" id="bridgeDailyMethod"></section>
+      <section class="bridge-phase-map" id="bridgePhaseMap"></section>
+      <section class="bridge-week-layout">
+        <aside class="bridge-week-nav" id="bridgeWeekNav" aria-label="小升初强化周计划"></aside>
+        <div class="bridge-week-workspace" id="bridgeWeekWorkspace"></div>
+      </section>
+      <section class="bridge-knowledge" id="bridgeKnowledge"></section>
+      <section class="bridge-module-links" id="bridgeModuleLinks"></section>
     </section>
 
     <section class="view" id="view-garden">
@@ -264,6 +289,7 @@
 
     <section class="view" id="view-report">
       <div class="page-title"><span class="eyebrow">DAILY GROWTH REPORT</span><h1>成长日报</h1><p>给孩子看每天的进步，给家长看需要帮助的地方。</p></div>
+      <section class="junior-bridge-slot" id="reportBridgeBanner" hidden></section>
       <div class="report-grid" id="reportCards"></div>
       <section class="panel"><div class="section-head"><div><span class="eyebrow">RECENT 7 DAYS</span><h2>最近学习记录</h2></div></div><div class="week-chart" id="weekChart"></div></section>
       <section class="panel"><div class="section-head"><div><span class="eyebrow">PARENT TIPS</span><h2>本周家长建议</h2></div></div><div id="parentAdvice" class="advice-list"></div></section>
@@ -292,12 +318,13 @@
 
   <div class="toast" id="toast" role="status"></div>
   <audio id="voicePlayer" preload="auto" playsinline hidden></audio>
-  <script src="curriculum.js?v=34"></script>
-  <script src="dictionary.js?v=34"></script>
-  <script src="growth.js?v=34"></script>
-  <script src="grammar.js?v=34"></script>
-  <script src="audio-index.js?v=34"></script>
-  <script src="phoneme-audio.js?v=34"></script>
-  <script src="app.js?v=34"></script>
+  <script src="curriculum.js?v=35"></script>
+  <script src="dictionary.js?v=35"></script>
+  <script src="growth.js?v=35"></script>
+  <script src="grammar.js?v=35"></script>
+  <script src="audio-index.js?v=35"></script>
+  <script src="phoneme-audio.js?v=35"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>
+
