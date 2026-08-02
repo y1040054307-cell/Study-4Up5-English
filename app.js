@@ -17,7 +17,7 @@
   const TEST_BALANCE = 99999;
   let persistedEconomy = {suns:0,foods:0};
   const iso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, grammar:{completed:[],quizBest:{},attempts:{}}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
+  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, beginner:{letters:[]}, grammar:{completed:[],quizBest:{},attempts:{}}, abilities:{diagnostic:null,phonicsCompleted:[],listeningCompleted:[],speakingCompleted:[],rewarded:[]}, papers:{scores:{},attempts:{}}, bridge:{week:1,done:[],rewarded:[],abilityBest:0}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
   const load = (profileId=activeUserId) => { try {
     const key=profileStoreKey(profileId);
     if(!localStorage.getItem(key)&&profileId===USER_PROFILES[0].id&&localStorage.getItem(STORE))localStorage.setItem(key,localStorage.getItem(STORE));
@@ -29,8 +29,12 @@
     Object.entries(legacyPets.progress||{}).forEach(([id,data])=>{const kind=petKind(id);if(!kind)return;const old=petProgressMerged[kind];if(!old||Number(data.xp||0)>Number(old.xp||0))petProgressMerged[kind]={...data};else old.fullness=Math.max(Number(old.fullness||0),Number(data.fullness||0));});
     const petOwned=[...new Set((legacyPets.owned||[]).map(petKind).filter(Boolean))],selectedKind=petKind(legacyPets.selected),petSelected=petOwned.includes(selectedKind)?selectedKind:petOwned[0]||"";
     const pets={...defaultState.pets,...legacyPets,selected:petSelected,owned:petOwned,progress:petProgressMerged};
+    const rawBeginner=raw.beginner||{},beginner={...defaultState.beginner,...rawBeginner,letters:[...(rawBeginner.letters||[])]};
     const rawGrammar=raw.grammar||{},grammar={...defaultState.grammar,...rawGrammar,completed:[...(rawGrammar.completed||[])],quizBest:{...(rawGrammar.quizBest||{})},attempts:{...(rawGrammar.attempts||{})}};
-    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})},grammar};
+    const rawAbilities=raw.abilities||{},abilities={...defaultState.abilities,...rawAbilities,phonicsCompleted:[...(rawAbilities.phonicsCompleted||[])],listeningCompleted:[...(rawAbilities.listeningCompleted||[])],speakingCompleted:[...(rawAbilities.speakingCompleted||[])],rewarded:[...(rawAbilities.rewarded||[])]};
+    const rawPapers=raw.papers||{},papers={...defaultState.papers,...rawPapers,scores:{...(rawPapers.scores||{})},attempts:{...(rawPapers.attempts||{})}};
+    const rawBridge=raw.bridge||{},bridge={...defaultState.bridge,...rawBridge,done:[...(rawBridge.done||[])],rewarded:[...(rawBridge.rewarded||[])]};
+    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})},beginner,grammar,abilities,papers,bridge};
   } catch { persistedEconomy={suns:0,foods:0};const fresh=structuredClone(defaultState);fresh.suns=TEST_MODE?TEST_BALANCE:0;fresh.foods=TEST_MODE?TEST_BALANCE:0;return fresh; } };
   let state = load(activeUserId);
   let selectedGrade = Number(state.bookId[1]) || 4;
@@ -39,6 +43,9 @@
   let memoryIndex = 0;
   let memoryFlipped = false;
   let phonicsGroup = "short";
+  let beginnerTab = "alphabet";
+  let outlineGrade = selectedGrade;
+  let outlineTerm = selectedTerm;
   let dictionarySection = "primary";
   let dictionaryLetter = "all";
   let dictionaryLimit = 48;
@@ -48,6 +55,27 @@
   let grammarTopicId = (window.GRAMMAR_TOPICS||[])[0]?.id || "articles";
   let grammarAnswers = {};
   let grammarResult = null;
+  let abilityTab = "diagnostic";
+  let diagnosticAnswers = {};
+  let diagnosticPage = 0;
+  let abilityPhonicsLesson = "short-vowels";
+  let abilityPhonicsAnswers = {};
+  let abilityPhonicsChecked = false;
+  let abilityListeningAnswers = {};
+  let abilityListeningChecked = false;
+  let speakingRecording = null;
+  let speakingRecorder = null;
+  let speakingStream = null;
+  let speakingChunks = [];
+  let speakingRecordedKeys = new Set();
+  let paperGrade = selectedGrade;
+  let paperTerm = selectedTerm;
+  let paperUnitIndex = state.unitIndex;
+  let paperActiveId = "";
+  let paperAnswers = {};
+  let paperChecked = false;
+  let bridgeAbilityAnswers = {};
+  let bridgeAbilityChecked = false;
   let toastTimer;
   let petActionTimer;
   let deferredInstallPrompt = null;
@@ -61,10 +89,13 @@
   let localAudioAbort = null;
   let speechRequestId = 0;
   let networkVoiceNoticeShown = false;
-  const AUDIO_PACK_CACHE = "sunny-audio-pack-v28";
+  const AUDIO_PACK_CACHE = "sunny-audio-pack-v31";
 
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+  const versionStatus = book => book.version?.status || "reference";
+  const versionBadge = (book, compact=false) => `<span class="course-version-badge version-${versionStatus(book)}">${esc(compact?(book.version?.short||book.edition):(book.version?.label||book.edition))}</span>`;
+  const versionDetails = book => `<div class="course-version-details version-${versionStatus(book)}"><div>${versionBadge(book)}<strong>${esc(book.version?.statusLabel||"请核对版本")}</strong></div><p>${esc(book.version?.note||"请以学校实际发放的纸质教材为准。")}</p><small>本站内容属性：原创讲解与练习，不是出版社教材原文或官方电子课件。</small></div>`;
   const bookNow = () => COURSE_BOOKS.find(b => b.id === state.bookId) || COURSE_BOOKS[2];
   const unitNow = () => bookNow().units[state.unitIndex] || bookNow().units[0];
   const unitKey = () => unitNow().id;
@@ -79,11 +110,187 @@
     {id:"vocab",icon:"🔤",title:"点读必备单词",detail:"听、读、看意思，至少主动回忆6个词",stage:"words"},
     {id:"speak",icon:"🗣️",title:"跟读并替换句型",detail:"每个重点句型读3遍，再换一个关键词",stage:"patterns"},
     {id:"read",icon:"📖",title:"完成对话或阅读",detail:"先读英文猜意思，再看中文理解线索",stage:"reading"},
-    {id:"quiz",icon:"🎯",title:"完成5分钟小测",detail:"错题不是失败，会自动进入复习清单",stage:"practice"},
+    {id:"quiz",icon:"🎯",title:"完成20题分层练习",detail:"依次练词义、拼写、句式与语境，错题自动进入复习清单",stage:"practice"},
     {id:"zh2en",icon:"✍️",title:"看中文写英文",detail:"完成本单元5个词的英文默写，注意拼写",stage:"words"},
     {id:"en2zh",icon:"🀄",title:"看英文写中文",detail:"写出5个英文单词的准确中文意思",stage:"words"},
     {id:"review",icon:"🔁",title:"复习过往单词",detail:"只从已经学过的单元中随机抽取，不提前出现未来词汇",stage:"review"}
   ];
+  const BRIDGE_WEEKS = [
+    {week:1,phase:"基础校准",title:"词汇诊断与拼读补漏",goal:"找出真正不会的词，建立音—形—义联系。",output:"完成六年级词汇初测，建立个人错词清单。",days:["检测60个小学高频词，标出不确定词","复习短元音、长元音和常见字母组合","近形词辨析：right/light、read/red、there/three","完成六年级重点词卡20个并口头造句","周测30题并整理本周10个错词"]},
+    {week:2,phase:"基础校准",title:"冠词、名词与代词",goal:"分清 a/an/the、可数与不可数、单复数及代词指代。",output:"能解释每个限定词和代词为什么这样使用。",days:["学习a、an、the和零冠词的使用场景","整理可数名词复数规则与不规则复数","练习some/any、many/much和数量表达","代词主格、宾格、物主代词对比练习","完成专项20题和5句订正"]},
+    {week:3,phase:"基础校准",title:"小学核心时态总复习",goal:"看时间标志词判断一般现在、现在进行、一般过去和一般将来。",output:"制作四时态对比表，能写8个正确句子。",days:["一般现在时与第三人称单数","现在进行时：be + doing","一般过去时与20个不规则动词","一般将来时：will / be going to","四时态混合25题与错因归类"]},
+    {week:4,phase:"专项突破",title:"动词词形与主谓一致",goal:"不靠感觉，依据主语和句型选择正确动词。",output:"掌握can后原形、三单、过去式、动名词的选择。",days:["主语是I/you/we/they时的动词","he/she/it与第三人称单数","情态动词can/must/should后用原形","like doing、want to do等常见搭配","易错词形综合30题"]},
+    {week:5,phase:"专项突破",title:"介词和固定搭配",goal:"掌握时间、地点、方向介词以及高频动词搭配。",output:"能在完整句子中正确选择介词和固定短语。",days:["in/on/at时间介词对比","方位介词与路线表达","for/from/with/by的常见用法","take photos、go swimming等固定搭配","介词与搭配综合20题"]},
+    {week:6,phase:"专项突破",title:"形容词、副词与比较",goal:"理解修饰对象，正确使用原级、比较级和最高级。",output:"能比较人物、动物、地点并说明依据。",days:["形容词修饰名词，副词修饰动作","规则比较级和最高级变化","big/bigger、good/better等易错变化","as...as与than句型","完成比较表达15句和20题"]},
+    {week:7,phase:"专项突破",title:"句子结构与正确语序",goal:"建立主语—谓语—宾语框架，解决问句和连词成句。",output:"能独立还原陈述句、一般疑问句和特殊疑问句。",days:["找句子主干：谁做什么","be动词、助动词和情态动词问句","特殊疑问词+一般疑问句语序","频率副词和时间地点的位置","连词成句与改错25题"]},
+    {week:8,phase:"专项突破",title:"连接词与初中衔接从句",goal:"用and、but、because、so、if、when连接完整信息。",output:"能读懂并写出包含原因、转折和条件的长句。",days:["and/but/or连接并列信息","because与so表达原因结果","if和when引导的时间条件信息","who/where等从句入门与陈述语序","长句拆分、翻译和合并20题"]},
+    {week:9,phase:"综合运用",title:"阅读理解：定位证据",goal:"先看问题，再从原文找人物、时间、地点和动作证据。",output:"完成3篇分级阅读并给每题圈出证据句。",days:["标题和首句预测文章主题","人物与代词指代定位","时间顺序和事件排序","根据上下文猜生词","限时完成3篇阅读15题"]},
+    {week:10,phase:"综合运用",title:"完形与语境选词",goal:"同时检查词义、词形、搭配和上下文逻辑。",output:"形成“四步选词法”，不再只凭眼熟选择。",days:["先通读再判断词性","上下句中的时间和代词线索","近义词、近形词和固定搭配辨析","把答案放回全文检查逻辑","完成2篇完形和20道语境题"]},
+    {week:11,phase:"综合运用",title:"写作与口语表达",goal:"从正确的5句话扩展到结构清楚的60—80词短文。",output:"完成自我介绍、计划、经历三类短文和口头复述。",days:["五句法：人物、时间、地点、事情、感受","用first/then/finally组织顺序","一般过去与一般将来写作对比","检查大小写、标点、拼写和时态","完成1篇限时写作并录音复述"]},
+    {week:12,phase:"模拟冲刺",title:"综合模拟与错题回炉",goal:"完成限时模拟，按错误类型回到对应模块补漏。",output:"完成2套综合卷，形成个人小升初最后复习清单。",days:["模拟卷A：限时完成并标记犹豫题","按词汇/语法/阅读/写作统计失分","回到对应课程重做错题","模拟卷B：同类题再次检测","整理最终20词、10句型和5条语法提醒"]}
+  ];
+  const BRIDGE_KNOWLEDGE = [
+    ["词汇拼读","六年级重点词、近形近音词、不规则动词、固定搭配","单词本 · 词典库"],
+    ["名词与限定词","a/an/the、可数不可数、单复数、some/any、many/much","语法课堂"],
+    ["代词","主格、宾格、形容词性物主代词、指示代词、疑问代词","语法课堂"],
+    ["动词与时态","一般现在、现在进行、一般过去、一般将来、主谓一致","语法课堂 · 能力中心"],
+    ["介词与搭配","时间地点介词、方向表达、动词短语与常用搭配","课程 · 每日任务"],
+    ["形容词与副词","修饰关系、比较级、最高级、频率和程度","语法课堂"],
+    ["句子与从句","陈述句、疑问句、语序、连接词、简单从句","语法课堂 · 课程"],
+    ["综合运用","听力抓关键词、阅读证据、完形语境、60—80词写作","能力中心 · 真题考卷"]
+  ];
+  const BRIDGE_ABILITY_TAB={id:"bridge-check",icon:"🎓",name:"小升初综合",tip:"20题衔接检测"};
+  const BRIDGE_ABILITY_QUESTIONS=[
+    {area:"近形词",q:"Please turn ____ at the crossing.",options:["right","light","night"],answer:"right",why:"turn right 表示向右转；light是灯或轻的，night是夜晚。"},
+    {area:"冠词",q:"Amy wants to be ____ English teacher.",options:["a","an","the"],answer:"an",why:"English以元音音素开头，表示一位英语老师用an。"},
+    {area:"名词",q:"There are three ____ in the box.",options:["knife","knifes","knives"],answer:"knives",why:"knife的复数通常把fe变为ves。"},
+    {area:"数量词",q:"How ____ milk do you need?",options:["many","much","often"],answer:"much",why:"milk是不可数名词，询问数量用how much。"},
+    {area:"代词",q:"This book is not mine. It is ____.",options:["her","hers","she"],answer:"hers",why:"空格后没有名词，要用名词性物主代词hers。"},
+    {area:"一般现在时",q:"My father ____ to work by bus every day.",options:["go","goes","went"],answer:"goes",why:"every day提示一般现在时，主语my father是第三人称单数。"},
+    {area:"现在进行时",q:"Listen! The children ____ an English song.",options:["sing","sang","are singing"],answer:"are singing",why:"Listen提示动作正在发生，使用be + doing。"},
+    {area:"一般过去时",q:"We ____ a science museum yesterday.",options:["visit","visited","will visit"],answer:"visited",why:"yesterday提示一般过去时，visit变为visited。"},
+    {area:"一般将来时",q:"I ____ my grandparents next Sunday.",options:["visit","visited","will visit"],answer:"will visit",why:"next Sunday提示将来，使用will + 动词原形。"},
+    {area:"动词搭配",q:"Would you like ____ with us?",options:["come","to come","coming"],answer:"to come",why:"would like to do是固定结构。"},
+    {area:"介词",q:"The sports meeting is ____ Friday afternoon.",options:["in","on","at"],answer:"on",why:"具体到星期几的上午、下午或晚上，使用on。"},
+    {area:"比较级",q:"This river is ____ than that one.",options:["long","longer","longest"],answer:"longer",why:"than是比较级的重要标志。"},
+    {area:"副词",q:"Tom runs very ____.",options:["fast","fastly","faster"],answer:"fast",why:"fast本身既可作形容词也可作副词，不加ly。"},
+    {area:"主谓一致",q:"Neither Lily nor her friends ____ late.",options:["is","are","am"],answer:"are",why:"neither...nor采用就近原则，friends是复数。"},
+    {area:"特殊疑问句",q:"____ did you go last weekend? — I went to Xiamen.",options:["What","Where","When"],answer:"Where",why:"回答是地点Xiamen，因此用Where询问。"},
+    {area:"语序",q:"选择正确的句子。",options:["Can you tell me where the library is?","Can you tell me where is the library?","Where the library is?"],answer:"Can you tell me where the library is?",why:"间接问句中使用陈述语序where + 主语 + be动词。"},
+    {area:"连接词",q:"I stayed at home ____ it was raining heavily.",options:["because","but","or"],answer:"because",why:"后半句说明待在家的原因。"},
+    {area:"阅读",q:"Ben missed the bus, so he walked to school. Ben为什么步行？",options:["他错过了公交车","他喜欢运动","学校很近"],answer:"他错过了公交车",why:"missed the bus是步行上学的直接原因。"},
+    {area:"语境",q:"The box is too ____ for me to carry. I need help.",options:["heavy","hungry","healthy"],answer:"heavy",why:"需要别人帮忙搬箱子，说明箱子太重。"},
+    {area:"写作",q:"写过去的旅行经历，最合适的开头是？",options:["Last Sunday, I went to Fuzhou with my family.","Next Sunday, I will go to Fuzhou.","I go to Fuzhou every day."],answer:"Last Sunday, I went to Fuzhou with my family.",why:"题目要求过去经历，应有过去时间和过去式went。"}
+  ];
+  const BEGINNER_TABS = [
+    {id:"alphabet",icon:"🔠",name:"字母认识表",tip:"26个大小写字母"},
+    {id:"sounds",icon:"👂",name:"字母与声音",tip:"分清名称和常见音"},
+    {id:"phonics",icon:"🧩",name:"自然拼读起步",tip:"从声音拼成单词"},
+    {id:"ipa",icon:"👄",name:"音标课堂",tip:"48个标准音素"}
+  ];
+  const ALPHABET_LESSONS = [
+    ["A","a","/eɪ/","apple","苹果","a 在 apple 中常发 /æ/"],["B","b","/biː/","book","书","b 常发 /b/"],["C","c","/siː/","cat","猫","c 在 cat 中发 /k/"],["D","d","/diː/","dog","狗","d 常发 /d/"],["E","e","/iː/","egg","鸡蛋","e 在 egg 中常发 /e/"],["F","f","/ef/","fish","鱼","f 常发 /f/"],["G","g","/dʒiː/","girl","女孩","g 在 girl 中发 /g/"],["H","h","/eɪtʃ/","hand","手","h 常发 /h/"],["I","i","/aɪ/","ink","墨水","i 在 ink 中常发 /ɪ/"],["J","j","/dʒeɪ/","juice","果汁","j 常发 /dʒ/"],["K","k","/keɪ/","kite","风筝","k 常发 /k/"],["L","l","/el/","lion","狮子","l 常发 /l/"],["M","m","/em/","milk","牛奶","m 常发 /m/"],["N","n","/en/","nose","鼻子","n 常发 /n/"],["O","o","/əʊ/","orange","橙子","o 在 orange 中常发 /ɒ/"],["P","p","/piː/","pen","钢笔","p 常发 /p/"],["Q","q","/kjuː/","queen","女王","qu 常发 /kw/"],["R","r","/ɑː/","red","红色","r 常发 /r/"],["S","s","/es/","sun","太阳","s 常发 /s/"],["T","t","/tiː/","tiger","老虎","t 常发 /t/"],["U","u","/juː/","umbrella","雨伞","u 在 umbrella 中常发 /ʌ/"],["V","v","/viː/","van","货车","v 常发 /v/"],["W","w","/ˈdʌbəljuː/","water","水","w 常发 /w/"],["X","x","/eks/","box","盒子","x 在 box 中常发 /ks/"],["Y","y","/waɪ/","yellow","黄色","y 在 yellow 中发 /j/"],["Z","z","/zed/","zoo","动物园","z 常发 /z/"]
+  ];
+  const PAPER_TYPES = [
+    {id:"unit-basic",icon:"🌱",kind:"本单元专项",title:"单元基础卷",level:"基础",minutes:30,desc:"按听力、词汇、句型和综合理解四部分检查本单元基础。"},
+    {id:"unit-advanced",icon:"🚀",kind:"本单元专项",title:"单元提高卷",level:"提高",minutes:40,desc:"加入近形词、近音词、同词不同词形和相似句型，必须真正理解后才能选择。"},
+    {id:"review-a",icon:"🔁",kind:"过往知识累计",title:"累计复习 A 卷",level:"巩固",minutes:35,desc:"随机回顾当前单元之前学过的词汇与句型。"},
+    {id:"review-b",icon:"🧭",kind:"过往知识累计",title:"累计复习 B 卷",level:"综合",minutes:40,desc:"换一组题序和干扰项，检查是否真正记牢。"},
+    {id:"review-c",icon:"🏆",kind:"过往知识累计",title:"累计挑战 C 卷",level:"挑战",minutes:40,desc:"把过往知识放进完整句子，训练理解与运用。"},
+    {id:"fujian-combo",icon:"🏫",kind:"公开真题题型",title:"福建学校真题组合卷",level:"实战",minutes:45,desc:"参考福建多地学校公开卷结构，重新编写30道同类型题。"}
+  ];
+  const BRIDGE_PAPER_TYPE={id:"bridge-mock",icon:"🎓",kind:"六年级专属",title:"小升初综合模拟卷",level:"衔接",minutes:50,desc:"综合当前及过往知识，强化易错词、四大时态、语序、阅读和语境运用。"};
+  const PUBLIC_PAPER_REFERENCES = [
+    {area:"莆田",school:"麟峰小学",label:"六年级上学期期中阶段性评价",url:"https://zy.21cnjy.com/23958482"},
+    {area:"泉州",school:"台商投资区小学",label:"五年级下学期期末质量抽测",url:"https://zy.21cnjy.com/23325412"},
+    {area:"福州",school:"福州市小学",label:"2024年小升初英语试卷",url:"https://zy.21cnjy.com/21382786"},
+    {area:"漳州",school:"诏安县桥东片区",label:"三年级上学期过程性评价",url:"https://www.xxsj.org/sjdetail/2551.html"},
+    {area:"福建",school:"闽教版公开资源",label:"三年级上册Unit 3练习题",url:"https://www.tthaoke.com/shijuan_44837.html"}
+  ];
+
+  const ABILITY_TABS = [
+    {id:"diagnostic",icon:"🧭",name:"入学诊断",tip:"找到合适起点"},
+    {id:"natural-phonics",icon:"🔡",name:"自然拼读",tip:"看词会读、听音会拼"},
+    {id:"listening",icon:"🎧",name:"听力训练",tip:"只听声音判断意思"},
+    {id:"speaking",icon:"🎙️",name:"口语录音",tip:"听—录—回放—改进"}
+  ];
+  const DIAGNOSTIC_QUESTIONS = [
+    {area:"词汇",grade:3,q:"‘书包’的英文是？",options:["bag","book","desk"],answer:"bag",why:"bag 表示书包；book 是书，desk 是课桌。"},
+    {area:"句型",grade:3,q:"— How are you? — ____",options:["I'm fine.","I'm nine.","It's red."],answer:"I'm fine.",why:"How are you? 询问身体或近况，应回答 I'm fine. 等。"},
+    {area:"语法",grade:3,q:"This is ____ apple.",options:["a","an","the"],answer:"an",why:"apple 以元音音素开头，表示一个苹果用 an。"},
+    {area:"词汇",grade:4,q:"选择正确的复数：two ____",options:["box","boxs","boxes"],answer:"boxes",why:"box 以 x 结尾，复数通常加 -es。"},
+    {area:"语序",grade:4,q:"哪一句语序正确？",options:["Where the book is?","Where is the book?","The book where is?"],answer:"Where is the book?",why:"特殊疑问句常用“疑问词 + be动词 + 主语”。"},
+    {area:"阅读",grade:4,q:"‘It is rainy. Take an umbrella.’ 最合适的意思是？",options:["天晴了，戴帽子。","下雨了，带上雨伞。","天冷了，穿外套。"],answer:"下雨了，带上雨伞。",why:"rainy 是下雨的，umbrella 是雨伞。"},
+    {area:"动词",grade:5,q:"She ____ breakfast at seven every day.",options:["have","has","having"],answer:"has",why:"一般现在时中 she 是第三人称单数，have 变为 has。"},
+    {area:"时态",grade:5,q:"Yesterday I ____ to the park.",options:["go","went","will go"],answer:"went",why:"yesterday 表示过去，go 的过去式是 went。"},
+    {area:"介词",grade:5,q:"We have English ____ Monday.",options:["in","on","at"],answer:"on",why:"具体星期前使用介词 on。"},
+    {area:"句型",grade:6,q:"— What did you see? — I ____ two pandas.",options:["see","saw","seen"],answer:"saw",why:"问过去发生的事，回答中的 see 要用过去式 saw。"},
+    {area:"连接词",grade:6,q:"I stayed home ____ it was raining.",options:["because","but","or"],answer:"because",why:"后半句说明待在家的原因，所以用 because。"},
+    {area:"阅读",grade:6,q:"‘Tom is taller than Ben, but Ben runs faster.’ 哪项正确？",options:["Tom 更高，Ben 跑得更快。","Ben 更高，Tom 跑得更快。","两人一样高。"],answer:"Tom 更高，Ben 跑得更快。",why:"taller than 表示比……高；faster 表示更快。"},
+    {area:"字母",grade:3,q:"哪个字母排在 G 后面？",options:["F","H","J"],answer:"H",why:"英文字母顺序是 F、G、H、I、J。"},
+    {area:"词汇",grade:3,q:"‘红色’的英文是？",options:["red","read","blue"],answer:"red",why:"red 表示红色；read 表示阅读。"},
+    {area:"句型",grade:3,q:"— What's your name? — ____",options:["My name is Lily.","I'm ten.","It's a cat."],answer:"My name is Lily.",why:"What's your name? 询问姓名，应回答 My name is... 或 I'm...。"},
+    {area:"词汇",grade:4,q:"library 的意思是？",options:["图书馆","操场","教室"],answer:"图书馆",why:"library 是可以借阅和阅读书籍的图书馆。"},
+    {area:"代词",grade:4,q:"Amy is my sister. ____ is nine.",options:["He","She","It"],answer:"She",why:"Amy 是女孩，后一句用代词 she 指代。"},
+    {area:"介词",grade:4,q:"The ball is ____ the desk.（球在桌子下面）",options:["on","under","in"],answer:"under",why:"under 表示在……下面。"},
+    {area:"动词",grade:4,q:"We can ____ English songs.",options:["sing","sings","singing"],answer:"sing",why:"情态动词 can 后使用动词原形。"},
+    {area:"阅读",grade:4,q:"‘Lily has a blue coat.’ Lily 有什么？",options:["一件蓝色外套","一条蓝色裙子","一顶蓝色帽子"],answer:"一件蓝色外套",why:"blue coat 表示蓝色外套。"},
+    {area:"词形",grade:5,q:"study 的第三人称单数是？",options:["studys","studies","studying"],answer:"studies",why:"辅音字母加 y 结尾，变 y 为 i 再加 -es。"},
+    {area:"时态",grade:5,q:"Listen! The birds ____.",options:["sing","sang","are singing"],answer:"are singing",why:"Listen! 提示动作正在发生，应使用现在进行时。"},
+    {area:"比较级",grade:5,q:"An elephant is ____ than a rabbit.",options:["big","bigger","biggest"],answer:"bigger",why:"than 前通常使用比较级；big 的比较级双写 g 加 -er。"},
+    {area:"搭配",grade:5,q:"选择正确搭配：____ photos",options:["take","make","do"],answer:"take",why:"take photos 是“拍照”的固定搭配。"},
+    {area:"阅读",grade:5,q:"‘Ben usually walks to school, but today he goes by bus.’ 今天 Ben 怎样上学？",options:["步行","坐公交车","骑自行车"],answer:"坐公交车",why:"today he goes by bus 表示今天他坐公交车。"},
+    {area:"时态",grade:6,q:"We ____ Xiamen next Sunday.",options:["visit","visited","will visit"],answer:"will visit",why:"next Sunday 表示将来，使用 will + 动词原形。"},
+    {area:"主谓一致",grade:6,q:"Neither Tom nor his friends ____ late.",options:["is","are","am"],answer:"are",why:"就近看 his friends 是复数，因此使用 are。"},
+    {area:"从句",grade:6,q:"I know the girl ____ is reading under the tree.",options:["who","where","when"],answer:"who",why:"先行词是人，关系词在从句中作主语，可用 who。"},
+    {area:"语序",grade:6,q:"选择正确句子。",options:["Could you tell me where the library is?","Could you tell me where is the library?","Where the library is could you tell me?"],answer:"Could you tell me where the library is?",why:"宾语从句使用陈述语序：where + 主语 + be动词。"},
+    {area:"阅读",grade:6,q:"‘Although it was cold, the children kept playing outside.’ 哪项正确？",options:["天气冷，但孩子们继续在外面玩。","天气热，孩子们回家了。","因为下雨，孩子们停止玩耍。"],answer:"天气冷，但孩子们继续在外面玩。",why:"although 表示“虽然”，kept playing 表示继续玩。"}
+  ];
+  DIAGNOSTIC_QUESTIONS.sort((a,b)=>a.grade-b.grade);
+  const NATURAL_PHONICS_LESSONS = [
+    {id:"short-vowels",level:"第1关",title:"短元音与 CVC 拼读",rule:"三个音依次滑读，再合成一个词。元音要短，不要拖长。",pattern:"辅音 + 短元音 + 辅音",examples:["cat","pen","sit","hot","sun"],blend:["c → a → t","/k/ → /æ/ → /t/","cat"],quiz:{q:"哪个词中的 a 发短音 /æ/？",options:["cat","cake","day"],answer:"cat",why:"cat 是 CVC 结构，a 发 /æ/；cake 和 day 中 a 发 /eɪ/。"}},
+    {id:"digraphs",level:"第2关",title:"辅音字母组合",rule:"两个字母常常合起来表示一个声音，不能拆成两个字母名来读。",pattern:"sh / ch / th / wh",examples:["ship","chair","three","white"],blend:["sh → i → p","/ʃ/ → /ɪ/ → /p/","ship"],quiz:{q:"哪个词以 /ʃ/ 开头？",options:["ship","chair","three"],answer:"ship",why:"sh 常发 /ʃ/；ch 常发 /tʃ/；th 在 three 中发 /θ/。"}},
+    {id:"silent-e",level:"第3关",title:"神奇的静音 e",rule:"词尾 e 通常不单独发音，却会让前面的元音读字母本身的长音。",pattern:"a-e / i-e / o-e / u-e",examples:["cake","bike","home","cute"],blend:["c-a-k → cap 的短音规律","加上词尾 e","cake /keɪk/"],quiz:{q:"哪组词体现了静音 e 改变元音？",options:["cap—cape","cat—cats","dog—dogs"],answer:"cap—cape",why:"cape 的词尾 e 不发音，使 a 从 /æ/ 变为 /eɪ/。"}},
+    {id:"vowel-teams",level:"第4关",title:"元音字母组合",rule:"两个元音字母组合后常出现稳定读音，但也要留意少量特殊词。",pattern:"ee / ea / ai / ay / oa",examples:["green","read","rain","day","boat"],blend:["r → ai → n","/r/ → /eɪ/ → /n/","rain"],quiz:{q:"哪个字母组合在 boat 中常发 /əʊ/？",options:["oa","ai","ee"],answer:"oa",why:"boat 中 oa 发 /əʊ/，把 b + oa + t 合读。"}},
+    {id:"r-controlled",level:"第5关",title:"r 控制元音",rule:"元音后跟 r 时，读音会发生变化。先把组合当作一个整体记。",pattern:"ar / or / er / ir / ur",examples:["car","short","her","bird","nurse"],blend:["b → ir → d","/b/ → /ɜː/ → /d/","bird"],quiz:{q:"bird 和 nurse 中间的元音最接近哪个音？",options:["/ɜː/","/æ/","/eɪ/"],answer:"/ɜː/",why:"ir 和 ur 在这两个词中都常发 /ɜː/。"}},
+    {id:"syllables",level:"第6关",title:"音节与重读",rule:"多音节词先分节，再找重读音节。重读部分更清楚，弱读部分更轻。",pattern:"音节拍手 + 重读标记",examples:["teacher","banana","computer","holiday"],blend:["com · PU · ter","中间音节重读","computer"],quiz:{q:"computer 的重读音节在哪里？",options:["第1音节","第2音节","第3音节"],answer:"第2音节",why:"computer /kəmˈpjuːtə/ 中 ˈ 在第二音节前。"}}
+  ];
+  const NATURAL_PHONICS_DRILLS = {
+    "short-vowels":[
+      {q:"pen 中的 e 发哪个音？",options:["/e/","/iː/","/əʊ/"],answer:"/e/",why:"pen 是 CVC 结构，e 发短音 /e/。"},
+      {q:"sit 中的 i 发哪个音？",options:["/ɪ/","/aɪ/","/iː/"],answer:"/ɪ/",why:"sit 中 i 发短促的 /ɪ/。"},
+      {q:"hot 中的 o 发哪个音？",options:["/ɒ/","/əʊ/","/uː/"],answer:"/ɒ/",why:"hot 中 o 发短元音 /ɒ/。"},
+      {q:"sun 中的 u 发哪个音？",options:["/ʌ/","/uː/","/ʊ/"],answer:"/ʌ/",why:"sun 中 u 常发短元音 /ʌ/。"},
+      {q:"哪个词符合 CVC 结构？",options:["dog","rain","tree"],answer:"dog",why:"dog 是辅音 d + 元音 o + 辅音 g。"},
+      {q:"哪个词不使用短元音规律？",options:["cake","map","bed"],answer:"cake",why:"cake 有静音 e，a 发长音 /eɪ/。"},
+      {q:"把 /m/、/æ/、/p/ 合起来是？",options:["map","mop","make"],answer:"map",why:"三个音依次合成 /mæp/，拼写为 map。"}
+    ],
+    digraphs:[
+      {q:"ship 开头的 sh 发什么音？",options:["/ʃ/","/s/","/tʃ/"],answer:"/ʃ/",why:"sh 常作为整体发 /ʃ/。"},
+      {q:"chair 开头的 ch 发什么音？",options:["/tʃ/","/ʃ/","/k/"],answer:"/tʃ/",why:"chair 中 ch 发 /tʃ/。"},
+      {q:"three 开头的 th 发什么音？",options:["/θ/","/ð/","/f/"],answer:"/θ/",why:"three 中 th 是清音 /θ/。"},
+      {q:"this 开头的 th 发什么音？",options:["/ð/","/θ/","/d/"],answer:"/ð/",why:"this 中 th 是声带振动的 /ð/。"},
+      {q:"white 中哪个组合在词首？",options:["wh","sh","ch"],answer:"wh",why:"white 以字母组合 wh 开头。"},
+      {q:"哪个词含有 sh 组合？",options:["fish","thin","chip"],answer:"fish",why:"fish 结尾是 sh。"},
+      {q:"哪个词以 /tʃ/ 开头？",options:["child","ship","white"],answer:"child",why:"child 的 ch 发 /tʃ/。"}
+    ],
+    "silent-e":[
+      {q:"kit 加上词尾 e 变成？",options:["kite","kitt","keit"],answer:"kite",why:"kite 中词尾 e 不发音，使 i 发 /aɪ/。"},
+      {q:"hop 加上静音 e 后是？",options:["hope","hoop","hopp"],answer:"hope",why:"hope 中 o 发字母长音 /əʊ/。"},
+      {q:"cub 加上静音 e 后是？",options:["cube","cubb","cobe"],answer:"cube",why:"cube 中 u 受到词尾 e 影响。"},
+      {q:"tap 与 tape 的元音有什么不同？",options:["tap短、tape长","都发短音","都发长音"],answer:"tap短、tape长",why:"tape 的词尾 e 使 a 发 /eɪ/。"},
+      {q:"哪个词含静音 e？",options:["home","hot","hand"],answer:"home",why:"home 的 e 通常不单独发音。"},
+      {q:"静音 e 自己通常怎样发音？",options:["不发音","发 /e/","发 /iː/"],answer:"不发音",why:"它通常不发音，但会改变前面元音的读音。"},
+      {q:"哪组是短音词变长音词？",options:["rid—ride","red—read","sit—sits"],answer:"rid—ride",why:"ride 的静音 e 使 i 从短音变为 /aɪ/。"}
+    ],
+    "vowel-teams":[
+      {q:"green 中 ee 常发什么音？",options:["/iː/","/e/","/ɪ/"],answer:"/iː/",why:"green 中 ee 发长元音 /iː/。"},
+      {q:"read（读，原形）中的 ea 常发？",options:["/iː/","/æ/","/ɒ/"],answer:"/iː/",why:"read 作原形时通常读 /riːd/。"},
+      {q:"rain 中 ai 常发什么音？",options:["/eɪ/","/aɪ/","/əʊ/"],answer:"/eɪ/",why:"rain 中 ai 发 /eɪ/。"},
+      {q:"day 中 ay 常发什么音？",options:["/eɪ/","/aʊ/","/ɔɪ/"],answer:"/eɪ/",why:"day 中 ay 发 /eɪ/。"},
+      {q:"boat 中 oa 常发什么音？",options:["/əʊ/","/ɒ/","/uː/"],answer:"/əʊ/",why:"boat 中 oa 发 /əʊ/。"},
+      {q:"哪个词含 ee 组合？",options:["sheep","ship","shop"],answer:"sheep",why:"sheep 中 ee 发长音 /iː/。"},
+      {q:"看见元音组合时，第一步应该？",options:["把组合当整体尝试发音","逐个读字母名","直接跳过"],answer:"把组合当整体尝试发音",why:"自然拼读先识别常见字母组合，再合成整词。"}
+    ],
+    "r-controlled":[
+      {q:"car 中 ar 常发什么音？",options:["/ɑː/","/eə/","/ɜː/"],answer:"/ɑː/",why:"car 中 ar 常发 /ɑː/。"},
+      {q:"short 中 or 常发什么音？",options:["/ɔː/","/ɒ/","/aʊ/"],answer:"/ɔː/",why:"short 中 or 常发 /ɔː/。"},
+      {q:"her 中 er 的读音接近？",options:["/ɜː/","/iː/","/æ/"],answer:"/ɜː/",why:"her 中 er 发 /ɜː/。"},
+      {q:"bird 中控制元音的组合是？",options:["ir","bi","rd"],answer:"ir",why:"ir 是需要整体识别的 r 控制元音组合。"},
+      {q:"nurse 中的 ur 常发？",options:["/ɜː/","/uː/","/ʌ/"],answer:"/ɜː/",why:"nurse 中 ur 发 /ɜː/。"},
+      {q:"哪个词中的 ar 发 /ɑː/？",options:["park","pair","pen"],answer:"park",why:"park 中 ar 发 /ɑː/。"},
+      {q:"遇到 ar、or、ir 时应该怎样拼？",options:["把元音和 r 当整体","忽略 r","只读 r"],answer:"把元音和 r 当整体",why:"r 会控制前面元音的音色，应整体识别。"}
+    ],
+    syllables:[
+      {q:"teacher 有几个音节？",options:["1个","2个","3个"],answer:"2个",why:"teacher 可分为 teach·er 两个音节。"},
+      {q:"banana 有几个音节？",options:["2个","3个","4个"],answer:"3个",why:"banana 可按 ba·na·na 分为三个音节。"},
+      {q:"holiday 有几个音节？",options:["2个","3个","4个"],answer:"3个",why:"holiday 通常分为 hol·i·day 三个音节。"},
+      {q:"computer 有几个音节？",options:["2个","3个","4个"],answer:"3个",why:"computer 可分为 com·pu·ter 三个音节。"},
+      {q:"banana 通常重读哪个音节？",options:["第1音节","第2音节","第3音节"],answer:"第2音节",why:"banana /bəˈnɑːnə/ 的第二音节重读。"},
+      {q:"holiday 通常重读哪个音节？",options:["第1音节","第2音节","第3音节"],answer:"第1音节",why:"holiday /ˈhɒlədeɪ/ 的第一音节重读。"},
+      {q:"遇到很长的单词，先怎样做？",options:["分音节再拼读","只猜第一个字母","每个字母都读字母名"],answer:"分音节再拼读",why:"分音节能减少一次需要处理的声音数量。"}
+    ]
+  };
 
   const PHONICS_GROUPS = {
     short:{name:"短元音",tip:"声音短而有力，不要拖长。",items:[
@@ -112,6 +319,41 @@
   const WORD_COMMON_MEANINGS={
     light:["灯；灯光","光线","轻的","浅色的","点燃"],in:["在……里面","进入；在内","在家；在场","流行的"],right:["右边","正确的","权利","恰好"],left:["左边","离开了","剩下的"],fine:["很好","健康的","精细的","罚款"],kind:["亲切的；善良的","种类"],well:["好；很好地","健康的","井"],watch:["观看","手表","留意；看守"],play:["玩；参加运动","演奏","戏剧","播放"],call:["打电话","呼叫；称呼","叫声"],change:["零钱","改变；变化","更换"],fit:["合身","适合","健康的"],mean:["意思是","意味着","吝啬的；刻薄的"],orange:["橙色","橙子"],fish:["鱼；鱼肉","捕鱼"],water:["水","给……浇水"],work:["工作","起作用","作品"],rest:["休息","其余部分"],plan:["计划","平面图"],trip:["旅行","绊倒"],train:["火车","训练"],book:["书","预订"],class:["班级","课程","等级；种类"],school:["学校","学派；学校全体师生"],read:["阅读","读懂；显示"],run:["跑步","经营","运行"],draw:["画画","拉；拖","平局"],wear:["穿；戴","磨损"],meet:["遇见；会面","满足；符合"],please:["请","使高兴；使满意"],name:["名字","命名"],friend:["朋友","支持者"],family:["家庭；家人","家族"],love:["爱；喜爱","热爱的人或事"],like:["喜欢","像；如同"],day:["一天","白天","时期"],color:["颜色","给……涂色"],cold:["寒冷的","感冒","冷淡的"],warm:["温暖的","热情的","使暖和"],party:["聚会","政党","一方；团体"],gift:["礼物","天赋"],time:["时间","次数","为……计时"],homework:["家庭作业","准备工作"],clean:["干净的","打扫","完全地"],flower:["花","开花"],visit:["拜访；参观","访问；逗留"],stay:["停留","保持","住宿"],message:["留言；消息","要旨"],busy:["忙碌的","占线的","热闹的"],number:["数字；号码","数量","编号"],short:["矮的；短的","缺少的","短裤（shorts）"],strong:["强壮的","强烈的","擅长的"],hard:["努力地","困难的","坚硬的"],star:["星星","明星","主演"],present:["礼物","现在","出席的","展示"],card:["卡片","纸牌","证件"],spring:["春天","泉水","弹簧","跳起"],season:["季节","给食物调味"],park:["公园","停车"],show:["展示","演出","表明"],matter:["问题；事情","要紧；有关系"],dream:["梦想","做梦"],future:["未来","将来的"],memory:["记忆；回忆","存储器"],miss:["想念","错过","未击中"],wish:["祝愿；愿望","希望"],help:["帮助","有帮助的人或事"],carry:["搬运；携带","传播；延伸"],cook:["厨师","做饭"],dance:["跳舞","舞蹈"],smile:["微笑","笑容"],exercise:["锻炼","练习；习题"],race:["赛跑；比赛","种族"],game:["游戏；比赛","猎物"],team:["队","合作"],floor:["地板","楼层"],view:["景色","观点","观看"],date:["日期","约会","枣"],space:["太空","空间；空白"],earth:["地球","泥土"],moon:["月球；月亮","一个月的时间（文学用法）"],sun:["太阳","晒太阳"],rock:["岩石","摇动","摇滚乐"]
   };
+  const PAPER_EXTRA_MEANINGS={
+    "let's":"让我们",all:"全部；所有",another:"另一个",any:"任何；一些",as:"作为；像",away:"离开",back:"回来；后面",bed:"床",best:"最好的",both:"两者都",chess:"国际象棋",computer:"计算机",cousin:"堂（表）兄弟姐妹",different:"不同的",down:"向下",during:"在……期间",each:"每一个",early:"早；早的",else:"其他",every:"每一个",first:"第一；首先",football:"足球",friendly:"友好的；亲切的",got:"得到；到达",into:"进入",just:"正好；只是",more:"更多",most:"最多；大多数",only:"仅仅；唯一的",other:"其他的",out:"向外",really:"真正地",room:"房间",same:"相同的",sentence:"句子",small:"小的",some:"一些",something:"某事",than:"比",them:"他们；它们（宾格）",then:"然后；那时",thing:"事情；东西",three:"三",two:"二",unit:"单元",up:"向上",word:"单词","didn't":"没有；did not","doesn't":"不；does not","don't":"不；do not","can't":"不能","won't":"不会","could":"能够；可以","should":"应该"
+  };
+  const paperTextKey=text=>String(text||"").trim().replace(/[“”]/g,'"').replace(/[’]/g,"'").replace(/\s+/g," ").replace(/[.!?]+$/g,"").toLowerCase();
+  const PAPER_LEXICON=new Map(),PAPER_SENTENCE_MEANINGS=new Map();
+  Object.entries(BASIC_MEANINGS).forEach(([word,meaning])=>PAPER_LEXICON.set(word,meaning));
+  Object.entries(PAPER_EXTRA_MEANINGS).forEach(([word,meaning])=>PAPER_LEXICON.set(word,meaning));
+  Object.entries(WORD_COMMON_MEANINGS).forEach(([word,meanings])=>PAPER_LEXICON.set(word,meanings[0]));
+  (window.GAOKAO_WORDS||[]).forEach(item=>{if(!PAPER_LEXICON.has(item.word.toLowerCase()))PAPER_LEXICON.set(item.word.toLowerCase(),item.meaning);});
+  COURSE_BOOKS.forEach(book=>book.units.forEach(unit=>{unit.core.forEach(word=>{const key=word.word.toLowerCase();if(!PAPER_LEXICON.has(key))PAPER_LEXICON.set(key,word.meaning);PAPER_SENTENCE_MEANINGS.set(paperTextKey(word.example),word.exampleZh);});unit.patterns.forEach(pattern=>PAPER_SENTENCE_MEANINGS.set(paperTextKey(pattern.en),pattern.zh));}));
+  function paperTokenMeaning(token){
+    const clean=String(token).toLowerCase().replace(/[’]/g,"'"),direct=PAPER_LEXICON.get(clean);if(direct)return direct;
+    const candidates=[];
+    if(clean.endsWith("'s"))candidates.push(clean.slice(0,-2));
+    if(clean.endsWith("ies"))candidates.push(clean.slice(0,-3)+"y");
+    if(clean.endsWith("ied"))candidates.push(clean.slice(0,-3)+"y");
+    if(clean.endsWith("ing"))candidates.push(clean.slice(0,-3),clean.slice(0,-3)+"e");
+    if(clean.endsWith("ed"))candidates.push(clean.slice(0,-2),clean.slice(0,-1));
+    if(clean.endsWith("es"))candidates.push(clean.slice(0,-2),clean.slice(0,-1));
+    if(clean.endsWith("s"))candidates.push(clean.slice(0,-1));
+    for(const candidate of candidates){const meaning=PAPER_LEXICON.get(candidate);if(meaning)return`${meaning}（${token}为词形变化）`;}
+    if(/^[A-Z]/.test(token))return"人名、地名或专有名称";
+    return"结合本句语境理解";
+  }
+  function paperExactMeaning(text){const key=paperTextKey(text);return PAPER_SENTENCE_MEANINGS.get(key)||PAPER_LEXICON.get(key)||"";}
+  function paperGlossaryMarkup(text,title="逐词中文意思"){
+    const tokens=String(text||"").match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g)||[],unique=[];tokens.forEach(token=>{if(!unique.some(item=>item.toLowerCase()===token.toLowerCase()))unique.push(token);});if(!unique.length)return"";
+    const whole=paperExactMeaning(text),wholeMarkup=whole?`<p><b>整体意思</b><span>${esc(String(text).trim())}：${esc(whole)}</span></p>`:"";
+    return `<div class="paper-word-glossary"><strong>${esc(title)}</strong>${wholeMarkup}<div>${unique.map(token=>`<span><b>${esc(token)}</b><em>${esc(paperTokenMeaning(token))}</em></span>`).join("")}</div></div>`;
+  }
+  function paperAnnotatedTextMarkup(text){
+    const source=String(text||""),regex=/[A-Za-z]+(?:['’][A-Za-z]+)?/g,parts=[];let last=0,match;
+    while((match=regex.exec(source))){parts.push(esc(source.slice(last,match.index)));parts.push(`<span class="paper-inline-word"><b>${esc(match[0])}</b><small>${esc(paperTokenMeaning(match[0]))}</small></span>`);last=match.index+match[0].length;}
+    parts.push(esc(source.slice(last)));return parts.join("");
+  }
   const WORD_PROFILE_OVERRIDES={
     light:{pos:"名词 / 形容词 / 动词",forms:"名词单数 light；复数 lights；形容词无单复数"},in:{pos:"介词 / 副词 / 形容词",forms:"无单复数变化"},right:{pos:"名词 / 形容词 / 副词",forms:"名词单数 right；复数 rights"},left:{pos:"名词 / 形容词 / 副词 / leave的过去式",forms:"名词单数 left；复数 lefts（少用）"},kind:{pos:"形容词 / 名词",forms:"名词单数 kind；复数 kinds"},watch:{pos:"动词 / 名词",forms:"名词单数 watch；复数 watches；动词三单 watches"},play:{pos:"动词 / 名词",forms:"名词单数 play；复数 plays；动词三单 plays"},call:{pos:"动词 / 名词",forms:"名词单数 call；复数 calls；动词三单 calls"},change:{pos:"动词 / 名词",forms:"名词单数 change；复数 changes；动词三单 changes"},fit:{pos:"动词 / 形容词",forms:"无名词单复数；动词三单 fits"},orange:{pos:"名词 / 形容词",forms:"名词单数 orange；复数 oranges"},fish:{pos:"名词 / 动词",forms:"名词单数 fish；复数 fish（常用）/ fishes（种类）"},water:{pos:"不可数名词 / 动词",forms:"通常无复数；动词三单 waters"},work:{pos:"不可数名词 / 动词",forms:"表示工作时通常无复数；动词三单 works"},rest:{pos:"名词 / 动词",forms:"名词单数 rest；复数 rests；动词三单 rests"},plan:{pos:"名词 / 动词",forms:"名词单数 plan；复数 plans；动词三单 plans"},train:{pos:"名词 / 动词",forms:"名词单数 train；复数 trains；动词三单 trains"},book:{pos:"名词 / 动词",forms:"名词单数 book；复数 books；动词三单 books"},class:{pos:"名词",forms:"单数 class；复数 classes"},present:{pos:"名词 / 形容词 / 动词",forms:"名词单数 present；复数 presents"},spring:{pos:"名词 / 动词",forms:"名词单数 spring；复数 springs"},park:{pos:"名词 / 动词",forms:"名词单数 park；复数 parks；动词三单 parks"},show:{pos:"动词 / 名词",forms:"名词单数 show；复数 shows；动词三单 shows"},matter:{pos:"名词 / 动词",forms:"名词单数 matter；复数 matters；动词三单 matters"},dream:{pos:"名词 / 动词",forms:"名词单数 dream；复数 dreams；动词三单 dreams"},miss:{pos:"动词 / 名词",forms:"动词三单 misses；名词 Miss 用于未婚女性称谓"},wish:{pos:"名词 / 动词",forms:"名词单数 wish；复数 wishes；动词三单 wishes"},help:{pos:"名词 / 动词",forms:"作“帮助”时通常不可数；动词三单 helps"},cook:{pos:"名词 / 动词",forms:"名词单数 cook；复数 cooks；动词三单 cooks"},dance:{pos:"名词 / 动词",forms:"名词单数 dance；复数 dances；动词三单 dances"},exercise:{pos:"名词 / 动词",forms:"名词单数 exercise；复数 exercises；动词三单 exercises"},race:{pos:"名词 / 动词",forms:"名词单数 race；复数 races；动词三单 races"},floor:{pos:"名词",forms:"单数 floor；复数 floors"},date:{pos:"名词 / 动词",forms:"名词单数 date；复数 dates；动词三单 dates"},view:{pos:"名词 / 动词",forms:"名词单数 view；复数 views；动词三单 views"},space:{pos:"名词",forms:"表示空间时可数或不可数；复数 spaces"}
   };
@@ -150,7 +392,6 @@
     const blob=new Blob([buffer],{type:"application/octet-stream"});localAudioPartBlobs.set(part.url,blob);return new Uint8Array(await blob.slice(start,start+length).arrayBuffer());
   }
   function playLocalVoice(text,rate,requestId,fallback){
-    if(!localAudioPackReady)return false;
     const pack=audioPack(),entry=pack?.entries?.[audioKey(text)];if(!entry)return false;
     try{
       const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(!AudioContextClass)return false;
@@ -305,7 +546,7 @@
   function switchProfile(profileId){
     const nextId=validProfileId(profileId);if(nextId===activeUserId){closeProfileDialog();return;}
     save();activeUserId=nextId;localStorage.setItem(ACTIVE_PROFILE_STORE,activeUserId);state=load(activeUserId);
-    selectedGrade=Number(state.bookId[1])||4;selectedTerm=state.bookId.endsWith("a")?"上册":"下册";memoryFilter="current";memoryIndex=0;memoryFlipped=false;quizAnswers={};grammarAnswers={};grammarResult=null;
+    selectedGrade=Number(state.bookId[1])||4;selectedTerm=state.bookId.endsWith("a")?"上册":"下册";outlineGrade=selectedGrade;outlineTerm=selectedTerm;beginnerTab="alphabet";paperGrade=selectedGrade;paperTerm=selectedTerm;paperUnitIndex=state.unitIndex;paperActiveId="";paperAnswers={};paperChecked=false;memoryFilter="current";memoryIndex=0;memoryFlipped=false;quizAnswers={};grammarAnswers={};grammarResult=null;diagnosticAnswers={};diagnosticPage=0;abilityListeningAnswers={};abilityListeningChecked=false;abilityPhonicsAnswers={};abilityPhonicsChecked=false;bridgeAbilityAnswers={};bridgeAbilityChecked=false;speakingRecordedKeys=new Set();
     carePlant();carePets();renderHeader();closeProfileDialog();route("home");toast(`已切换到${USER_PROFILES.find(item=>item.id===activeUserId).name}，学习记录互不混用`);
   }
   const installedAsApp = () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone===true;
@@ -376,17 +617,73 @@
     document.querySelectorAll(".main-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===view || (view==="unit"&&b.dataset.view==="courses")));
     if(view==="home") renderHome();
     if(view==="courses") renderCourses();
+    if(view==="outline") renderOutline();
+    if(view==="papers") renderPapers();
+    if(view==="abilities") renderAbilities();
     if(view==="unit") renderUnit();
     if(view==="today") renderToday();
     if(view==="words") renderWords();
     if(view==="dictionary") renderDictionary();
-    if(view==="phonics") renderPhonics();
+    if(view==="beginner") renderBeginner();
     if(view==="grammar") renderGrammar();
+    if(view==="bridge") renderBridge();
     if(view==="market") renderMarket();
     if(view==="garden") renderGarden();
     if(view==="pets") renderPets();
     if(view==="report") renderReport();
     window.scrollTo({top:0,behavior:"smooth"});
+  }
+
+  const bridgeTaskKey=(week,index)=>`w${week}:d${index}`;
+  const bridgeDoneCount=()=>state.bridge.done.length;
+  function renderBridgeBanner(id,show,context){
+    const host=$(id);if(!host)return;host.hidden=!show;if(!show){host.innerHTML="";return;}
+    const week=BRIDGE_WEEKS[Math.max(0,Math.min(BRIDGE_WEEKS.length-1,Number(state.bridge.week||1)-1))],percent=Math.round(bridgeDoneCount()/(BRIDGE_WEEKS.length*5)*100);
+    host.innerHTML=`<div><span>🎓</span><div><small>仅在六年级课程内开放 · PRIMARY TO JUNIOR HIGH</small><h2>小升初强化学习资料</h2><p>${esc(context)}专属 · 当前第${week.week}周“${esc(week.title)}” · 已学${bridgeDoneCount()}/60课 · ${percent}%</p></div></div><button class="primary" data-view="bridge">进入12周资料课程 →</button>`;
+  }
+  function renderBridge(){
+    state.bridge.week=Math.max(1,Math.min(BRIDGE_WEEKS.length,Number(state.bridge.week||1)));const week=BRIDGE_WEEKS[state.bridge.week-1],done=bridgeDoneCount(),total=BRIDGE_WEEKS.length*5,weekDone=week.days.filter((_,index)=>state.bridge.done.includes(bridgeTaskKey(week.week,index))).length,rewarded=state.bridge.rewarded.includes(week.week),phases=[
+      ["1—3周","基础校准","词汇拼读、名词代词、四大时态"],["4—8周","专项突破","动词、介词、比较、语序、连接词"],["9—11周","综合运用","阅读、完形、写作与口语"],["第12周","模拟冲刺","两套综合卷与错题回炉"]
+    ];
+    const materialCount=(window.BRIDGE_LESSON_MATERIALS||[]).reduce((sum,items)=>sum+items.length,0);
+    $("bridgeDashboard").innerHTML=`<article class="bridge-main-progress"><div><span>🎓</span><div><small>我的小升初资料课进度</small><h2>${done} / ${total} 课</h2><p>当前第${week.week}周 · ${esc(week.phase)} · ${esc(week.title)}</p></div></div><aside><b>${Math.round(done/total*100)}%</b><i><em style="width:${done/total*100}%"></em></i><small>五个学习身份分别保存</small></aside></article><article><b>${state.bridge.rewarded.length}/12</b><small>完成学习周</small></article><article><b>${materialCount}</b><small>完整学习资料</small></article><article><b>${materialCount*3}</b><small>随堂检查题</small></article>`;
+    $("bridgeDailyMethod").innerHTML=`<div><small>每课约30—40分钟 · 先学懂再完成</small><h2>每项任务都是一节资料课</h2><p>点击任务会打开独立学习窗口。认真阅读讲解和3个例句，完成3道随堂检查并订正后，才会记为完成。</p></div><div class="bridge-time-grid"><span><b>第1步</b>阅读讲解<br>理解规则和易错点</span><span><b>第2步</b>学习例句<br>英文、中文、用法</span><span><b>第3步</b>随堂检查<br>独立完成3道题</span><span><b>第4步</b>订正完成<br>错题改对再记录</span></div>`;
+    $("bridgePhaseMap").innerHTML=phases.map((item,index)=>`<article class="${week.phase===item[1]?"active":""}"><span>${index+1}</span><small>${item[0]}</small><h3>${item[1]}</h3><p>${item[2]}</p></article>`).join("");
+    $("bridgeWeekNav").innerHTML=`<header><small>12-WEEK PLAN</small><h2>选择学习周</h2></header>${BRIDGE_WEEKS.map(item=>{const count=item.days.filter((_,index)=>state.bridge.done.includes(bridgeTaskKey(item.week,index))).length;return `<button class="${item.week===week.week?"active":""} ${count===5?"done":""}" data-bridge-week="${item.week}"><span>${count===5?"✓":item.week}</span><div><small>${esc(item.phase)}</small><b>${esc(item.title)}</b><em>${count}/5项</em></div></button>`;}).join("")}`;
+    $("bridgeWeekWorkspace").innerHTML=`<header><div><small>第${week.week}周 · ${esc(week.phase)}</small><h2>${esc(week.title)}</h2><p>${esc(week.goal)}</p></div><aside><b>${weekDone}/5</b><small>本周学完</small></aside></header><section class="bridge-week-output"><b>本周学习成果</b><p>${esc(week.output)}</p></section><div class="bridge-day-list">${week.days.map((task,index)=>{const key=bridgeTaskKey(week.week,index),checked=state.bridge.done.includes(key);return `<button class="${checked?"done":""}" data-bridge-lesson="${key}"><span>${checked?"✓":index+1}</span><div><small>${["周一","周二","周三","周四","周五"][index]} · 一节独立资料课</small><b>${esc(task)}</b><p>包含知识讲解、3个例句和3道随堂检查；做错可以订正后再次检查。</p></div><em>${checked?"复习资料":"打开学习资料 →"}</em></button>`}).join("")}</div><footer><div><b>${weekDone===5?"本周5节资料课已全部学完":"还差 "+(5-weekDone)+" 节资料课"}</b><p>${rewarded?"本周奖励已经领取，仍可随时重新打开资料复习。":"全部学完并通过检查后，领取3个小太阳和2份粮食。"}</p></div><button class="primary" data-bridge-claim="${week.week}" ${weekDone<5||rewarded?"disabled":""}>${rewarded?"✓ 已领取":weekDone<5?"学完5课后领取":"领取本周奖励"}</button></footer>`;
+    $("bridgeKnowledge").innerHTML=`<div class="section-head"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>小升初必备知识总纲</h2><p>每一个知识分支都已经编入上方60节资料课，可以按周学习，也可以反复打开复习。</p></div></div><div>${BRIDGE_KNOWLEDGE.map((item,index)=>`<article><span>${index+1}</span><h3>${item[0]}</h3><p>${item[1]}</p><small>${item[2]}</small></article>`).join("")}</div>`;
+    const guides=[["📖","知识讲解","说明规则、适用场景和常见易错点"],["💬","3个例句","逐句提供英文、中文和本句用法说明"],["✍️","3题检查","独立作答，错误时立即显示答案和原因"],["✅","订正完成","全部答对后才记录完成，可反复打开复习"]];
+    $("bridgeModuleLinks").innerHTML=`<div class="section-head"><div><span class="eyebrow">REAL LEARNING MATERIALS</span><h2>每节资料课包含什么</h2><p>这里不再跳转到每日任务、能力中心、语法、试卷、单词本、词典库或成长日报。</p></div></div><div>${guides.map(item=>`<article><span>${item[0]}</span><b>${item[1]}</b><small>${item[2]}</small></article>`).join("")}</div>`;
+  }
+
+  function bridgeLessonFromKey(key){
+    const match=String(key||"").match(/^w(\d+):d(\d+)$/),weekNo=Number(match?.[1]),dayIndex=Number(match?.[2]);
+    if(!weekNo||dayIndex<0)return null;
+    const week=BRIDGE_WEEKS[weekNo-1],material=window.BRIDGE_LESSON_MATERIALS?.[weekNo-1]?.[dayIndex];
+    if(!week||!material)return null;
+    return {key,weekNo,dayIndex,week,task:week.days[dayIndex],material};
+  }
+  function openBridgeLesson(key){
+    const lesson=bridgeLessonFromKey(key);if(!lesson)return toast("这节学习资料暂时无法读取，请刷新网页后重试");
+    const {weekNo,dayIndex,week,task,material}=lesson,alreadyDone=state.bridge.done.includes(key),dialog=$("practiceDialog");
+    $("practiceDialogContent").innerHTML=`<div class="bridge-lesson-window"><header><span>🎓</span><div><small>第${weekNo}周 · 第${dayIndex+1}课 · 学习资料</small><h2 id="practiceDialogTitle">${esc(task)}</h2><p>${esc(week.goal)}</p></div></header><section class="bridge-lesson-teach"><small>先学懂</small><h3>知识讲解</h3><p>${esc(material.teach)}</p><div>${material.points.map((point,index)=>`<article><b>${index+1}</b><span>${esc(point)}</span></article>`).join("")}</div></section><section class="bridge-lesson-examples"><div class="bridge-lesson-section-head"><div><small>再看会</small><h3>3个完整例句</h3></div><span>可以播放英文</span></div><div>${material.examples.map((item,index)=>`<article><header><b>例句 ${index+1}</b><button type="button" data-say="${esc(item[0])}" aria-label="播放例句${index+1}">🔊 播放</button></header><p>${esc(item[0])}</p><em>${esc(item[1])}</em><small><b>用法：</b>${esc(item[2])}</small></article>`).join("")}</div></section><section class="bridge-lesson-practice"><div class="bridge-lesson-section-head"><div><small>最后独立完成</small><h3>3道随堂检查</h3></div><span>全部答对才能完成</span></div><div>${material.practice.map((item,index)=>`<label><b>${index+1}. ${esc(item[0])}</b><input type="text" autocomplete="off" spellcheck="false" data-bridge-lesson-answer data-expected="${esc(item[1])}" data-why="${esc(item[2])}" placeholder="请输入答案"><small></small></label>`).join("")}</div></section><footer><button class="soft" type="button" data-check-bridge-lesson="${esc(key)}">检查3道题</button><button class="primary" type="button" data-complete-bridge-lesson="${esc(key)}" ${alreadyDone?"":"disabled"}>${alreadyDone?"✓ 已完成，关闭资料":"全部答对后完成本课"}</button></footer></div>`;
+    $("practiceDialogContent").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
+    $("practiceDialogContent").querySelector("[data-check-bridge-lesson]").onclick=()=>checkBridgeLesson(key);
+    $("practiceDialogContent").querySelector("[data-complete-bridge-lesson]").onclick=()=>completeBridgeLesson(key);
+    if(dialog.showModal)dialog.showModal();else dialog.classList.add("open");
+    setTimeout(()=>$('practiceDialogContent').querySelector('[data-bridge-lesson-answer]')?.focus(),80);
+  }
+  function checkBridgeLesson(key){
+    const inputs=[...$("practiceDialogContent").querySelectorAll("[data-bridge-lesson-answer]")],clean=value=>String(value||"").trim().toLowerCase().replace(/[，。；、,.;！!？?]/g,"").replace(/\s+/g," ");let correct=0;
+    inputs.forEach(input=>{const answer=clean(input.value),expected=clean(input.dataset.expected),ok=answer===expected;input.classList.toggle("correct",ok);input.classList.toggle("wrong",!ok);const result=input.nextElementSibling;result.className=ok?"correct":"wrong";result.textContent=ok?`✓ 正确：${input.dataset.why}`:`答案：${input.dataset.expected}。${input.dataset.why}`;if(ok)correct++;});
+    const complete=$("practiceDialogContent").querySelector("[data-complete-bridge-lesson]");if(complete)complete.disabled=correct!==inputs.length;
+    toast(correct===inputs.length?"3题全部正确，可以完成本课了":`答对 ${correct}/3，请根据解析订正后再次检查`);
+  }
+  function completeBridgeLesson(key){
+    if(!state.bridge.done.includes(key)){state.bridge.done.push(key);activity();save();toast("本课已学完，进度已经保存");}
+    else toast("本课已经完成，可随时回来复习");
+    $("closePracticeDialog").click();
+    if($("view-bridge").classList.contains("active"))renderBridge();
   }
 
   function renderHome(){
@@ -398,7 +695,8 @@
     const plant=plantState(),progress=plantProgress(); $("homePlant").textContent=plant.icon; $("plantName").textContent=plant.name; $("plantHint").textContent=`活力 ${progress.energy}/100 · 必须亲手浇灌才会成长`;
     $("homeTasks").innerHTML=todayTasks.slice(0,3).map(t=>{const done=state.dailyDone.includes(todayKey(t.id));return `<button class="preview-task ${done?"done":""}" data-open-stage="${t.stage}"><span>${done?"✓":t.icon}</span><div><b>${t.title}</b><small>${t.detail}</small></div><em>${done?"已完成":"去学习 →"}</em></button>`}).join("");
     const unitDone=stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length;
-    $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} · Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/stages.length*100}%"></span></div><small>${unitDone}/${stages.length} 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
+    $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><div class="home-course-meta"><small>${book.label} · Unit ${unit.number}</small>${versionBadge(book,true)}</div><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/stages.length*100}%"></span></div><small>${unitDone}/${stages.length} 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
+    $("homeOutlineCard").innerHTML=`<div><span>🗺️</span><div><small>LEARNING MAP · 当前知识位置</small><h2>${book.label} → Unit ${unit.number} ${esc(unit.title)}</h2><p><b>本单元重点：</b>${esc(unit.goal)}　<b>必备词：</b>${uCorePreview(unit)}　<b>核心句：</b>${esc(unit.patterns[0]?.en||"")}</p></div></div><button class="soft" data-view="outline">查看总纲与全部单元 →</button>`;
     renderHomePet();
   }
 
@@ -408,26 +706,141 @@
     $("gradeSwitch").innerHTML=[3,4,5,6].map(g=>`<button class="${selectedGrade===g?"active":""}" data-grade="${g}">${g}年级</button>`).join("");
     $("termSwitch").innerHTML=["上册","下册"].map(t=>`<button class="${selectedTerm===t?"active":""}" data-term="${t}">${t}</button>`).join("");
     const book=COURSE_BOOKS.find(b=>b.grade===selectedGrade&&b.term===selectedTerm);
+    renderBridgeBanner("courseBridgeBanner",selectedGrade===6,"六年级课程");
     const done=book.units.filter(u=>stages.every(s=>state.stageDone.includes(`${u.id}:${s.id}`))).length;
-    $("bookSummary").innerHTML=`<div><span>${book.edition}</span><h2>${book.label}</h2><p>${book.units.length}个主题单元 · 每单元${stages.length}步 · 原创讲解与练习</p></div><div><b>${done}/${book.units.length}</b><small>完成单元</small></div>`;
+    $("bookSummary").innerHTML=`<div class="book-summary-copy"><div class="book-version-line">${versionBadge(book)}<strong>${esc(book.version.statusLabel)}</strong></div><h2>${book.label}</h2><p>${book.units.length}个主题单元 · 每单元${stages.length}步 · 原创讲解与练习</p><p class="book-version-note">${esc(book.version.note)}</p><small class="original-content-note">本站原创内容，不是出版社教材原文或官方电子课件。</small></div><div class="book-summary-progress"><b>${done}/${book.units.length}</b><small>完成单元</small></div>`;
     $("unitGrid").innerHTML=book.units.map(u=>{
       const stepDone=stages.filter(s=>state.stageDone.includes(`${u.id}:${s.id}`)).length;
       const current=state.bookId===book.id&&state.unitIndex===u.number-1;
-      return `<button class="unit-card ${current?"current":""}" data-unit-book="${book.id}" data-unit-index="${u.number-1}"><span class="unit-icon">${u.icon}</span><span class="unit-no">UNIT ${String(u.number).padStart(2,"0")}</span><h3>${u.title}</h3><p>${u.zh} · ${u.goal}</p><div class="unit-materials"><span>3课时</span><span>${u.core.length}词</span><span>${u.patterns.length}句型</span><span>句式填词</span></div><div class="thin-bar"><span style="width:${stepDone/stages.length*100}%"></span></div><small>${stepDone}/${stages.length}步完成 ${current?"· 正在学习":""}</small><strong class="unit-cta">${stepDone?"继续单元教材":"进入单元教材"} →</strong></button>`;
+      return `<button class="unit-card ${current?"current":""}" data-unit-book="${book.id}" data-unit-index="${u.number-1}"><span class="unit-icon">${u.icon}</span><span class="unit-no">UNIT ${String(u.number).padStart(2,"0")}</span>${versionBadge(book,true)}<h3>${u.title}</h3><p>${u.zh} · ${u.goal}</p><div class="unit-materials"><span>3—5天</span><span>${u.core.length}词</span><span>8句式</span><span>20题练习</span></div><div class="thin-bar"><span style="width:${stepDone/stages.length*100}%"></span></div><small>${stepDone}/${stages.length}步完成 ${current?"· 正在学习":""}</small><strong class="unit-cta">${stepDone?"继续原创课件":"进入原创课件"} →</strong></button>`;
     }).join("");
+  }
+
+  function uCorePreview(unit,limit=5){return unit.core.slice(0,limit).map(item=>`<em>${esc(item.word)}</em>`).join("、");}
+  function renderOutline(){
+    const book=COURSE_BOOKS.find(item=>item.grade===outlineGrade&&item.term===outlineTerm)||COURSE_BOOKS[0],completed=book.units.filter(unit=>stages.every(stage=>state.stageDone.includes(`${unit.id}:${stage.id}`))).length;
+    $("outlineOverview").innerHTML=`<div class="outline-root"><span>🌳</span><small>闽教版三至六年级</small><b>英语学习知识树</b><em>8册 · 52单元</em></div><div class="outline-trunk"></div><div class="outline-grade-branches">${[3,4,5,6].map(grade=>{const books=COURSE_BOOKS.filter(item=>item.grade===grade);return `<article class="${outlineGrade===grade?"active":""}"><button data-outline-grade="${grade}"><span>${grade}</span><b>${grade}年级</b><small>${books.reduce((sum,item)=>sum+item.units.length,0)}个单元</small></button><div>${books.map(item=>`<button class="${book.id===item.id?"active":""}" data-outline-book="${item.id}">${item.term}<small>${item.units.length}单元</small></button>`).join("")}</div></article>`;}).join("")}</div>`;
+    $("outlineGradeSwitch").innerHTML=[3,4,5,6].map(grade=>`<button class="${outlineGrade===grade?"active":""}" data-outline-grade="${grade}">${grade}年级</button>`).join("");
+    $("outlineTermSwitch").innerHTML=["上册","下册"].map(term=>`<button class="${outlineTerm===term?"active":""}" data-outline-term="${term}">${term}</button>`).join("");
+    $("outlineBookHead").innerHTML=`<div><div class="book-version-line">${versionBadge(book)}<strong>${esc(book.version.statusLabel)}</strong></div><h2>${esc(book.label)}知识分支</h2><p>从 Unit 1 依次向后学习；每个单元都完成“理解—词汇—句型—对话—阅读—练习”。</p><p class="outline-version-note">${esc(book.version.note)}</p></div><aside><b>${completed}/${book.units.length}</b><small>完整单元已完成</small></aside>`;
+    $("outlineUnitMap").innerHTML=book.units.map((unit,index)=>{const done=stages.filter(stage=>state.stageDone.includes(`${unit.id}:${stage.id}`)).length;return `<article class="outline-unit-card ${done===stages.length?"done":""}"><header><span>${unit.icon}</span><div><small>UNIT ${String(unit.number).padStart(2,"0")} · ${done}/${stages.length}步</small><h2>${esc(unit.title)}</h2><p>${esc(unit.zh)}</p></div></header><section><b>🎯 学习目标</b><p>${esc(unit.goal)}</p></section><section><b>🔤 必备知识词</b><p class="outline-word-list">${uCorePreview(unit,6)}</p></section><section><b>🧩 重点句型</b>${unit.patterns.slice(0,2).map(pattern=>`<p class="outline-pattern"><button data-say="${esc(pattern.en)}">🔊</button><span>${esc(pattern.en)}</span><small>${esc(pattern.zh)}</small></p>`).join("")}</section><div class="outline-volume"><span>8个句式学习</span><span>3组情境对话</span><span>3篇分级阅读</span><span>20题分层练习</span></div><footer><button class="soft" data-outline-unit="${index}" data-outline-stage="overview">查看单元导学</button><button class="primary" data-outline-unit="${index}" data-outline-stage="${done?nextUnitStage(unit):"overview"}">${done?"继续学习":"进入本单元"} →</button></footer></article>`;}).join("");
+    $("outlineUnitMap").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
+  }
+  function nextUnitStage(unit){return stages.find(stage=>!state.stageDone.includes(`${unit.id}:${stage.id}`))?.id||"practice";}
+
+  function paperSelection(){
+    const book=COURSE_BOOKS.find(item=>item.grade===paperGrade&&item.term===paperTerm)||COURSE_BOOKS[0];
+    paperUnitIndex=Math.max(0,Math.min(paperUnitIndex,book.units.length-1));
+    return {book,unit:book.units[paperUnitIndex]};
+  }
+  const paperHash=value=>[...String(value)].reduce((sum,char)=>((sum*33)+char.charCodeAt(0))>>>0,11);
+  const paperShuffle=(items,seed)=>[...items].sort((a,b)=>paperHash(`${seed}:${JSON.stringify(a)}`)-paperHash(`${seed}:${JSON.stringify(b)}`));
+  const paperUnique=items=>[...new Set(items.filter(Boolean).map(item=>String(item).trim()).filter(Boolean))];
+  function paperOptions(answer,pool,seed){
+    const alternatives=paperShuffle(paperUnique(pool).filter(item=>item!==answer),seed).slice(0,2);
+    return paperShuffle([answer,...alternatives],`${seed}:options`);
+  }
+  const PAPER_CONFUSABLE_GROUPS=[
+    ["right","light","night"],["read","red","ride"],["there","three","these"],["where","wear","were"],["here","hear","her"],["then","than","when"],["now","know","no"],["four","for","from"],["two","too","to"],["quiet","quite"],["house","horse"],["weather","whether"],["many","much"],["some","any"],["this","these","those"],["is","are","am"],["do","does","did"],["go","goes","went","going"],["have","has","had"],["make","makes","made","making"],["play","plays","played","playing"],["look","book","cook"],["school","cool"],["class","glass"],["lunch","launch"],["dinner","winner"],["early","every"],["high","higher","highest"],["small","smell"],["friend","friendly"]
+  ];
+  function paperEditDistance(left,right){
+    const a=paperTextKey(left),b=paperTextKey(right),row=Array.from({length:b.length+1},(_,index)=>index);for(let i=1;i<=a.length;i+=1){let previous=row[0];row[0]=i;for(let j=1;j<=b.length;j+=1){const old=row[j];row[j]=Math.min(row[j]+1,row[j-1]+1,previous+(a[i-1]===b[j-1]?0:1));previous=old;}}return row[b.length];
+  }
+  function paperConfusableStrings(answer,pool,seed){
+    const key=paperTextKey(answer),group=PAPER_CONFUSABLE_GROUPS.find(items=>items.includes(key))||[],unique=paperUnique([...group,...pool]).filter(item=>paperTextKey(item)!==key);
+    return unique.sort((left,right)=>{const lKey=paperTextKey(left),rKey=paperTextKey(right),lGroup=group.includes(lKey)?0:1,rGroup=group.includes(rKey)?0:1;if(lGroup!==rGroup)return lGroup-rGroup;const lScore=paperEditDistance(key,lKey)+Math.abs(key.length-lKey.length)*.25-(key[0]===lKey[0]?1:0),rScore=paperEditDistance(key,rKey)+Math.abs(key.length-rKey.length)*.25-(key[0]===rKey[0]?1:0);return lScore-rScore||paperHash(`${seed}:${left}`)-paperHash(`${seed}:${right}`);});
+  }
+  function paperAdvancedEnglishOptions(answer,pool,seed){const alternatives=paperConfusableStrings(answer,pool,seed).slice(0,2);return paperShuffle([answer,...alternatives],`${seed}:advanced-options`);}
+  function paperAdvancedMeaningOptions(word,answer,wordPool,meaningPool,seed){
+    const similar=paperConfusableStrings(word,wordPool.map(item=>item.word),seed).map(candidate=>paperExactMeaning(candidate)).filter(Boolean),alternatives=paperUnique([...similar,...meaningPool]).filter(item=>item!==answer).slice(0,2);return paperShuffle([answer,...alternatives],`${seed}:advanced-meanings`);
+  }
+  function paperAdvancedSentenceOptions(answer,pool,seed){
+    const answerTokens=new Set((answer.toLowerCase().match(/[a-z]+/g)||[])),similar=paperUnique(pool).filter(item=>item!==answer).sort((left,right)=>{const score=text=>{const tokens=text.toLowerCase().match(/[a-z]+/g)||[],overlap=tokens.filter(token=>answerTokens.has(token)).length;return overlap*10-Math.abs(tokens.length-answerTokens.size)-paperEditDistance(answer,text)*.05;};return score(right)-score(left)||paperHash(`${seed}:${left}`)-paperHash(`${seed}:${right}`);}).slice(0,2);return paperShuffle([answer,...similar],`${seed}:advanced-sentences`);
+  }
+  function paperPreviousUnits(book,unitIndex){
+    const bookIndex=COURSE_BOOKS.findIndex(item=>item.id===book.id);
+    return [...COURSE_BOOKS.slice(0,bookIndex).flatMap(item=>item.units),...book.units.slice(0,unitIndex)];
+  }
+  function paperSourceUnits(book,unitIndex,type){
+    const current=book.units[unitIndex];
+    if(type.id.startsWith("unit-"))return [current];
+    const previous=paperPreviousUnits(book,unitIndex);
+    if(type.id==="fujian-combo"||type.id==="bridge-mock")return [...previous,current];
+    return previous.length?previous:[current];
+  }
+  function paperQuestionPool(book,unitIndex,type){
+    const units=paperSourceUnits(book,unitIndex,type),allCourseWords=COURSE_BOOKS.flatMap(item=>item.units.flatMap(unit=>unit.core)),allCoursePatterns=COURSE_BOOKS.flatMap(item=>item.units.flatMap(unit=>unit.patterns));
+    const seed=`${book.id}:${unitIndex}:${type.id}`,words=paperShuffle(units.flatMap(unit=>unit.core.map(item=>({...item,origin:`Unit ${unit.number} ${unit.title}`}))),`${seed}:words`),patterns=paperShuffle(units.flatMap(unit=>unit.patterns.map(item=>({...item,origin:`Unit ${unit.number} ${unit.title}`}))),`${seed}:patterns`);
+    const meanings=paperUnique([...words.map(item=>item.meaning),...allCourseWords.map(item=>item.meaning)]),spellings=paperUnique([...words.map(item=>item.word),...allCourseWords.map(item=>item.word)]),patternZh=paperUnique([...patterns.map(item=>item.zh),...allCoursePatterns.map(item=>item.zh)]),patternEn=paperUnique([...patterns.map(item=>item.en),...allCoursePatterns.map(item=>item.en)]),exampleEn=paperUnique([...words.map(item=>item.example),...allCourseWords.map(item=>item.example)]),questions=[];
+    const advanced=type.id==="unit-advanced"||type.id==="bridge-mock",wordAt=index=>words[index%words.length],patternAt=index=>patterns[index%patterns.length],meaningOptions=(item,tag)=>advanced?paperAdvancedMeaningOptions(item.word,item.meaning,allCourseWords,meanings,tag):paperOptions(item.meaning,meanings,tag),englishOptions=(answer,pool,tag)=>advanced?paperAdvancedEnglishOptions(answer,pool,tag):paperOptions(answer,pool,tag),sentenceOptions=(answer,pool,tag)=>advanced?paperAdvancedSentenceOptions(answer,pool,tag):paperOptions(answer,pool,tag),patternMeaningOptions=(item,tag)=>{if(!advanced)return paperOptions(item.zh,patternZh,tag);const similar=paperAdvancedSentenceOptions(item.en,patternEn,tag).map(sentence=>allCoursePatterns.find(pattern=>pattern.en===sentence)?.zh||paperExactMeaning(sentence)).filter(Boolean);return paperShuffle(paperUnique([item.zh,...similar]).slice(0,3),`${tag}:zh`);};
+    for(let index=0;index<5;index+=1){const item=wordAt(index);questions.push({section:"第一部分　听力辨义",type:"Listen and choose",audio:item.word,q:"点击播放按钮，选择你听到的单词意思。",options:meaningOptions(item,`${seed}:listen:${index}`),answer:item.meaning,focusWord:item.word,focusMeaning:item.meaning,why:`你听到的是 ${item.word}，常见意思是“${item.meaning}”。知识来源：${item.origin}。`});}
+    for(let index=0;index<5;index+=1){const item=wordAt(index+5);questions.push({section:"第二部分　词汇基础",type:"英译中",q:`“${item.word}”在本课程中的常见意思是？`,options:meaningOptions(item,`${seed}:meaning:${index}`),answer:item.meaning,focusWord:item.word,focusMeaning:item.meaning,why:`${item.word} 的常见意思是“${item.meaning}”。知识来源：${item.origin}。`});}
+    for(let index=0;index<5;index+=1){const item=wordAt(index+10);questions.push({section:"第二部分　词汇基础",type:"中译英",q:`选择“${item.meaning}”对应的英文。`,options:englishOptions(item.word,spellings,`${seed}:spelling:${index}`),answer:item.word,focusWord:item.word,focusMeaning:item.meaning,why:`“${item.meaning}”对应 ${item.word}。拼写时要注意每个字母的顺序。`});}
+    for(let index=0;index<6;index+=1){const item=wordAt(index+15),escaped=String(item.word).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),completeSentence=String(item.example||`I can say ${item.word}.`),blank=completeSentence.replace(new RegExp(escaped,"i"),"____");questions.push({section:"第三部分　句型运用",type:"句子填词",q:`选择合适的单词补全句子：${blank}`,options:englishOptions(item.word,spellings,`${seed}:fill:${index}`),answer:item.word,focusWord:item.word,focusMeaning:item.meaning,completeSentence,completeMeaning:item.exampleZh||"结合完整句子理解。",why:`完整句子：${completeSentence}${item.exampleZh?`；意思：${item.exampleZh}`:""}`});}
+    for(let index=0;index<3;index+=1){const item=patternAt(index);questions.push({section:"第三部分　句型运用",type:"情境表达",q:`哪一句最适合表达“${item.zh}”？`,options:sentenceOptions(item.en,patternEn,`${seed}:expression:${index}`),answer:item.en,sourceSentence:item.en,targetZh:item.zh,why:`正确表达是：${item.en}。${item.rule||"注意句子结构和语序。"}`});}
+    {const item=wordAt(20),answer=item.example||`I can say ${item.word}.`;questions.push({section:"第三部分　句型运用",type:"词语运用",q:`哪一个句子正确使用了单词“${item.word}”（${item.meaning}）？`,options:sentenceOptions(answer,exampleEn,`${seed}:usage`),answer,focusWord:item.word,focusMeaning:item.meaning,sourceSentence:answer,completeMeaning:item.exampleZh||"结合完整句子理解。",why:`正确例句：${answer}${item.exampleZh?`；意思：${item.exampleZh}`:""}`});}
+    for(let index=0;index<3;index+=1){const item=patternAt(index+4);questions.push({section:"第四部分　综合理解",type:"句意理解",q:`“${item.en}”的意思是？`,options:patternMeaningOptions(item,`${seed}:sentence:${index}`),answer:item.zh,sourceSentence:item.en,targetZh:item.zh,why:`句子意思：${item.zh}。${item.rule||"先抓住句中的关键词，再理解整句。"}`});}
+    for(let index=0;index<2;index+=1){const item=wordAt(index+21),sentence=item.example||`I can say ${item.word}.`;questions.push({section:"第四部分　综合理解",type:"语境理解",q:`在句子“${sentence}”中，${item.word} 最接近的意思是？`,options:meaningOptions(item,`${seed}:context:${index}`),answer:item.meaning,focusWord:item.word,focusMeaning:item.meaning,sourceSentence:sentence,completeMeaning:item.exampleZh||"结合完整句子理解。",why:`在这个句子中，${item.word} 表示“${item.meaning}”。${item.exampleZh?`整句可理解为：${item.exampleZh}`:""}`});}
+    if(advanced)questions.forEach(item=>{item.difficultyTag="近形近义易错";item.trap=item.type==="Listen and choose"?"干扰项来自拼写或读音相近的词，必须先听清再回忆词义。":item.type==="英译中"||item.type==="中译英"?"三个选项在拼写、读音或词义类别上较接近，请逐字母比较。":item.type==="句子填词"?"不能只看单词眼熟，要同时检查词义、词形和固定搭配。":"相似句型只改动少量关键词或语序，需要理解完整句意。";item.why+=` 易错提醒：${item.trap}`;});
+    return questions;
+  }
+  const paperScoreKey=(book,unit,typeId)=>`${unit.id}:${typeId}`;
+  function renderPapers(){
+    const {book,unit}=paperSelection(),paperTypes=PAPER_TYPES,passScore=18,completedTotal=Object.values(state.papers.scores).filter(score=>Number(score)>=passScore).length,scores=Object.values(state.papers.scores).map(Number).filter(Number.isFinite),average=scores.length?Math.round(scores.reduce((sum,value)=>sum+value,0)/scores.length/30*100):0,currentDone=paperTypes.filter(type=>Number(state.papers.scores[paperScoreKey(book,unit,type.id)]||0)>=passScore).length;
+    $("paperDashboard").innerHTML=`<article><span>📚</span><div><b>52</b><small>课程单元</small></div></article><article><span>📝</span><div><b>312</b><small>完整试卷</small></div></article><article><span>✍️</span><div><b>9360</b><small>总练习题量</small></div></article><article><span>✅</span><div><b>${completedTotal}</b><small>本身份已通过</small></div></article><article><span>🎯</span><div><b>${scores.length?average+"%":"—"}</b><small>平均正确率</small></div></article>`;
+    $("paperGradeSwitch").innerHTML=[3,4,5,6].map(grade=>`<button class="${paperGrade===grade?"active":""}" data-paper-grade="${grade}">${grade}年级</button>`).join("");
+    $("paperTermSwitch").innerHTML=["上册","下册"].map(term=>`<button class="${paperTerm===term?"active":""}" data-paper-term="${term}">${term}</button>`).join("");
+    $("paperUnitSwitch").innerHTML=book.units.map((item,index)=>`<button class="${paperUnitIndex===index?"active":""}" data-paper-unit="${index}"><span>${item.icon}</span>Unit ${item.number}<small>${esc(item.zh)}</small></button>`).join("");
+    $("paperUnitSummary").innerHTML=`<div><span>${unit.icon}</span><div><small>${esc(book.label)} · UNIT ${unit.number} · ${esc(book.version.short)} · 原创试题</small><h2>${esc(unit.title)} <i>${esc(unit.zh)}</i></h2><p>本单元共${paperTypes.length}卷、${paperTypes.length*30}题；累计卷只覆盖课程顺序中已经出现过的内容。</p></div></div><aside><b>${currentDone}/${paperTypes.length}</b><small>达到18/30即通过</small><div><span style="width:${currentDone/paperTypes.length*100}%"></span></div></aside>`;
+    $("paperGrid").innerHTML=paperTypes.map(type=>{const key=paperScoreKey(book,unit,type.id),score=Number(state.papers.scores[key]||0),attempts=Number(state.papers.attempts[key]||0),passed=score>=passScore,historyCount=paperPreviousUnits(book,paperUnitIndex).length,scope=type.id==="bridge-mock"?"当前及全部过往知识":type.id.startsWith("review-")?`${historyCount||1}个历史单元`:type.id==="fujian-combo"?"5个公开来源":"当前单元";return `<article class="paper-card ${passed?"passed":""} ${type.id==="fujian-combo"?"public-combo":""} ${type.id==="unit-advanced"||type.id==="bridge-mock"?"advanced-paper-card":""}"><div class="paper-card-top"><span>${type.icon}</span><div><small>${esc(type.kind)}</small><h3>${esc(type.title)}</h3></div><em>${esc(type.level)}</em></div><p>${esc(type.desc)}</p><div class="paper-card-facts"><span>30题</span><span>${type.minutes}分钟</span><span>${scope}</span>${type.id==="unit-advanced"||type.id==="bridge-mock"?"<span class=\"advanced-fact\">近形词 · 时态 · 语序 · 综合语境</span>":""}</div>${attempts?`<div class="paper-best"><b>最高 ${score}/30</b><small>已作答 ${attempts} 次</small></div>`:`<div class="paper-best empty"><b>尚未作答</b><small>完成全部30题后交卷</small></div>`}<button class="${passed?"soft":"primary"}" data-paper-start="${type.id}">${passed?"再次练习":"开始答卷"} →</button></article>`;}).join("");
+    const workspace=$("paperExamWorkspace");
+    if(!paperActiveId){workspace.hidden=true;workspace.innerHTML="";return;}
+    const type=paperTypes.find(item=>item.id===paperActiveId);if(!type){paperActiveId="";workspace.hidden=true;return;}
+    workspace.hidden=false;renderPaperExam(book,unit,type);
+  }
+  function paperChoiceMeaningText(option){
+    const exact=paperExactMeaning(option);if(exact)return exact;
+    const tokens=String(option||"").match(/[A-Za-z]+(?:['’][A-Za-z]+)?/g)||[];
+    return [...new Set(tokens.map(token=>`${token}=${paperTokenMeaning(token)}`))].join("，");
+  }
+  function paperWrongReason(item,option){
+    const optionMeaning=paperChoiceMeaningText(option),meaningHint=optionMeaning?`“${option}”可理解为“${optionMeaning}”`:`“${option}”表达的是另一个意思`;
+    if(item.type==="Listen and choose")return`音频中的词是 ${item.focusWord}（${item.focusMeaning}），而${meaningHint}，声音和词义不能对应。`;
+    if(item.type==="英译中")return`题目中的 ${item.focusWord} 表示“${item.focusMeaning}”，而“${option}”不是这个单词在本课的意思。`;
+    if(item.type==="中译英")return`${meaningHint}，不能表示题目要求的“${item.focusMeaning}”；正确单词是 ${item.focusWord}。`;
+    if(item.type==="句子填词")return`${meaningHint}。把它填入句子后，词义或搭配与完整句子“${item.completeSentence}”不一致；本题需要 ${item.focusWord}（${item.focusMeaning}）。`;
+    if(item.type==="情境表达")return`${meaningHint}，与题目要求表达的“${item.targetZh}”不一致。应比较整句意思和语序，不能只看某一个熟悉的词。`;
+    if(item.type==="词语运用")return`${meaningHint}，但它不是题目中 ${item.focusWord}（${item.focusMeaning}）的正确示例句。`;
+    if(item.type==="句意理解")return`原句“${item.sourceSentence}”的意思是“${item.targetZh}”，“${option}”与原句中的人物、动作或信息不一致。`;
+    if(item.type==="语境理解")return`在“${item.sourceSentence}”这个具体句子里，${item.focusWord} 表示“${item.focusMeaning}”，不能选择“${option}”。同一个词需要结合语境判断。`;
+    return`${meaningHint}，与题干要求不相符。`;
+  }
+  function renderPaperExam(book,unit,type){
+    const questions=paperQuestionPool(book,paperUnitIndex,type),answered=Object.keys(paperAnswers).length,score=paperChecked?questions.filter((item,index)=>paperAnswers[index]===item.answer).length:0,key=paperScoreKey(book,unit,type.id),best=Number(state.papers.scores[key]||0),passed=score>=18,history=paperPreviousUnits(book,paperUnitIndex);
+    const refs=type.id==="fujian-combo"?`<section class="paper-reference-box"><div><b>公开卷参考范围</b><p>参考福建学校公开卷的题型结构重新编写，题目内容仍严格匹配当前及过往课程，不复制第三方整卷。</p></div><div class="paper-reference-links">${PUBLIC_PAPER_REFERENCES.map(item=>`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"><span>${esc(item.area)}</span><b>${esc(item.school)}</b><small>${esc(item.label)} ↗</small></a>`).join("")}</div></section>`:"";
+    const questionMarkup=(item,index)=>{const selected=paperAnswers[index],correct=selected===item.answer,questionGlossary=paperChecked?paperGlossaryMarkup(item.q,"题干中的英文词"):"",audioGlossary=paperChecked&&item.audio?paperGlossaryMarkup(item.audio,"听力原词"):"";return `<article class="paper-question ${paperChecked?(correct?"correct":"wrong"):""}"><div class="paper-question-title"><span>${index+1}</span><div><small>${esc(item.type)}${item.difficultyTag?`<em class="paper-trap-badge">${esc(item.difficultyTag)}</em>`:""}</small><h3>${paperChecked?paperAnnotatedTextMarkup(item.q):esc(item.q)}</h3>${item.audio?`<button class="paper-audio-button" data-paper-say="${esc(item.audio)}">▶ 播放听力</button>`:""}${questionGlossary}${audioGlossary}</div></div><div class="paper-options">${item.options.map(option=>{const isAnswer=option===item.answer,isSelected=selected===option,glossary=paperChecked?paperGlossaryMarkup(option,"选项中的英文词"):"",reason=paperChecked?(isAnswer?`这是正确答案。${item.why}`:paperWrongReason(item,option)):"";return `<div class="paper-option-review ${paperChecked?(isAnswer?"correct-option":"wrong-option"):""} ${paperChecked&&isSelected?"chosen-option":""}"><button class="${isSelected?"selected":""} ${paperChecked&&isAnswer?"answer":""}" data-paper-answer="${index}" data-paper-value="${esc(option)}" ${paperChecked?"disabled":""}><span>${paperChecked?paperAnnotatedTextMarkup(option):esc(option)}</span>${paperChecked?`<em>${isAnswer?"✓ 正确选项":isSelected?"✗ 你的选择":"不选"}</em>`:""}</button>${glossary}${paperChecked?`<p class="paper-choice-reason"><b>${isAnswer?"为什么正确":"为什么不选"}</b>${esc(reason)}</p>`:""}</div>`;}).join("")}</div>${paperChecked?`<div class="paper-explanation"><header><b>${correct?"✓ 本题回答正确":`✗ 本题回答错误 · 正确答案：${esc(item.answer)}`}</b><span>${correct?"继续说明自己为什么这样选":"先看正确原因，再比较自己的选项"}</span></header><section><b>正确答案为什么正确</b><p>${esc(item.why)}</p></section>${!correct?`<section class="selected-wrong-reason"><b>你选择的“${esc(selected)}”为什么错误</b><p>${esc(paperWrongReason(item,selected))}</p></section>`:""}<section><b>订正方法</b><p>${item.type.includes("听")||item.type==="Listen and choose"?"重新播放两遍：第一遍只辨认声音，第二遍说出英文和中文，再朗读正确词。":"先读题干，再逐个比较选项的中文意思；最后把正确答案放回完整句子朗读一遍。"}</p></section></div>`:""}</article>`;};
+    const sections=[...new Set(questions.map(item=>item.section))].map(section=>{const indexed=questions.map((item,index)=>({item,index})).filter(entry=>entry.item.section===section);return `<section class="paper-question-section"><header><div><small>STANDARD PRIMARY ENGLISH PAPER</small><h3>${esc(section)}</h3></div><b>${indexed[0].index+1}—${indexed.at(-1).index+1}题</b></header><div class="paper-question-list">${indexed.map(entry=>questionMarkup(entry.item,entry.index)).join("")}</div></section>`;}).join("");
+    const scopeText=type.id.startsWith("review-")?`知识范围：${history.length?`当前单元之前的${history.length}个单元`:`Unit 1 起点知识`}`:type.id==="fujian-combo"?"知识范围：当前及过往单元 · 福建公开卷题型结构":type.id==="bridge-mock"?"知识范围：小学阶段累计知识 · 小升初综合":`知识范围：${esc(unit.title)}（${esc(unit.zh)}）`;
+    $("paperExamWorkspace").innerHTML=`<header class="paper-exam-head"><button class="paper-exam-close" data-paper-close aria-label="关闭试卷">×</button><div><small>${esc(book.label)} · Unit ${unit.number} · ${esc(type.kind)}</small><h2>${type.icon} ${esc(type.title)}</h2><p>${scopeText} · 建议限时${type.minutes}分钟</p></div><aside><b>${paperChecked?`${score}/30`:`${answered}/30`}</b><small>${paperChecked?(passed?"已通过":"需要订正"):"已作答"}</small></aside></header>${refs}${sections}<footer class="paper-submit-row">${paperChecked?`<div><b>${passed?"🎉 本卷通过":"📌 还需继续巩固"}</b><p>本次 ${score}/30，历史最高 ${Math.max(best,score)}/30。${passed?"建议隔3天再做一次。":"请先阅读错题解析，再重新答卷。"}</p></div><button class="soft" data-paper-retry>重新答卷</button>`:`<div><b>答题进度 ${answered}/30</b><p>必须完成全部30题后才能交卷，避免漏题。</p></div><button class="primary" data-paper-submit ${answered<30?"disabled":""}>${answered<30?`还需完成 ${30-answered} 题`:"提交并查看解析"}</button>`}</footer>`;
+  }
+  function submitPaper(){
+    const {book,unit}=paperSelection(),type=(paperGrade===6?[...PAPER_TYPES,BRIDGE_PAPER_TYPE]:PAPER_TYPES).find(item=>item.id===paperActiveId),questions=type?paperQuestionPool(book,paperUnitIndex,type):[];if(!type||Object.keys(paperAnswers).length<questions.length)return toast("请先完成本卷全部30题");
+    const key=paperScoreKey(book,unit,type.id),score=questions.filter((item,index)=>paperAnswers[index]===item.answer).length,previous=Number(state.papers.scores[key]||0),firstPass=previous<18&&score>=18;paperChecked=true;state.papers.scores[key]=Math.max(previous,score);state.papers.attempts[key]=Number(state.papers.attempts[key]||0)+1;
+    if(firstPass)reward(2,`通过${type.title}`,1);else save();renderPapers();setTimeout(()=>$("paperExamWorkspace")?.scrollIntoView({behavior:"smooth",block:"start"}),30);
   }
 
   function lessonPlan(u){
     return [
       {number:1,title:"词汇启蒙课",time:"约20分钟",icon:"🔤",detail:`理解主题，点读并掌握前${Math.min(8,u.core.length)}个必备词`,stage:"words"},
-      {number:2,title:"句型交流课",time:"约25分钟",icon:"🗣️",detail:`学会${u.patterns.length}个重点句型，完成例句学习和句式填词`,stage:"patterns"},
-      {number:3,title:"阅读运用课",time:"约25分钟",icon:"📖",detail:"朗读原创短文，完成理解题、单元小测与表达任务",stage:"reading"}
+      {number:2,title:"句型交流课",time:"约30分钟",icon:"🗣️",detail:"学习8个核心与迁移句式，完成3组共18句情境对话",stage:"patterns"},
+      {number:3,title:"阅读运用课",time:"约35分钟",icon:"📖",detail:"完成3篇分级原创阅读、15个读后问题和20题分层练习",stage:"reading"}
     ];
   }
 
   function renderUnit(){
     const book=bookNow(), u=unitNow();
-    $("unitHero").innerHTML=`<div class="unit-hero-icon">${u.icon}</div><div><span>完整单元教材 · ${book.label} · UNIT ${String(u.number).padStart(2,"0")}</span><h1>${u.title}</h1><h2>${u.zh}</h2><p>${u.goal}</p><div class="unit-hero-actions"><button data-open-stage="${nextStage().id}">▶ ${stages.find(s=>s.id===nextStage().id).name}</button><button data-action="print">🖨️ 打印学习单</button></div></div><div class="hero-count"><b>${stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length}/${stages.length}</b><small>学习步骤</small></div>`;
+    $("unitHero").innerHTML=`<div class="unit-hero-icon">${u.icon}</div><div><span>原创同步学习课件 · ${book.label} · UNIT ${String(u.number).padStart(2,"0")}</span><h1>${u.title}</h1><h2>${u.zh}</h2><p>${u.goal}</p><div class="unit-hero-actions"><button data-open-stage="${nextStage().id}">▶ ${stages.find(s=>s.id===nextStage().id).name}</button><button data-action="print">🖨️ 打印学习单</button></div></div><div class="hero-count"><b>${stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length}/${stages.length}</b><small>学习步骤</small></div>`;
+    $("unitVersionNotice").innerHTML=versionDetails(book);
     $("lessonTabs").innerHTML=stages.map(s=>`<button class="${state.stage===s.id?"active":""} ${state.stageDone.includes(stageKey(s.id))?"done":""}" data-stage="${s.id}"><span>${state.stageDone.includes(stageKey(s.id))?"✓":s.icon}</span>${s.name}</button>`).join("");
     renderStage();
   }
@@ -442,7 +855,7 @@
 
   function renderStage(){
     const u=unitNow(), box=$("lessonContent");
-    if(state.stage==="overview") box.innerHTML=`<div class="content-head"><span>单元教材导学</span><h2>这套教材怎样学习？</h2><p>本单元分成3课时，不需要一次学完。每完成一课，第二天先复习5分钟。</p></div><div class="material-summary"><article><b>${u.core.length}</b><span>必备与拓展词</span></article><article><b>${u.patterns.length}</b><span>重点句型</span></article><article><b>3–5</b><span>完整例句与填词</span></article><article><b>1+5</b><span>阅读与小测</span></article></div><div class="textbook-plan">${lessonPlan(u).map(item=>`<button data-open-stage="${item.stage}"><span>${item.icon}</span><div><small>LESSON ${item.number} · ${item.time}</small><h3>${item.title}</h3><p>${item.detail}</p></div><em>开始学习 →</em></button>`).join("")}</div><h3 class="goal-title">学完本单元，我可以做到</h3><div class="objective-list"><article><b>我能听懂</b><p>在“${u.zh}”情境中听出关键词，判断人物在谈论什么。</p></article><article><b>我能开口</b><p>${u.goal}</p></article><article><b>我能读懂</b><p>读一段3—5句的原创短文，找到人物、地点或主要信息。</p></article><article><b>我能写出</b><p>仿照重点句型替换关键词，独立写2—3个句子。</p></article></div><div class="explain-card"><span>${u.icon}</span><div><h3>生活情境</h3><p>想一想：你在真实生活中什么时候会用到“${u.zh}”英语？先用中文说清楚，再尝试说出一个英文关键词。</p><strong>学习秘诀：理解意思 → 看例子 → 自己换词 → 离开提示再说一遍。</strong></div></div>${doneButton("我已经看懂学习路线")}`;
+    if(state.stage==="overview") box.innerHTML=`<div class="content-head"><span>单元教材导学</span><h2>这套教材怎样学习？</h2><p>本单元建议分3—5天完成。每次只学一个模块，第二天先复习5分钟。</p></div><div class="material-summary"><article><b>${u.core.length}</b><span>必备与拓展词</span></article><article><b>8</b><span>核心与迁移句式</span></article><article><b>3×6</b><span>情境对话句</span></article><article><b>3+20</b><span>分级阅读与练习</span></article></div><div class="textbook-plan">${lessonPlan(u).map(item=>`<button data-open-stage="${item.stage}"><span>${item.icon}</span><div><small>LESSON ${item.number} · ${item.time}</small><h3>${item.title}</h3><p>${item.detail}</p></div><em>开始学习 →</em></button>`).join("")}</div><h3 class="goal-title">学完本单元，我可以做到</h3><div class="objective-list"><article><b>我能听懂</b><p>在“${u.zh}”情境中听出关键词，判断人物在谈论什么。</p></article><article><b>我能开口</b><p>${u.goal}</p></article><article><b>我能读懂</b><p>读懂3篇由浅入深的原创材料，找到人物、地点、时间与主要信息。</p></article><article><b>我能写出</b><p>完成20题分层练习，并仿照重点句型独立写出5个句子。</p></article></div><div class="explain-card"><span>${u.icon}</span><div><h3>生活情境</h3><p>想一想：你在真实生活中什么时候会用到“${u.zh}”英语？先用中文说清楚，再尝试说出一个英文关键词。</p><strong>学习秘诀：理解意思 → 看例子 → 自己换词 → 离开提示再说一遍。</strong></div></div>${doneButton("我已经看懂学习路线")}`;
     if(state.stage==="words") renderWordStage(box,u);
     if(state.stage==="patterns") renderPatternStage(box,u);
     if(state.stage==="dialogue") renderDialogueStage(box,u);
@@ -606,8 +1019,15 @@
   }
   function wordCard(w,i,u,type){const known=state.mastered.includes(`${u.id}:${w.word}`),sentences=wordSentenceStudies(w,i,u),profile=wordProfile(w);return `<article class="vocab-card sentence-word-card ${known?"known":""}"><button class="sound" data-say="${esc(w.word)}">🔊 单词</button><small>${type==="core"?"必备":"拓展"} ${i+1}</small><h3>${esc(w.word)}</h3><button class="meaning-cover" data-toggle-word>点击查看意思</button><p class="word-meaning">${esc(w.meaning)}</p><div class="word-profile"><div><b>词性</b><span>${esc(profile.pos)}</span></div><div><b>单复数 / 词形</b><span>${esc(profile.forms)}</span></div><div class="word-profile-meanings"><b>常见词意</b><span>${profile.meanings.map(meaning=>`<em>${esc(meaning)}</em>`).join("")}</span></div></div><div class="word-sentence-module"><div class="word-sentence-title"><em>句式学习</em><b>3个例句</b></div><div class="word-sentence-list">${sentences.map((sentence,index)=>`<section><div><span>例句 ${index+1}</span><button data-say="${esc(sentence.en)}">🔊 整句</button></div>${interactiveSentence(sentence.en,u)}<div class="sentence-explanation"><p><b>句子意思</b>${esc(sentence.zh)}</p><p><b>${esc(sentence.role.label)}</b><strong>${esc(w.word)}</strong>：${esc(sentence.role.detail)}</p></div></section>`).join("")}</div></div></article>`;}
 
+  function expandedPatternItems(u){
+    const items=[],seen=new Set(),add=item=>{const key=String(item.en||"").toLowerCase();if(!key||seen.has(key))return;seen.add(key);items.push(item);};
+    u.patterns.forEach(pattern=>add({...pattern,kind:"核心句型",focus:"理解结构后替换关键词"}));
+    u.core.slice(0,8).forEach((word,index)=>wordSentenceStudies(word,index,u).forEach(study=>add({en:study.en,zh:study.zh,rule:`${study.role.label}：${study.role.detail}`,kind:"词汇迁移句",focus:`重点观察 ${word.word} 在完整句中的位置和词形`})));
+    return items.slice(0,8);
+  }
   function renderPatternStage(box,u){
-    box.innerHTML=`<div class="content-head"><span>第3步</span><h2>重点句型：知道为什么，再学会替换</h2><p>先听完整句子；遇到不会的词，直接点击该单词听发音、看意思。</p></div><div class="pattern-list">${u.patterns.map((p,i)=>`<article class="pattern-card"><div class="pattern-number">${i+1}</div><div><button class="line-sound" data-say="${esc(p.en)}">🔊 听完整句子</button>${interactiveSentence(p.en,u)}<p class="sentence-translation">${esc(p.zh)}</p><div class="rule"><b>为什么这样说？</b>${esc(p.rule)}</div><div class="try"><b>替换练习</b><span>先读原句3遍，再把关键词换成本单元另一个词。最后合上提示说一遍。</span></div></div></article>`).join("")}</div><div class="mistake-box"><h3>⚠️ 本单元检查清单</h3><ul><li>句子开头是否大写？结尾是否有问号或句号？</li><li>he / she 作主语时，动词是否需要变化？</li><li>时间、日期、星期前的介词是否用对？只检查本句真正出现的规则。</li></ul></div>${doneButton("我已会读并替换")}`;
+    const patterns=expandedPatternItems(u);
+    box.innerHTML=`<div class="content-head"><span>第3步 · ${patterns.length}个完整句式</span><h2>重点句型：知道为什么，再学会替换</h2><p>本单元由核心句型延伸到词汇迁移句。每句都能整句点读、逐词点读，并说明使用重点。</p></div><div class="module-volume"><article><b>${u.patterns.length}</b><span>核心句型</span></article><article><b>${patterns.length-u.patterns.length}</b><span>迁移例句</span></article><article><b>${patterns.length*3}</b><span>建议跟读次数</span></article><article><b>1</b><span>独立表达任务</span></article></div><div class="pattern-list expanded-pattern-list">${patterns.map((p,i)=>`<article class="pattern-card"><div class="pattern-number">${i+1}</div><div><div class="pattern-kind">${esc(p.kind)} <span>${esc(p.focus||"")}</span></div><button class="line-sound" data-say="${esc(p.en)}">🔊 听完整句子</button>${interactiveSentence(p.en,u)}<p class="sentence-translation">${esc(p.zh)}</p><div class="rule"><b>为什么这样说？</b>${esc(p.rule)}</div><div class="try"><b>三遍学习法</b><span>第1遍听懂意思；第2遍逐词跟读；第3遍换成本单元其他词或自己的真实信息。</span></div></div></article>`).join("")}</div><div class="mistake-box"><h3>⚠️ 本单元检查清单</h3><ul><li>句子开头是否大写？结尾是否有问号或句号？</li><li>主语换成 he / she 后，动词是否需要变化？</li><li>能否不看提示，用其中两个句式表达自己的真实信息？</li></ul></div>${doneButton("我已会读并替换8个句式")}`;
     box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
     bindSentenceWords(box);
   }
@@ -627,34 +1047,56 @@
   function dialogueLines(u){ const p=u.patterns; return [
     ["A",`Hi! Let's talk about ${u.title}.`],["B",p[0].en],["A",p[1]?.en||"That's interesting."],["B",p[2]?.en||"Let's learn together."],["A","Great! Can you say it again?"],["B","Sure. Let's practise together!"]
   ]; }
+  function dialogueScenes(u){
+    const p=u.patterns,w0=u.core[0],w1=u.core[1]||u.core[0];
+    return [
+      {title:"场景一 · 课本主题交流",tip:"先完整听一遍，再分角色朗读。",lines:dialogueLines(u)},
+      {title:"场景二 · 同桌替换练习",tip:"把原句中的关键词换成本单元其他词。",lines:[["A","Can we practise this unit together?"],["B",p[0]?.en||"Yes, let's begin."],["A",p[1]?.en||"I understand."],["B",wordExample(w0,0,u)],["A","Please say one more sentence."],["B",wordExample(w1,1,u)]]},
+      {title:"场景三 · 离开提示复述",tip:"用单词造句，并请同伴继续追问。",lines:[["A","Which key word do you remember?"],["B",`I remember ${w0.word}.`],["A",`Can you use ${w0.word} in a sentence?`],["B",wordExample(w0,0,u)],["A","Good. What is another key word?"],["B",`I also remember ${w1.word}.`]]}
+    ];
+  }
   function renderDialogueStage(box,u){
-    const lines=dialogueLines(u);
-    box.innerHTML=`<div class="content-head"><span>第4步</span><h2>原创情境对话：把句型真正说出来</h2><p>第一遍听完整句，第二遍逐词点读，第三遍分别扮演A和B。</p></div><div class="dialogue-card"><div class="scene-label">情境：两位同学在练习“${u.zh}”</div>${lines.map(([role,text])=>`<article class="dialogue-line role-${role.toLowerCase()}"><span>${role}</span><div>${interactiveSentence(text,u)}</div><button class="dialogue-sound" data-say="${esc(text)}" aria-label="播放完整句子">🔊 整句</button></article>`).join("")}</div><div class="speaking-challenge"><h3>🎤 开口挑战</h3><p>把对话中的一个关键词换成自己的真实信息，再完整说一遍。能让家长听懂意思，就算过关。</p></div>${doneButton("我已完成角色朗读")}`;
+    const scenes=dialogueScenes(u);
+    box.innerHTML=`<div class="content-head"><span>第4步 · 3个场景 · 18句对话</span><h2>原创情境对话：把句型真正说出来</h2><p>从跟读课本主题，到同桌替换，再到离开提示复述。每句话都支持整句和逐词点读。</p></div><div class="dialogue-scene-list">${scenes.map((scene,sceneIndex)=>`<section class="dialogue-scene"><header><span>${sceneIndex+1}</span><div><h3>${esc(scene.title)}</h3><p>${esc(scene.tip)}</p></div><button data-say="${esc(scene.lines.map(line=>line[1]).join(" "))}">🔊 听整组</button></header><div class="dialogue-card"><div class="scene-label">情境：两位同学围绕“${esc(u.zh)}”进行第${sceneIndex+1}轮练习</div>${scene.lines.map(([role,text])=>`<article class="dialogue-line role-${role.toLowerCase()}"><span>${role}</span><div>${interactiveSentence(text,u)}</div><button class="dialogue-sound" data-say="${esc(text)}" aria-label="播放完整句子">🔊 整句</button></article>`).join("")}</div></section>`).join("")}</div><div class="speaking-challenge"><h3>🎤 三步开口挑战</h3><p>①任选一组完整分角色朗读；②替换至少两个关键词；③合上提示，用自己的真实信息重新说4—6句。</p></div>${doneButton("我已完成3组角色朗读")}`;
     box.querySelectorAll("[data-say]").forEach(b=>b.onclick=()=>speak(b.dataset.say));
     bindSentenceWords(box);
   }
 
+  function readingPassages(u){
+    const examples=u.core.map((word,index)=>wordExample(word,index,u)),patternText=u.patterns.map(pattern=>pattern.en).join(" "),wordText=examples.slice(0,5).join(" "),transferText=[...u.patterns.map(pattern=>pattern.en),...examples.slice(5,9)].join(" ");
+    const build=(level,title,text,focus)=>{const evidence=u.core.find(word=>findWordForm(text,word.word))?.word||(text.match(/[A-Za-z]+/)||["English"])[0];return {level,title,text,focus,questions:[
+      ["What is the passage mainly about?",`It is mainly about ${u.title}.`],
+      [`Find one key word about “${u.zh}”.`,`参考答案：${evidence}。也可以选择短文中其他本单元词。`],
+      ["How many sentences can you find?",`这篇短文共有 ${(text.match(/[.!?]/g)||[]).length||1} 个完整句子。`],
+      [`Which sentence contains “${evidence}”?`,`请在原文中找到并完整读出含有 ${evidence} 的句子。`],
+      ["Can you say one true sentence about yourself?","开放题：使用本单元重点词或句型说一个与自己有关的真实句子。"]
+    ]};};
+    return [build("LEVEL 1","基础精读：主题小故事",u.story,"找人物、地点、时间和重复词"),build("LEVEL 2","词汇阅读：单词进入句子",wordText,"观察5个必备词在完整句中的作用"),build("LEVEL 3","迁移阅读：句型综合运用",transferText||patternText,"找出核心句型并尝试替换真实信息")];
+  }
   function renderReadingStage(box,u){
-    const q1=`What is the passage mainly about?`, q2=`Find one word about “${u.zh}”.`, q3="Can you say one true sentence about yourself?";
-    box.innerHTML=`<div class="content-head"><span>第5步</span><h2>原创阅读：先猜，再找证据</h2><p>不要逐字翻译。先找人物、地点、时间和重复出现的词。</p></div><article class="reading-sheet"><span>READING · ${u.title.toUpperCase()}</span><button data-say="${esc(u.story)}">🔊 听全文</button><h3>${u.zh}小故事</h3><p class="english-reading">${esc(u.story)}</p><details><summary>需要帮助？查看中文理解线索</summary><p>这篇短文围绕“${u.zh}”展开。先圈出熟悉的单词，再判断人物做了什么。中文只用于检查理解，不要求逐字对应。</p></details></article><div class="reading-questions"><h3>读后思考</h3>${[[q1,`It is mainly about ${u.title}.`],[q2,`参考答案：${u.core[0].word}。其他符合主题的词也可以。`],[q3,"开放题：用本单元任一重点句型说一个真实句子。"]].map((q,i)=>`<details><summary>${i+1}. ${esc(q[0])}</summary><p>${esc(q[1])}</p></details>`).join("")}</div><div class="reading-method"><b>阅读三遍法</b><span>第一遍看大意；第二遍圈证据；第三遍大声朗读。遇到生词先猜，不要立刻查。</span></div>${doneButton("我已完成阅读")}`;
-    box.querySelector("[data-say]").onclick=()=>speak(u.story);
+    const passages=readingPassages(u);
+    box.innerHTML=`<div class="content-head"><span>第5步 · 3篇分级阅读 · 15个读后问题</span><h2>原创阅读：从读懂短句到综合运用</h2><p>三篇材料由浅入深。不要逐字翻译，先找人物、地点、时间、关键词和重复句式。</p></div><div class="reading-level-list">${passages.map((passage,index)=>`<section class="reading-level"><header><span>${passage.level}</span><div><h3>${esc(passage.title)}</h3><p>${esc(passage.focus)}</p></div><em>${(passage.text.match(/[A-Za-z]+/g)||[]).length}词</em></header><article class="reading-sheet"><span>READING ${index+1} · ${u.title.toUpperCase()}</span><button data-say="${esc(passage.text)}">🔊 听全文</button><p class="english-reading">${esc(passage.text)}</p><details><summary>需要帮助？查看阅读线索</summary><p>先圈出本单元学过的词，再给每句话标上序号。中文提示只用于检查大意，不要求逐字对应。</p></details></article><div class="reading-questions"><h3>读后理解 · 5题</h3>${passage.questions.map((question,qIndex)=>`<details><summary>${qIndex+1}. ${esc(question[0])}</summary><p>${esc(question[1])}</p></details>`).join("")}</div></section>`).join("")}</div><div class="reading-method"><b>分级阅读三遍法</b><span>第一遍看大意；第二遍完成5个问题并圈证据；第三遍跟读全文。一天读1篇即可，不必一次完成。</span></div>${doneButton("我已完成3篇分级阅读")}`;
+    box.querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
   }
 
+  function practiceOptions(answer,pool,seed){return seededShuffle([answer,...seededShuffle([...new Set(pool.filter(item=>item&&item!==answer))],seed).slice(0,2)],`${seed}:all`);}
   function quizItems(u){
-    const words=seededShuffle(u.core,`${iso()}:${u.id}:quiz`).slice(0,5);
-    return words.map((w,i)=>{
-      const wrong=seededShuffle(u.core.filter(x=>x.word!==w.word),`${iso()}:${u.id}:${w.word}:wrong`).slice(0,2).map(x=>x.meaning);
-      return {q:`“${w.word}” 的意思是？`,opts:shuffle([w.meaning,...wrong]),answer:w.meaning,word:w.word};
-    });
+    const words=seededShuffle(u.core,`${u.id}:practice-words`),meanings=u.core.map(item=>item.meaning),spellings=u.core.map(item=>item.word),patterns=expandedPatternItems(u),items=[];
+    for(let i=0;i<5;i+=1){const word=words[i%words.length];items.push({level:"第一关 · 词汇辨义",q:`“${word.word}”在本单元中的常见意思是？`,opts:practiceOptions(word.meaning,meanings,`${u.id}:p1:${i}`),answer:word.meaning,word:word.word,why:`${word.word} 表示“${word.meaning}”。先读英文，再主动回忆中文意思。`});}
+    for(let i=0;i<5;i+=1){const word=words[(i+5)%words.length];items.push({level:"第二关 · 中英转换",q:`选择“${word.meaning}”对应的英文单词或短语。`,opts:practiceOptions(word.word,spellings,`${u.id}:p2:${i}`),answer:word.word,word:word.word,why:`“${word.meaning}”对应 ${word.word}，注意字母顺序和短语中的空格。`});}
+    for(let i=0;i<5;i+=1){const word=words[(i+10)%words.length],study=wordSentenceStudies(word,i,u)[i%3],answer=study?.answer||word.word,sentence=study?.en||wordExample(word,i,u);items.push({level:"第三关 · 句式填空",q:`补全句子：${blankSentence(sentence,answer)}`,opts:practiceOptions(answer,spellings,`${u.id}:p3:${i}`),answer,word:word.word,why:`完整句子是：${sentence} 其中 ${answer} 在句中表示“${word.meaning}”。`});}
+    for(let i=0;i<5;i+=1){const pattern=patterns[i%patterns.length],pool=patterns.map(item=>item.en);items.push({level:"第四关 · 语境运用",q:`哪一句最适合表达“${pattern.zh}”？`,opts:practiceOptions(pattern.en,pool,`${u.id}:p4:${i}`),answer:pattern.en,word:u.core[i%u.core.length].word,why:`正确表达是：${pattern.en} ${pattern.rule}`});}
+    return items;
   }
   function shuffle(a){const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
   function renderPracticeStage(box,u){
     const items=quizItems(u);
-    box.innerHTML=`<div class="content-head"><span>第6步</span><h2>分层练习：从记单词到真正会运用</h2><p>先完成基础小测，再做句型、阅读和表达任务。错词会自动进入复习清单。</p></div><h3 class="practice-level">第一关 · 基础词汇</h3><div class="quiz-list">${items.map((item,i)=>`<article class="quiz-item" data-question="${i}"><b>${i+1}. ${esc(item.q)}</b><div>${item.opts.map(o=>`<button data-answer="${esc(o)}">${esc(o)}</button>`).join("")}</div><p></p></article>`).join("")}</div><button class="primary submit-quiz" id="submitQuiz">提交并查看结果</button><div id="quizResult"></div><h3 class="practice-level">第二关 · 理解与表达</h3><div class="ability-practice"><details><summary>1. 句型理解：翻译并朗读</summary><p><b>${esc(u.patterns[0].en)}</b><br>${esc(u.patterns[0].zh)}<br><small>朗读3遍，再替换一个关键词。</small></p></details><details><summary>2. 阅读理解：短文主要讲什么？</summary><p>主要围绕“${esc(u.zh)}”展开。请从短文中圈出两个能证明答案的词。</p></details><details><summary>3. 独立表达：说或写3句话</summary><p>第1句使用本单元必备词，第2句使用重点句型，第3句说自己的真实情况。完成后读给家长听。</p></details></div>${doneButton("我已完成本单元")}`;
+    const levels=[...new Set(items.map(item=>item.level))];
+    box.innerHTML=`<div class="content-head"><span>第6步 · 4个层级 · 20道题</span><h2>分层练习：从认得单词到能够独立运用</h2><p>依次完成词汇辨义、中英转换、句式填空和语境运用。提交后每题都会显示答案和原因。</p></div><div class="practice-road"><span><b>1</b>认意思</span><i>→</i><span><b>2</b>找英文</span><i>→</i><span><b>3</b>补句子</span><i>→</i><span><b>4</b>懂语境</span></div>${levels.map(level=>{const rows=items.map((item,index)=>({item,index})).filter(row=>row.item.level===level);return `<section class="practice-level-section"><h3 class="practice-level">${esc(level)} <small>5题</small></h3><div class="quiz-list">${rows.map(({item,index})=>`<article class="quiz-item" data-question="${index}"><b>${index+1}. ${esc(item.q)}</b><div>${item.opts.map(option=>`<button data-answer="${esc(option)}">${esc(option)}</button>`).join("")}</div><p></p></article>`).join("")}</div></section>`;}).join("")}<button class="primary submit-quiz" id="submitQuiz">提交20题并查看逐题解析</button><div id="quizResult"></div><h3 class="practice-level">完成选择题后，再做3项真实表达</h3><div class="ability-practice"><details><summary>1. 句型理解：翻译并朗读</summary><p><b>${esc(u.patterns[0].en)}</b><br>${esc(u.patterns[0].zh)}<br><small>朗读3遍，再替换两个关键词。</small></p></details><details><summary>2. 阅读证据：从三篇短文各找一句</summary><p>找出含有本单元关键词的3个句子，圈出证据词并大声读出来。</p></details><details><summary>3. 独立表达：说或写5句话</summary><p>至少使用3个必备词和2个重点句型，其中1句话必须介绍自己的真实情况。</p></details></div>${doneButton("我已完成本单元")}`;
     box.querySelectorAll(".quiz-item button").forEach(b=>b.onclick=()=>{const item=b.closest(".quiz-item");item.querySelectorAll("button").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");quizAnswers[item.dataset.question]=b.dataset.answer;});
     $("submitQuiz").onclick=()=>{
-      let correct=0; items.forEach((item,i)=>{const el=box.querySelector(`[data-question="${i}"]`), chosen=quizAnswers[i]; const ok=chosen===item.answer; if(ok)correct++; el.classList.add(chosen?(ok?"correct":"wrong"):"wrong"); el.querySelector("p").textContent=chosen?(ok?"回答正确！":"正确答案："+item.answer):"还没有作答，正确答案："+item.answer; const key=`${u.id}:${item.word}`; if(ok){if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(x=>x!==key);}else if(!state.weak.includes(key))state.weak.push(key);});
-      state.quiz.correct+=correct;state.quiz.total+=items.length; if(!state.dailyDone.includes(todayKey("quiz")))state.dailyDone.push(todayKey("quiz")); reward(Math.max(1,correct),`答对 ${correct}/${items.length} 题`,1); $("quizResult").innerHTML=`<div class="quiz-result"><b>${correct}/${items.length}</b><p>${correct===items.length?"全部正确！明天还要再回忆一次。":correct>=3?"基本掌握，去单词本复习错词。":"先别急，回到必备单词再听读一遍。"}</p></div>`;
+      let correct=0; items.forEach((item,i)=>{const el=box.querySelector(`[data-question="${i}"]`), chosen=quizAnswers[i]; const ok=chosen===item.answer; if(ok)correct++; el.classList.remove("correct","wrong");el.classList.add(chosen?(ok?"correct":"wrong"):"wrong"); el.querySelector("p").innerHTML=chosen?(ok?`<b>✓ 回答正确</b>${esc(item.why)}`:`<b>正确答案：${esc(item.answer)}</b>${esc(item.why)}`):`<b>尚未作答，正确答案：${esc(item.answer)}</b>${esc(item.why)}`; const key=`${u.id}:${item.word}`; if(ok){if(!state.mastered.includes(key))state.mastered.push(key);state.weak=state.weak.filter(x=>x!==key);}else if(!state.weak.includes(key))state.weak.push(key);});
+      state.quiz.correct+=correct;state.quiz.total+=items.length; if(!state.dailyDone.includes(todayKey("quiz")))state.dailyDone.push(todayKey("quiz")); reward(Math.max(1,Math.ceil(correct/4)),`完成20题分层练习，答对 ${correct} 题`,1); $("quizResult").innerHTML=`<div class="quiz-result"><b>${correct}/${items.length}</b><p>${correct===items.length?"全部正确！请隔3天再做一次，检查是否真正记牢。":correct>=16?"掌握良好。请重点朗读做错的句子，再完成真实表达。":correct>=12?"基础已经建立，请回到相应模块订正错题。":"建议先复习单词与句型，再重新完成20题。"}</p></div>`;
     };
   }
 
@@ -700,6 +1142,7 @@
 
   function wordPool(){
     const current=seededShuffle(unitNow().core,`${iso()}:${unitKey()}:wordbook`).map(w=>({...w,key:`${unitKey()}:${w.word}`}));
+    if(memoryFilter==="bridge"){const ids=new Set(COURSE_BOOKS.filter(book=>book.grade===6).flatMap(book=>book.units.map(unit=>unit.id)));return seededShuffle(allWords().filter(word=>ids.has(word.unitId)),`${iso()}:bridge-wordbook`).map(word=>({...word,key:`${word.unitId}:${word.word}`}));}
     if(memoryFilter==="weak") return allWords().filter(w=>state.weak.includes(`${w.unitId}:${w.word}`)).map(w=>({...w,key:`${w.unitId}:${w.word}`}));
     if(memoryFilter==="mastered") return allWords().filter(w=>state.mastered.includes(`${w.unitId}:${w.word}`)).map(w=>({...w,key:`${w.unitId}:${w.word}`}));
     return current;
@@ -739,15 +1182,134 @@
   }
   function moveWord(known){ const pool=wordPool(); if(!pool.length)return; const w=pool[memoryIndex]; if(known){if(!state.mastered.includes(w.key))state.mastered.push(w.key);state.weak=state.weak.filter(x=>x!==w.key);toast("已记住：明天再回忆一次");}else{if(!state.weak.includes(w.key))state.weak.push(w.key);state.mastered=state.mastered.filter(x=>x!==w.key);toast("已加入复习清单，慢慢来");} activity();save();memoryIndex=(memoryIndex+1)%Math.max(1,pool.length);memoryFlipped=false;renderWords(); }
 
+  const abilityReward=(key,amount,message,food=0)=>{if(state.abilities.rewarded.includes(key)){save();return false;}state.abilities.rewarded.push(key);reward(amount,message,food);return true;};
+  const diagnosticResult=()=>{const result=state.abilities.diagnostic;return result&&Object.keys(result.answers||{}).length===DIAGNOSTIC_QUESTIONS.length?result:null;};
+  const abilityHash=value=>[...String(value)].reduce((sum,char)=>((sum*31)+char.charCodeAt(0))>>>0,7);
+  const abilityPrompts=()=>{
+    const u=unitNow(),storySentences=String(u.story||"").match(/[^.!?]+[.!?]/g)||[];
+    const words=u.core.map(item=>({type:"单词跟读",en:item.word,zh:item.meaning})),patterns=u.patterns.map(item=>({type:"重点句型",en:item.en.replace(/\s*—.*$/,"").trim(),zh:item.zh.replace(/\s*—.*$/,"").trim()})),stories=storySentences.slice(0,2).map(en=>({type:"故事跟读",en:en.trim(),zh:"本单元故事句：先理解大意，再模仿语音语调。"})),examples=u.core.map(item=>({type:"词汇运用",en:item.example,zh:item.exampleZh}));
+    return [...words,...patterns,...stories,...examples].slice(0,15);
+  };
+  function abilityListeningItems(){
+    const u=unitNow(),all=bookNow().units.flatMap(unit=>unit.core),allPatterns=bookNow().units.flatMap(unit=>unit.patterns),ordered=[...u.core].sort((a,b)=>abilityHash(`${activeUserId}:${unitKey()}:${a.word}`)-abilityHash(`${activeUserId}:${unitKey()}:${b.word}`));
+    const wordItems=ordered.slice(0,Math.min(10,ordered.length)).map((item,index)=>{
+      const meanings=[item.meaning];
+      for(let step=1;meanings.length<3&&step<all.length;step+=1){const candidate=all[(abilityHash(item.word)+index+step*7)%all.length]?.meaning;if(candidate&&!meanings.includes(candidate))meanings.push(candidate);}
+      meanings.sort((a,b)=>abilityHash(`${item.word}:${a}`)-abilityHash(`${item.word}:${b}`));
+      return {kind:"听单词",audio:item.word,answer:item.meaning,reveal:item.word,options:meanings};
+    });
+    const sentenceItems=u.patterns.slice(0,3).map((item,index)=>{const options=[item.zh];for(let step=1;options.length<3&&step<allPatterns.length;step+=1){const candidate=allPatterns[(abilityHash(item.en)+index+step*5)%allPatterns.length]?.zh;if(candidate&&!options.includes(candidate))options.push(candidate);}options.sort((a,b)=>abilityHash(`${item.en}:${a}`)-abilityHash(`${item.en}:${b}`));return {kind:"听句子",audio:item.en,answer:item.zh,reveal:item.en,options};});
+    const extraNeeded=Math.max(0,13-wordItems.length-sentenceItems.length),extraItems=u.core.slice(0,extraNeeded).map((item,index)=>{const answer=`${item.word}：${item.meaning}`,options=[answer];for(let step=1;options.length<3&&step<u.core.length;step+=1){const other=u.core[(index+step*3)%u.core.length],candidate=`${other.word}：${other.meaning}`;if(!options.includes(candidate))options.push(candidate);}options.sort((a,b)=>abilityHash(`${item.example}:${a}`)-abilityHash(`${item.example}:${b}`));return {kind:"听句辨词",audio:item.example,answer,reveal:item.example,options};});
+    return [...wordItems,...sentenceItems,...extraItems];
+  }
+  function renderAbilitySummary(){
+    const a=state.abilities,diagnostic=diagnosticResult(),phonics=a.phonicsCompleted.length,listening=a.listeningCompleted.length,speaking=a.speakingCompleted.length;
+    $("abilitySummary").innerHTML=`<article class="ability-level-card"><span>${diagnostic?"🧭":"🌱"}</span><div><small>当前建议起点</small><b>${diagnostic?`${diagnostic.recommendedGrade}年级基础`:"尚未完成诊断"}</b><p>${diagnostic?`最近得分 ${diagnostic.score}/${DIAGNOSTIC_QUESTIONS.length} · ${esc(diagnostic.date)}`:"约8分钟，完成后会给出学习顺序建议。"}</p></div></article><article><b>${phonics}/${NATURAL_PHONICS_LESSONS.length}</b><small>拼读关卡</small></article><article><b>${listening}</b><small>听力单元</small></article><article><b>${speaking}</b><small>完成跟读</small></article>`;
+  }
+  function renderAbilities(){
+    renderAbilitySummary();
+    if(abilityTab==="bridge-check")abilityTab="diagnostic";
+    $("abilityTabs").innerHTML=ABILITY_TABS.map(item=>`<button class="${abilityTab===item.id?"active":""}" data-ability-tab="${item.id}"><span>${item.icon}</span><b>${item.name}</b><small>${item.tip}</small></button>`).join("");
+    if(abilityTab==="diagnostic")renderDiagnostic();
+    if(abilityTab==="natural-phonics")renderNaturalPhonics();
+    if(abilityTab==="listening")renderAbilityListening();
+    if(abilityTab==="speaking")renderAbilitySpeaking();
+  }
+  function renderBridgeAbility(){
+    const answered=Object.keys(bridgeAbilityAnswers).length,score=bridgeAbilityChecked?BRIDGE_ABILITY_QUESTIONS.filter((item,index)=>bridgeAbilityAnswers[index]===item.answer).length:0,passed=score>=14;
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head bridge-ability-head"><div><span>🎓</span><small>PRIMARY TO JUNIOR HIGH CHECK</small><h2>小升初20题综合检测</h2><p>覆盖近形词、冠词名词、代词、四大时态、搭配、比较、语序、连接词、阅读和写作。必须读懂完整句子，不能只凭眼熟。</p></div><aside><b>${bridgeAbilityChecked?`${score}/20`:`${answered}/20`}</b><small>${bridgeAbilityChecked?(passed?"达到衔接线":"需要补漏"):"已作答"}</small></aside></header><div class="bridge-ability-note"><b>建议限时25分钟</b><span>每题只有一个最合适答案；交卷后逐题显示中文理由和知识归属。</span></div><div class="diagnostic-grid bridge-ability-grid">${BRIDGE_ABILITY_QUESTIONS.map((item,index)=>{const selected=bridgeAbilityAnswers[index],correct=selected===item.answer;return `<article class="diagnostic-question ${bridgeAbilityChecked?(correct?"correct":"wrong"):""}"><div><span>${index+1}</span><small>${esc(item.area)} · 小升初易错</small></div><h3>${esc(item.q)}</h3><div>${item.options.map(option=>`<button class="${selected===option?"selected":""} ${bridgeAbilityChecked&&option===item.answer?"answer":""}" data-bridge-ability-answer="${index}" data-answer-value="${esc(option)}" ${bridgeAbilityChecked?"disabled":""}>${esc(option)}</button>`).join("")}</div>${bridgeAbilityChecked?`<p><b>${correct?"✓ 回答正确":"正确答案："+esc(item.answer)}</b>${esc(item.why)}</p>`:""}</article>`}).join("")}</div><div class="ability-submit-row">${bridgeAbilityChecked?`<div class="bridge-result ${passed?"passed":"retry"}"><b>${score}/20 · ${passed?"达到小升初衔接线":"建议按错题类型补漏"}</b><p>${passed?"请把做错的题隔3天再做，并进入模拟卷检验稳定性。":"回到12周计划中对应知识周，学完规则后再重新检测。"}</p></div><button class="soft" data-bridge-ability-retry>重新检测</button><button class="primary" data-view="bridge">返回强化计划</button>`:`<button class="primary" data-bridge-ability-submit ${answered<BRIDGE_ABILITY_QUESTIONS.length?"disabled":""}>${answered<BRIDGE_ABILITY_QUESTIONS.length?`还需完成 ${BRIDGE_ABILITY_QUESTIONS.length-answered} 题`:"提交并查看逐题解析"}</button>`}</div>`;
+  }
+  function submitBridgeAbility(){
+    if(Object.keys(bridgeAbilityAnswers).length<BRIDGE_ABILITY_QUESTIONS.length)return toast("请先完成全部20题");
+    bridgeAbilityChecked=true;const score=BRIDGE_ABILITY_QUESTIONS.filter((item,index)=>bridgeAbilityAnswers[index]===item.answer).length;state.bridge.abilityBest=Math.max(Number(state.bridge.abilityBest||0),score);
+    if(score>=14)abilityReward("bridge-check",3,"通过小升初综合检测",2);else save();renderAbilities();
+  }
+  function renderDiagnostic(){
+    const result=diagnosticResult();if(!result&&state.abilities.diagnostic){state.abilities.diagnostic=null;save();}const shownAnswers=result?.answers||diagnosticAnswers,answered=Object.keys(shownAnswers).length,pageSize=10,totalPages=Math.ceil(DIAGNOSTIC_QUESTIONS.length/pageSize),start=diagnosticPage*pageSize,pageItems=DIAGNOSTIC_QUESTIONS.slice(start,start+pageSize),pageAnswered=pageItems.filter((_,offset)=>Object.hasOwn(shownAnswers,start+offset)).length,pageReady=pageAnswered===pageItems.length;
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head diagnostic-head"><div><span>🧭</span><small>START FROM THE RIGHT PLACE</small><h2>入学诊断：不是考试，是寻找起点</h2><p>共${DIAGNOSTIC_QUESTIONS.length}题，分3组完成，覆盖字母、词汇、句型、语法、语序和阅读。每完成10题可以休息一下。</p></div><aside><b>${result?`${result.score}/${DIAGNOSTIC_QUESTIONS.length}`:`${answered}/${DIAGNOSTIC_QUESTIONS.length}`}</b><small>${result?`建议${result.recommendedGrade}年级起步`:"已回答"}</small></aside></header><div class="diagnostic-section-bar"><div><b>第 ${diagnosticPage+1} 组</b><span>${diagnosticPage===0?"三年级基础":diagnosticPage===1?"四、五年级应用":"五、六年级综合"}</span></div><div>${Array.from({length:totalPages},(_,index)=>`<button class="${index===diagnosticPage?"active":""}" data-diagnostic-page="${index}">${index+1}</button>`).join("")}</div><small>本组 ${pageAnswered}/${pageItems.length} 题</small></div><div class="diagnostic-grid">${pageItems.map((item,offset)=>{const index=start+offset,selected=shownAnswers[index],checked=Boolean(result),correct=checked&&selected===item.answer;return `<article class="diagnostic-question ${checked?(correct?"correct":"wrong"):""}"><div><span>${index+1}</span><small>${item.area} · ${item.grade}年级梯度</small></div><h3>${esc(item.q)}</h3><div>${item.options.map(option=>`<button class="${selected===option?"selected":""} ${checked&&option===item.answer?"answer":""}" data-diagnostic-answer="${index}" data-answer-value="${esc(option)}" ${checked?"disabled":""}>${esc(option)}</button>`).join("")}</div>${checked?`<p><b>${correct?"✓ 回答正确":"正确答案："+esc(item.answer)}</b>${esc(item.why)}</p>`:""}</article>`}).join("")}</div><div class="ability-submit-row diagnostic-actions">${diagnosticPage>0?`<button class="soft" data-diagnostic-page="${diagnosticPage-1}">← 上一组</button>`:""}${!result&&diagnosticPage<totalPages-1?`<button class="primary" data-diagnostic-page="${diagnosticPage+1}" ${pageReady?"":"disabled"}>完成本组，进入下一组 →</button>`:""}${!result&&diagnosticPage===totalPages-1?`<button class="primary" data-diagnostic-submit ${answered<DIAGNOSTIC_QUESTIONS.length?"disabled":""}>${answered<DIAGNOSTIC_QUESTIONS.length?`全部还需完成 ${DIAGNOSTIC_QUESTIONS.length-answered} 题`:"查看完整诊断结果"}</button>`:""}${result&&diagnosticPage<totalPages-1?`<button class="primary" data-diagnostic-page="${diagnosticPage+1}">查看下一组解析 →</button>`:""}</div>${result?`<div class="ability-submit-row"><button class="soft" data-diagnostic-reset>重新诊断</button><button class="primary" data-ability-tab="natural-phonics">按建议开始自然拼读 →</button></div>${diagnosticAdvice(result)}`:""}`;
+  }
+  function diagnosticAdvice(result){
+    const tips=result.recommendedGrade<=3?["先完成短元音和辅音组合","从三年级上册开始，每天1个小环节","听懂后再看文字，不要求一次全对"]:result.recommendedGrade===4?["完成自然拼读前4关","从四年级对应学期开始","每天加入5分钟听力辨词"]:result.recommendedGrade===5?["重点补静音e、元音组合和时态","从五年级对应学期开始","每周完成2次录音回听"]:["复习多音节和重读规律","可从六年级课程开始","加强整句听力、表达和阅读复述"];
+    return `<section class="diagnostic-result"><span>🎯</span><div><small>个性化学习建议</small><h2>建议从 ${result.recommendedGrade} 年级基础开始</h2><p>这不是给孩子贴标签，而是让内容既不太难，也不无聊。</p><ul>${tips.map(tip=>`<li>${tip}</li>`).join("")}</ul></div></section>`;
+  }
+  function submitDiagnostic(){
+    if(Object.keys(diagnosticAnswers).length<DIAGNOSTIC_QUESTIONS.length)return toast(`请先完成全部${DIAGNOSTIC_QUESTIONS.length}题`);
+    const score=DIAGNOSTIC_QUESTIONS.filter((item,index)=>diagnosticAnswers[index]===item.answer).length,recommendedGrade=score<=7?3:score<=15?4:score<=23?5:6,first=!state.abilities.diagnostic;
+    state.abilities.diagnostic={score,recommendedGrade,date:iso(),answers:{...diagnosticAnswers}};
+    if(first)abilityReward("diagnostic",3,"完成入学诊断",1);else save();renderAbilities();
+  }
+  function renderNaturalPhonics(){
+    const lesson=NATURAL_PHONICS_LESSONS.find(item=>item.id===abilityPhonicsLesson)||NATURAL_PHONICS_LESSONS[0],questions=[lesson.quiz,...(NATURAL_PHONICS_DRILLS[lesson.id]||[])],done=state.abilities.phonicsCompleted.includes(lesson.id),answered=Object.keys(abilityPhonicsAnswers).length,checked=abilityPhonicsChecked,score=questions.filter((item,index)=>abilityPhonicsAnswers[index]===item.answer).length,passed=checked&&score>=Math.ceil(questions.length*.75);
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head phonics-head"><div><span>🔡</span><small>SEE · SOUND · BLEND</small><h2>自然拼读：每关8题，真正练会再过关</h2><p>6关共48题。先听示范、观察规律，再独立完成8题；答对至少6题才算通过，错题会逐题解释。</p></div><aside><b>${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length}</b><small>已闯关 · 共48题</small></aside></header><div class="phonics-level-nav">${NATURAL_PHONICS_LESSONS.map(item=>`<button class="${item.id===lesson.id?"active":""} ${state.abilities.phonicsCompleted.includes(item.id)?"done":""}" data-ability-phonics-lesson="${item.id}"><span>${state.abilities.phonicsCompleted.includes(item.id)?"✓":item.level}</span><b>${item.title}</b></button>`).join("")}</div><section class="phonics-lesson"><div class="phonics-rule-card"><small>${lesson.level} · 核心规律</small><h2>${esc(lesson.title)}</h2><p>${esc(lesson.rule)}</p><b>${esc(lesson.pattern)}</b></div><div class="phonics-example-row">${lesson.examples.map(word=>`<button data-say="${esc(word)}"><span>🔊</span><b>${esc(word)}</b><small>点听并跟读3遍</small></button>`).join("")}</div><div class="blend-road"><small>拼读示范</small>${lesson.blend.map((part,index)=>`<div><span>${index+1}</span><b>${esc(part)}</b></div>${index<lesson.blend.length-1?"<i>→</i>":""}`).join("")}</div><div class="phonics-practice-head"><div><small>本关强化练习</small><h3>8题闯关 · 达到6题正确才通过</h3></div><b>${checked?`${score}/${questions.length}`:`${answered}/${questions.length}`}</b></div><div class="phonics-question-list">${questions.map((item,index)=>{const selected=abilityPhonicsAnswers[index],correct=selected===item.answer;return `<article class="phonics-check ${checked?(correct?"correct":"wrong"):""}"><small>第 ${index+1} 题</small><h3>${esc(item.q)}</h3><div>${item.options.map(option=>`<button class="${selected===option?"selected":""} ${checked&&option===item.answer?"answer":""}" data-ability-phonics-answer="${esc(option)}" data-phonics-question="${index}" ${checked?"disabled":""}>${esc(option)}</button>`).join("")}</div>${checked?`<p><b>${correct?"✓ 回答正确":"正确答案："+esc(item.answer)}</b>${esc(item.why)}</p>`:""}</article>`}).join("")}</div><div class="ability-submit-row">${!checked?`<button class="primary" data-ability-phonics-submit ${answered<questions.length?"disabled":""}>${answered<questions.length?`还需完成 ${questions.length-answered} 题`:"提交本关答案"}</button>`:`<button class="soft" data-ability-phonics-retry>重新练习本关</button>${passed?`<button class="primary" data-ability-phonics-pass="${lesson.id}" ${done?"disabled":""}>${done?"✓ 本关已完成":`通过本关 ${score}/${questions.length} +2 ☀️`}</button>`:`<button class="primary" data-ability-phonics-retry>还差 ${Math.ceil(questions.length*.75)-score} 题，复习后再试</button>`}`}</div></section>`;
+    $("abilityWorkspace").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say,.74));
+  }
+  function renderAbilityListening(){
+    const items=abilityListeningItems(),key=unitKey(),completed=state.abilities.listeningCompleted.includes(key),wordCount=items.filter(item=>item.kind==="听单词").length,sentenceCount=items.length-wordCount;
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head listening-head"><div><span>🎧</span><small>LISTEN BEFORE YOU LOOK</small><h2>本单元听力：单词辨义 + 整句理解</h2><p>${esc(bookNow().label)} · Unit ${unitNow().number} ${esc(unitNow().title)}。共${items.length}题：${wordCount}道听单词、${sentenceCount}道听句子。题序已打乱，建议每题听2遍。</p></div><aside><b>${completed?"✓":`${Object.keys(abilityListeningAnswers).length}/${items.length}`}</b><small>${completed?"本单元已完成":"已作答"}</small></aside></header><div class="listening-volume-note"><span>训练量</span><b>${items.length}题 / 单元</b><p>先完成单词辨音，再进入整句理解；做错后重新听，不靠看英文猜答案。</p></div><div class="listening-list">${items.map((item,index)=>{const selected=abilityListeningAnswers[index],checked=abilityListeningChecked,correct=selected===item.answer;return `<article class="listening-question ${checked?(correct?"correct":"wrong"):""}"><div><span>${index+1}</span><button data-listening-say="${esc(item.audio)}">▶ ${item.kind} · 第 ${index+1} 题</button><small>不要先看答案，建议播放2遍</small></div><div class="listening-options">${item.options.map(option=>`<button class="${selected===option?"selected":""} ${checked&&option===item.answer?"answer":""}" data-listening-answer="${index}" data-answer-value="${esc(option)}" ${checked?"disabled":""}>${esc(option)}</button>`).join("")}</div>${checked?`<p><b>${correct?"✓ 听对了":"正确答案："+esc(item.answer)}</b><span>听到的是 <strong>${esc(item.reveal)}</strong></span><button data-say="${esc(item.audio)}">🔊 再听一次</button></p>`:""}</article>`}).join("")}</div><div class="ability-submit-row">${abilityListeningChecked?`<button class="soft" data-listening-retry>重新练习全部${items.length}题</button><button class="primary" data-ability-tab="speaking">进入口语录音 →</button>`:`<button class="primary" data-listening-submit ${Object.keys(abilityListeningAnswers).length<items.length?"disabled":""}>${Object.keys(abilityListeningAnswers).length<items.length?`还需完成 ${items.length-Object.keys(abilityListeningAnswers).length} 题`:"检查全部听力答案"}</button>`}</div>`;
+    $("abilityWorkspace").querySelectorAll("[data-listening-say],[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.listeningSay||button.dataset.say,.7));
+  }
+  function submitAbilityListening(){
+    const items=abilityListeningItems();if(Object.keys(abilityListeningAnswers).length<items.length)return toast("请先听完并完成全部题目");abilityListeningChecked=true;
+    const score=items.filter((item,index)=>abilityListeningAnswers[index]===item.answer).length,key=unitKey(),first=!state.abilities.listeningCompleted.includes(key);
+    if(first){state.abilities.listeningCompleted.push(key);abilityReward(`listening:${key}`,2,`完成本单元听力 ${score}/${items.length}`,1);}else save();renderAbilities();
+  }
+  function renderAbilitySpeaking(){
+    const prompts=abilityPrompts(),completed=state.abilities.speakingCompleted;
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head speaking-head"><div><span>🎙️</span><small>LISTEN · RECORD · PLAY BACK</small><h2>本单元口语：15次真实开口训练</h2><p>从单词清晰度练到完整句子的节奏和语调。建议每天完成3—5项，分3天学完；每项必须录音回放后才能完成。</p></div><aside><b>${prompts.filter((_,index)=>completed.includes(`${unitKey()}:${index}`)).length}/${prompts.length}</b><small>项已完成</small></aside></header><div class="speaking-volume-note"><div><span>第1组</span><b>必备单词</b><small>读准每个音</small></div><i>→</i><div><span>第2组</span><b>重点句型</b><small>读顺整句话</small></div><i>→</i><div><span>第3组</span><b>故事与运用</b><small>模仿节奏语调</small></div></div><div class="speaking-guide"><span><b>1</b>听原音2遍</span><i>→</i><span><b>2</b>看句意理解</span><i>→</i><span><b>3</b>录音并回放</span><i>→</i><span><b>4</b>勾选完成</span></div><div class="speaking-list">${prompts.map((item,index)=>{const key=`${unitKey()}:${index}`,done=completed.includes(key),recorded=speakingRecordedKeys.has(key);return `<article><div class="speaking-number">${done?"✓":index+1}</div><div class="speaking-copy"><small class="speaking-kind">${esc(item.type)}</small><h3>${esc(item.en)}</h3><p>${esc(item.zh)}</p><div><button class="soft" data-say="${esc(item.en)}">🔊 听标准${item.type==="单词跟读"?"单词":"句"}</button><button class="record-button" data-speaking-record="${index}">● ${recorded?"再录一次":"开始录音"}</button><button class="primary" data-speaking-complete="${index}" ${done||!recorded?"disabled":""}>${done?"已完成":recorded?"完成这项":"录音后解锁"}</button></div><section class="recording-result" id="recordingResult${index}"><small>录音只在当前页面临时播放，不会上传或保存。</small></section></div></article>`}).join("")}</div><section class="speaking-self-check"><span>👂</span><div><h3>回听时只检查3件事</h3><p><b>声音：</b>每个关键词是否清楚？　<b>节奏：</b>有没有一个词一个词地断开？　<b>语调：</b>问句和陈述句是否有自然变化？</p></div></section>`;
+    $("abilityWorkspace").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say,.74));
+  }
+  async function startSpeakingRecording(index,button){
+    if(speakingRecorder?.state==="recording"){speakingRecorder.stop();return;}
+    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return toast("当前浏览器不支持网页录音，请使用最新版微信、Chrome、Edge 或 Safari");
+    try{
+      speakingStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});speakingChunks=[];
+      const preferred=["audio/webm;codecs=opus","audio/mp4","audio/webm"].find(type=>MediaRecorder.isTypeSupported?.(type));speakingRecorder=new MediaRecorder(speakingStream,preferred?{mimeType:preferred}:undefined);
+      button.textContent="■ 停止并回放";button.classList.add("recording");const result=$("recordingResult"+index);result.innerHTML="<b>正在录音……读完后点击“停止并回放”</b>";
+      speakingRecorder.ondataavailable=event=>{if(event.data.size)speakingChunks.push(event.data);};
+      speakingRecorder.onstop=()=>{const blob=new Blob(speakingChunks,{type:speakingRecorder.mimeType||"audio/webm"});if(speakingRecording)URL.revokeObjectURL(speakingRecording);speakingRecording=URL.createObjectURL(blob);speakingRecordedKeys.add(`${unitKey()}:${index}`);result.innerHTML=`<audio controls playsinline src="${speakingRecording}"></audio><small>先完整听一遍，再和“标准句”比较。录音不会上传。</small>`;button.textContent="● 再录一次";button.classList.remove("recording");const completeButton=$("abilityWorkspace")?.querySelector(`[data-speaking-complete="${index}"]`);if(completeButton){completeButton.disabled=false;completeButton.textContent="完成这句";}speakingStream?.getTracks().forEach(track=>track.stop());speakingStream=null;};
+      speakingRecorder.start();
+    }catch{toast("没有获得麦克风权限。请在浏览器地址栏的网站设置中允许麦克风。");}
+  }
+  function completeSpeaking(index){
+    const key=`${unitKey()}:${index}`;if(state.abilities.speakingCompleted.includes(key))return;if(!speakingRecordedKeys.has(key))return toast("请先录音并回放，再完成这句");state.abilities.speakingCompleted.push(key);abilityReward(`speaking:${key}`,1,"完成一句口语回听");renderAbilities();
+  }
+
+  function renderBeginner(){
+    const totalPhonemes=Object.values(PHONICS_GROUPS).reduce((sum,group)=>sum+group.items.length,0),letters=state.beginner.letters.length;
+    $("beginnerProgress").innerHTML=`<article><span>🔠</span><div><b>${letters}/26</b><small>已认识字母</small></div><i><em style="width:${letters/26*100}%"></em></i></article><article><span>🧩</span><div><b>${state.abilities.phonicsCompleted.length}/6</b><small>自然拼读关卡</small></div><i><em style="width:${state.abilities.phonicsCompleted.length/6*100}%"></em></i></article><article><span>👄</span><div><b>${state.phonicsDone.length}/${totalPhonemes}</b><small>已完成音标</small></div><i><em style="width:${state.phonicsDone.length/totalPhonemes*100}%"></em></i></article><aside><b>推荐顺序</b><p>字母认识 → 字母与声音 → 自然拼读 → 音标辨音</p></aside>`;
+    $("beginnerTabs").innerHTML=BEGINNER_TABS.map(item=>`<button class="${beginnerTab===item.id?"active":""}" data-beginner-tab="${item.id}"><span>${item.icon}</span><b>${item.name}</b><small>${item.tip}</small></button>`).join("");
+    const host=$("beginnerWorkspace");
+    if(beginnerTab==="alphabet"){
+      host.innerHTML=`<header class="beginner-module-head"><div><small>STEP 1 · LOOK · LISTEN · SAY</small><h2>26个英文字母认识表</h2><p>先认大写和小写，再听字母名称和示例词。不要把“字母名称”和“字母在单词中的声音”混为一谈。</p></div><aside><b>${letters}/26</b><small>已认识</small></aside></header><div class="alphabet-guide"><span><b>1</b>看大小写</span><i>→</i><span><b>2</b>听字母名</span><i>→</i><span><b>3</b>听示例词</span><i>→</i><span><b>4</b>在空中写一遍</span></div><div class="alphabet-grid">${ALPHABET_LESSONS.map(item=>{const [upper,lower,ipa,word,zh,hint]=item,done=state.beginner.letters.includes(upper);return `<article class="alphabet-card ${done?"done":""}"><div class="alphabet-letter"><b>${upper}</b><span>${lower}</span></div><small>字母名称 ${ipa}</small><div class="alphabet-audio"><button data-say="${upper}">🔊 听字母名</button><button data-say="${word}">🎧 ${word}</button></div><p><b>${word}</b> · ${zh}</p><em>${hint}</em><button class="letter-known" data-letter-known="${upper}">${done?"✓ 已认识":"我认识了"}</button></article>`;}).join("")}</div><section class="beginner-checklist"><h3>字母启蒙5项检查</h3><div><span>能按顺序唱出 A—Z</span><span>看到大写能找到对应小写</span><span>听到字母名能指出字母</span><span>能写出自己姓名中的字母</span><span>知道字母名不等于单词里的发音</span></div></section>`;
+    }
+    if(beginnerTab==="sounds"){
+      const vowels=ALPHABET_LESSONS.filter(item=>"AEIOU".includes(item[0])),groups=[
+        ["会‘爆破’的声音","B /b/ · P /p/ · D /d/ · T /t/ · G /g/ · K /k/","手放在嘴前，感受短促气流；清辅音不振动，浊辅音喉咙振动。"],
+        ["会‘摩擦’的声音","F /f/ · V /v/ · S /s/ · Z /z/ · H /h/","让气流从窄缝通过，声音可以稍微延长。"],
+        ["鼻音和流音","M /m/ · N /n/ · L /l/ · R /r/","m、n 的气流经过鼻腔；l、r 要观察舌头位置。"],
+        ["常见字母组合","sh /ʃ/ · ch /tʃ/ · th /θ/ /ð/ · wh /w/","两个字母有时合起来表示一个音，要作为整体观察。"]
+      ];
+      host.innerHTML=`<header class="beginner-module-head sound-head"><div><small>STEP 2 · LETTER NAME ≠ LETTER SOUND</small><h2>字母名称和常见发音</h2><p>字母 A 的名称是 /eɪ/，但在 apple 中常发 /æ/。先建立这个区别，之后学习拼读会容易很多。</p></div><aside><b>5+4</b><small>元音与辅音组</small></aside></header><section class="vowel-board"><div><small>五个元音字母</small><h3>A · E · I · O · U</h3><p>元音是音节的中心。同一个元音字母在不同单词中可能有不同发音。</p></div>${vowels.map(item=>`<article><b>${item[0]} ${item[1]}</b><span>${item[2]}</span><button data-say="${item[3]}">🔊 ${item[3]}</button><small>${item[5]}</small></article>`).join("")}</section><div class="sound-family-grid">${groups.map((group,index)=>`<article><span>${index+1}</span><h3>${group[0]}</h3><b>${group[1]}</b><p>${group[2]}</p></article>`).join("")}</div><section class="sound-practice"><h3>每天8分钟声音游戏</h3><ol><li>家长说一个字母名，孩子指出大小写。</li><li>播放一个示例词，孩子说出开头字母。</li><li>比较一组清浊音，如 /p/ 与 /b/，摸喉咙判断是否振动。</li><li>从家里找3件物品，说出它们英文首字母。</li></ol></section>`;
+    }
+    if(beginnerTab==="phonics"){
+      host.innerHTML=`<header class="beginner-module-head phonics-start-head"><div><small>STEP 3 · SOUND → BLEND → WORD</small><h2>自然拼读起步路线</h2><p>自然拼读不是背规则表，而是把声音逐个滑读并合成单词。每关先看规律、听示范，再做8题闯关。</p></div><aside><b>${state.abilities.phonicsCompleted.length}/6</b><small>关已完成</small></aside></header><div class="phonics-path-cards">${NATURAL_PHONICS_LESSONS.map((lesson,index)=>`<article class="${state.abilities.phonicsCompleted.includes(lesson.id)?"done":""}"><span>${state.abilities.phonicsCompleted.includes(lesson.id)?"✓":index+1}</span><small>${lesson.level}</small><h3>${esc(lesson.title)}</h3><p>${esc(lesson.rule)}</p><b>${esc(lesson.pattern)}</b><div>${lesson.examples.map(word=>`<button data-say="${word}">🔊 ${word}</button>`).join("")}</div></article>`).join("")}</div><section class="phonics-start-action"><div><span>🧩</span><h3>进入足量闯关练习</h3><p>6关共48题，每关8题；答对至少6题才通过，错题逐题解释。</p></div><button class="primary" data-beginner-open-ability>打开自然拼读闯关 →</button></section>`;
+    }
+    if(beginnerTab==="ipa"){
+      host.innerHTML=`<div class="phonics-intro"><article><span>1</span><div><b>音标不是字母</b><p>字母是单词的写法，音标表示实际听到的声音。同一个字母在不同单词中可能发不同音。</p></div></article><article><span>2</span><div><b>符号 / / 表示发音</b><p>如 sheep /ʃiːp/；符号 ː 表示长音，要比短音多保持一会儿。</p></div></article><article><span>3</span><div><b>听—看—模仿—对比</b><p>先听标准音素和示例词，看口型提示，跟读3遍，再比较相近音。</p></div></article></div><div class="phonics-groups" id="phonicsGroups"></div><div class="phonics-grid" id="phonicsGrid"></div><section class="panel minimal-panel"><div class="section-head"><div><span class="eyebrow">MINIMAL PAIRS</span><h2>最小对立词辨音</h2></div></div><p>两个单词通常只差一个音。先分别点读，再闭眼判断听到的是哪一个。</p><div class="minimal-grid" id="minimalGrid"></div></section><section class="panel phonics-method"><h2>每天5分钟发音训练</h2><div><span><b>第1分钟</b>听5个示例词</span><span><b>第2分钟</b>看口型慢读</span><span><b>第3分钟</b>正常速度跟读</span><span><b>第4分钟</b>对比相近音</span><span><b>第5分钟</b>离开提示读词</span></div></section>`;
+      renderPhonics();
+    }
+    host.querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
+  }
+
   function renderPhonics(){
     const icons={short:"🟡",long:"🟢",diph:"🌈",stops:"💨",consonants:"👄",clusters:"🔗"},groups=Object.entries(PHONICS_GROUPS),total=groups.reduce((sum,[,item])=>sum+item.items.length,0),done=state.phonicsDone.length,group=PHONICS_GROUPS[phonicsGroup];
     $("phonicsGroups").innerHTML=`<div class="phonics-progress"><div><b>音标学习进度</b><span>${done} / ${total} 个音</span></div><i><em style="width:${Math.min(100,done/total*100)}%"></em></i></div><div class="phonics-group-buttons">${groups.map(([id,item])=>`<button class="${id===phonicsGroup?"active":""}" data-phonics-group="${id}">${icons[id]} ${item.name}<small>${item.items.length}个</small></button>`).join("")}</div>`;
     $("phonicsGrid").innerHTML=`<article class="phonics-tip"><span>${icons[phonicsGroup]}</span><div><small>本组学习目标</small><h2>${group.name}</h2><p>${group.tip}</p><p><b>发音已校正：</b>主按钮按<a href="https://www.xdf.cn/zhuanti/bd-phonetic-alphabet-card/index.html" target="_blank" rel="noopener noreferrer">新东方48音标卡</a>对照播放；“示范单词”播放完整单词。网络不可用时自动切换到本地音素包。</p></div></article>${group.items.map(item=>{const [symbol,word,ipa,tip,spelling]=item,key=`${phonicsGroup}:${symbol}`,finished=state.phonicsDone.includes(key);return `<article class="phoneme-card ${finished?"done":""}" data-phoneme-key="${esc(key)}"><div class="phoneme-top"><strong>${esc(symbol)}</strong><div><button data-say-phoneme="${esc(symbol)}" aria-label="播放标准音素 ${esc(symbol)}">🔊 标准音素</button><button data-say="${esc(word)}" aria-label="播放示例词 ${esc(word)}">🎧 示范单词</button></div></div><h3>${esc(word)} <small>${esc(ipa)}</small></h3><p><b>👄 发音方法：</b>${esc(tip)}</p><p><b>🔤 常见字母：</b>${esc(spelling)}</p><ol><li>听标准音素</li><li>听完整示范词</li><li>对照口型慢速跟读3遍</li></ol><button class="phoneme-done" data-finish-phoneme="${esc(key)}">${finished?"✓ 已学会":"我已听、看、读3遍 +1 ☀️"}</button></article>`}).join("")}`;
     $("minimalGrid").innerHTML=MINIMAL_PAIRS.map(([a,aIpa,b,bIpa])=>`<article><div><button data-say="${esc(a)}">🔊 ${esc(a)}</button><span>${esc(aIpa)}</span></div><b>VS</b><div><button data-say="${esc(b)}">🔊 ${esc(b)}</button><span>${esc(bIpa)}</span></div><p>先听两遍，再注意两个词中不同的音。</p></article>`).join("");
     document.querySelectorAll("[data-phonics-group]").forEach(button=>button.onclick=()=>{phonicsGroup=button.dataset.phonicsGroup;renderPhonics();});
-    document.querySelectorAll("#view-phonics [data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
-    document.querySelectorAll("#view-phonics [data-say-phoneme]").forEach(button=>button.onclick=()=>speakPhoneme(button.dataset.sayPhoneme));
-    document.querySelectorAll("[data-finish-phoneme]").forEach(button=>button.onclick=()=>{const key=button.dataset.finishPhoneme;if(state.phonicsDone.includes(key)){toast("这个音标已经学过了，继续巩固吧");return;}state.phonicsDone.push(key);reward(1,"完成一个音标跟读");renderPhonics();});
+    document.querySelectorAll("#view-beginner [data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
+    document.querySelectorAll("#view-beginner [data-say-phoneme]").forEach(button=>button.onclick=()=>speakPhoneme(button.dataset.sayPhoneme));
+    document.querySelectorAll("[data-finish-phoneme]").forEach(button=>button.onclick=()=>{const key=button.dataset.finishPhoneme;if(state.phonicsDone.includes(key)){toast("这个音标已经学过了，继续巩固吧");return;}state.phonicsDone.push(key);reward(1,"完成一个音标跟读");renderBeginner();});
   }
 
   function renderGrammar(){
@@ -847,14 +1409,51 @@
   function selectPet(id){if(!state.pets.owned.includes(id))return;state.pets.selected=id;petProgress(id);save();toast(`已选择 ${catalogPet(id).name} 作为当前伙伴`);renderPets();renderHomePet();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
 
   function renderReport(){
-    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0; $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🥣</span><b>${state.foods}</b><small>粮食库存</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
+    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0,diagnostic=diagnosticResult(); $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🧭</span><b>${diagnostic?diagnostic.recommendedGrade+"年级":"—"}</b><small>诊断建议起点</small></article><article><span>🔡</span><b>${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length}</b><small>拼读闯关</small></article><article><span>🥣</span><b>${state.foods}</b><small>粮食库存</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
     const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const key=iso(d);days.push({name:["日","一","二","三","四","五","六"][d.getDay()],count:state.activity[key]||0,today:i===0});} const max=Math.max(4,...days.map(d=>d.count)); $("weekChart").innerHTML=days.map(d=>`<div class="chart-day"><b>${d.count}</b><span style="height:${Math.max(8,d.count/max*120)}px"></span><small>${d.today?"今天":"周"+d.name}</small></div>`).join("");
-    const advice=[]; if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
+    const advice=[]; if(!diagnostic)advice.push("先完成一次入学诊断，找到不太难也不太简单的学习起点。");else if(state.abilities.phonicsCompleted.length<NATURAL_PHONICS_LESSONS.length)advice.push(`诊断建议从${diagnostic.recommendedGrade}年级基础开始；自然拼读已完成 ${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length} 关，可每次练1关。`);if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
   }
 
   document.addEventListener("click",e=>{
     const view=e.target.closest("[data-view]"); if(view){route(view.dataset.view);return;}
     const profileChoice=e.target.closest("[data-profile-id]");if(profileChoice){switchProfile(profileChoice.dataset.profileId);return;}
+    const bridgeWeekButton=e.target.closest("[data-bridge-week]");if(bridgeWeekButton){state.bridge.week=Number(bridgeWeekButton.dataset.bridgeWeek);save();renderBridge();return;}
+    const bridgeLessonButton=e.target.closest("[data-bridge-lesson]");if(bridgeLessonButton){openBridgeLesson(bridgeLessonButton.dataset.bridgeLesson);return;}
+    const bridgeClaim=e.target.closest("[data-bridge-claim]");if(bridgeClaim){const week=Number(bridgeClaim.dataset.bridgeClaim),complete=BRIDGE_WEEKS[week-1].days.every((_,index)=>state.bridge.done.includes(bridgeTaskKey(week,index)));if(!complete)return toast("请先完成本周5项强化任务");if(state.bridge.rewarded.includes(week))return toast("本周奖励已经领取");state.bridge.rewarded.push(week);state.bridge.week=Math.min(12,week+1);reward(3,`完成小升初强化第${week}周`,2);renderBridge();return;}
+    const outlineGradeButton=e.target.closest("[data-outline-grade]");if(outlineGradeButton){outlineGrade=Number(outlineGradeButton.dataset.outlineGrade);outlineTerm="上册";renderOutline();return;}
+    const outlineTermButton=e.target.closest("[data-outline-term]");if(outlineTermButton){outlineTerm=outlineTermButton.dataset.outlineTerm;renderOutline();return;}
+    const outlineBookButton=e.target.closest("[data-outline-book]");if(outlineBookButton){const book=COURSE_BOOKS.find(item=>item.id===outlineBookButton.dataset.outlineBook);if(book){outlineGrade=book.grade;outlineTerm=book.term;renderOutline();}return;}
+    const outlineUnitButton=e.target.closest("[data-outline-unit]");if(outlineUnitButton){const book=COURSE_BOOKS.find(item=>item.grade===outlineGrade&&item.term===outlineTerm);if(!book)return;state.bookId=book.id;state.unitIndex=Number(outlineUnitButton.dataset.outlineUnit);state.stage=outlineUnitButton.dataset.outlineStage||"overview";selectedGrade=book.grade;selectedTerm=book.term;save();quizAnswers={};route("unit");return;}
+    const beginnerTabButton=e.target.closest("[data-beginner-tab]");if(beginnerTabButton){beginnerTab=beginnerTabButton.dataset.beginnerTab;renderBeginner();return;}
+    const letterKnown=e.target.closest("[data-letter-known]");if(letterKnown){const letter=letterKnown.dataset.letterKnown;if(!state.beginner.letters.includes(letter)){state.beginner.letters.push(letter);save();}renderBeginner();return;}
+    const beginnerAbility=e.target.closest("[data-beginner-open-ability]");if(beginnerAbility){abilityTab="natural-phonics";renderAbilities();route("abilities");return;}
+    const paperGradeButton=e.target.closest("[data-paper-grade]");if(paperGradeButton){paperGrade=Number(paperGradeButton.dataset.paperGrade);paperUnitIndex=0;paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
+    const paperTermButton=e.target.closest("[data-paper-term]");if(paperTermButton){paperTerm=paperTermButton.dataset.paperTerm;paperUnitIndex=0;paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
+    const paperUnitButton=e.target.closest("[data-paper-unit]");if(paperUnitButton){paperUnitIndex=Number(paperUnitButton.dataset.paperUnit);paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
+    const paperStart=e.target.closest("[data-paper-start]");if(paperStart){paperActiveId=paperStart.dataset.paperStart;paperAnswers={};paperChecked=false;renderPapers();setTimeout(()=>$("paperExamWorkspace")?.scrollIntoView({behavior:"smooth",block:"start"}),30);return;}
+    const paperSay=e.target.closest("[data-paper-say]");if(paperSay){speak(paperSay.dataset.paperSay);return;}
+    const paperAnswer=e.target.closest("[data-paper-answer]");if(paperAnswer&&!paperChecked){paperAnswers[Number(paperAnswer.dataset.paperAnswer)]=paperAnswer.dataset.paperValue;renderPapers();return;}
+    const paperSubmit=e.target.closest("[data-paper-submit]");if(paperSubmit){submitPaper();return;}
+    const paperRetry=e.target.closest("[data-paper-retry]");if(paperRetry){paperAnswers={};paperChecked=false;renderPapers();setTimeout(()=>$("paperExamWorkspace")?.scrollIntoView({behavior:"smooth",block:"start"}),30);return;}
+    const paperClose=e.target.closest("[data-paper-close]");if(paperClose){paperActiveId="";paperAnswers={};paperChecked=false;renderPapers();return;}
+    const abilityTabButton=e.target.closest("[data-ability-tab]");if(abilityTabButton){abilityTab=abilityTabButton.dataset.abilityTab;renderAbilities();return;}
+    const bridgeAbilityAnswer=e.target.closest("[data-bridge-ability-answer]");if(bridgeAbilityAnswer&&!bridgeAbilityChecked){bridgeAbilityAnswers[Number(bridgeAbilityAnswer.dataset.bridgeAbilityAnswer)]=bridgeAbilityAnswer.dataset.answerValue;renderAbilities();return;}
+    const bridgeAbilitySubmit=e.target.closest("[data-bridge-ability-submit]");if(bridgeAbilitySubmit){submitBridgeAbility();return;}
+    const bridgeAbilityRetry=e.target.closest("[data-bridge-ability-retry]");if(bridgeAbilityRetry){bridgeAbilityAnswers={};bridgeAbilityChecked=false;renderAbilities();return;}
+    const diagnosticAnswer=e.target.closest("[data-diagnostic-answer]");if(diagnosticAnswer&&!state.abilities.diagnostic){diagnosticAnswers[Number(diagnosticAnswer.dataset.diagnosticAnswer)]=diagnosticAnswer.dataset.answerValue;renderAbilities();return;}
+    const diagnosticPageButton=e.target.closest("[data-diagnostic-page]");if(diagnosticPageButton){diagnosticPage=Number(diagnosticPageButton.dataset.diagnosticPage);renderAbilities();return;}
+    const diagnosticSubmit=e.target.closest("[data-diagnostic-submit]");if(diagnosticSubmit){submitDiagnostic();return;}
+    const diagnosticReset=e.target.closest("[data-diagnostic-reset]");if(diagnosticReset){diagnosticAnswers={};diagnosticPage=0;state.abilities.diagnostic=null;save();renderAbilities();return;}
+    const phonicsLesson=e.target.closest("[data-ability-phonics-lesson]");if(phonicsLesson){abilityPhonicsLesson=phonicsLesson.dataset.abilityPhonicsLesson;abilityPhonicsAnswers={};abilityPhonicsChecked=false;renderAbilities();return;}
+    const phonicsAnswer=e.target.closest("[data-ability-phonics-answer]");if(phonicsAnswer&&!abilityPhonicsChecked){abilityPhonicsAnswers[Number(phonicsAnswer.dataset.phonicsQuestion)]=phonicsAnswer.dataset.abilityPhonicsAnswer;renderAbilities();return;}
+    const phonicsSubmit=e.target.closest("[data-ability-phonics-submit]");if(phonicsSubmit){const lesson=NATURAL_PHONICS_LESSONS.find(item=>item.id===abilityPhonicsLesson),count=1+(NATURAL_PHONICS_DRILLS[lesson?.id]||[]).length;if(Object.keys(abilityPhonicsAnswers).length<count)return toast("请先完成本关全部8题");abilityPhonicsChecked=true;renderAbilities();return;}
+    const phonicsRetry=e.target.closest("[data-ability-phonics-retry]");if(phonicsRetry){abilityPhonicsAnswers={};abilityPhonicsChecked=false;renderAbilities();return;}
+    const phonicsPass=e.target.closest("[data-ability-phonics-pass]");if(phonicsPass){const key=phonicsPass.dataset.abilityPhonicsPass;if(!state.abilities.phonicsCompleted.includes(key)){state.abilities.phonicsCompleted.push(key);abilityReward(`natural-phonics:${key}`,2,"完成一个自然拼读关卡");}renderAbilities();return;}
+    const listeningAnswer=e.target.closest("[data-listening-answer]");if(listeningAnswer&&!abilityListeningChecked){abilityListeningAnswers[Number(listeningAnswer.dataset.listeningAnswer)]=listeningAnswer.dataset.answerValue;renderAbilities();return;}
+    const listeningSubmit=e.target.closest("[data-listening-submit]");if(listeningSubmit){submitAbilityListening();return;}
+    const listeningRetry=e.target.closest("[data-listening-retry]");if(listeningRetry){abilityListeningAnswers={};abilityListeningChecked=false;renderAbilities();return;}
+    const speakingRecord=e.target.closest("[data-speaking-record]");if(speakingRecord){startSpeakingRecording(Number(speakingRecord.dataset.speakingRecord),speakingRecord);return;}
+    const speakingComplete=e.target.closest("[data-speaking-complete]");if(speakingComplete){completeSpeaking(Number(speakingComplete.dataset.speakingComplete));return;}
     const grammarTopic=e.target.closest("[data-grammar-topic]");if(grammarTopic){grammarTopicId=grammarTopic.dataset.grammarTopic;grammarAnswers={};grammarResult=null;renderGrammar();return;}
     const grammarOption=e.target.closest("[data-grammar-option]");if(grammarOption){grammarAnswers[Number(grammarOption.dataset.grammarOption)]=grammarOption.dataset.grammarValue;grammarResult=null;renderGrammar();return;}
     const grammarSubmit=e.target.closest("#submitGrammarQuiz");if(grammarSubmit){submitGrammarQuiz();return;}
@@ -899,5 +1498,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();setupAudioPack();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=28",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=38",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();

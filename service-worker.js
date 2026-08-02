@@ -1,6 +1,6 @@
-const CACHE_NAME = "sunny-english-island-v28";
-const AUDIO_CACHE_NAME = "sunny-audio-pack-v28";
-const APP_FILES = ["./", "./index.html", "./styles.css", "./curriculum.js", "./dictionary.js", "./growth.js", "./grammar.js", "./audio-index.js", "./phoneme-audio.js", "./app.js", "./manifest.webmanifest", "./assets/app-icon-180.png", "./assets/app-icon-192.png", "./assets/app-icon-512.png", "./assets/cat-growth.webp", "./assets/dog-growth.webp", "./assets/turtle-growth.webp"];
+const CACHE_NAME = "sunny-english-island-v38";
+const AUDIO_CACHE_NAME = "sunny-audio-pack-v31";
+const APP_FILES = ["./", "./index.html", "./styles.css", "./curriculum.js", "./dictionary.js", "./growth.js", "./grammar.js", "./audio-index.js", "./phoneme-audio.js", "./bridge-content.js", "./app.js", "./manifest.webmanifest", "./assets/app-icon-180.png", "./assets/app-icon-192.png", "./assets/app-icon-512.png", "./assets/cat-growth.webp", "./assets/dog-growth.webp", "./assets/turtle-growth.webp"];
 self.addEventListener("install", event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => Promise.allSettled(APP_FILES.map(file=>cache.add(file))))); self.skipWaiting(); });
 self.addEventListener("activate", event => { event.waitUntil((async()=>{ await caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME && key !== AUDIO_CACHE_NAME).map(key => caches.delete(key)))); await self.clients.claim(); })()); });
 self.addEventListener("fetch", event => { if (event.request.method !== "GET" || event.request.headers.has("range")) return; const url=new URL(event.request.url); if(url.origin!==self.location.origin)return; event.respondWith(fetch(event.request).then(response => { const copy=response.clone(); caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy)).catch(()=>{}); return response; }).catch(()=>caches.match(event.request))); });

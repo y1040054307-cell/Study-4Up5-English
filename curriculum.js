@@ -72,16 +72,21 @@
     farewell: makeUnit("Farewell", "毕业告别", "🎒", "能回顾小学生活、表达感谢并送上祝福。", "farewell:告别,graduate:毕业,memory:回忆,miss:想念,remember:记得,wish:祝愿,future:未来,friendship:友谊,thank:感谢,keep in touch:保持联系", ["I'll miss you.|我会想念你。|will 表达将来的感受。","Thank you for helping me.|谢谢你帮助我。|for 后接 doing。","Let's keep in touch.|让我们保持联系。|用于毕业告别。"], "At the farewell party, the students share photos and happy memories. They thank their teachers and promise to keep in touch.")
   };
 
-  const book = (id, grade, term, label, edition, keys) => ({ id, grade, term, label, edition, units: keys.map((key, index) => ({ ...U[key], id: `${id}-u${index + 1}`, number: index + 1 })) });
+  const book = (id, grade, term, label, version, keys) => ({
+    id, grade, term, label,
+    edition: version.label,
+    version,
+    units: keys.map((key, index) => ({ ...U[key], id: `${id}-u${index + 1}`, number: index + 1 }))
+  });
 
   window.COURSE_BOOKS = [
-    book("g3a", 3, "上册", "三年级上册", "2024新课标主题", ["meeting","numbers","colors","family"]),
-    book("g3b", 3, "下册", "三年级下册", "2024新课标主题", ["animals","clothes","food","happy"]),
-    book("g4a", 4, "上册", "四年级上册", "2024新课标主题", ["school","daily","hobbies","festivals"]),
-    book("g4b", 4, "下册", "四年级下册", "闽教版核心主题", ["weekly","classroom","animalnumbers","time","shopping","weather","seasons","springfestival"]),
-    book("g5a", 5, "上册", "五年级上册", "闽教版核心主题", ["meeting","teachers","trip","weekend","months","directions","phone","friends"]),
-    book("g5b", 5, "下册", "五年级下册", "闽教版核心主题", ["vacation","zoo","easter","outing","sports","feelings","buildings","dates"]),
-    book("g6a", 6, "上册", "六年级上册", "闽教版核心主题", ["olympics","exercise","health","buyclothes","housework","unusual","thanksgiving","universe"]),
-    book("g6b", 6, "下册", "六年级下册", "闽教版核心主题", ["winter","helping","doctor","motherday","occupation","dream","middleschool","farewell"])
+    book("g3a", 3, "上册", "三年级上册", { label:"闽教版（2024修订）", short:"2024修订版", status:"aligned", statusLabel:"目录已核对", note:"对应2024年秋季启用的三年级上册单元目录。讲解、例句、阅读和练习均为本站原创，不是教材原文。" }, ["meeting","numbers","colors","family"]),
+    book("g3b", 3, "下册", "三年级下册", { label:"闽教版（2024修订）", short:"2024修订版", status:"precheck", statusLabel:"主题已对照", note:"按三年级下册新版主题整理，尚未逐课核对学校纸质教材中的Lesson、词表和页码。" }, ["animals","clothes","food","happy"]),
+    book("g4a", 4, "上册", "四年级上册", { label:"闽教版（2024课标修订）", short:"2025秋启用版", status:"precheck", statusLabel:"部分对照", note:"面向2025年秋季启用的四年级上册新版主题，部分单元标题仍需按学校纸质教材修正。" }, ["school","daily","hobbies","festivals"]),
+    book("g4b", 4, "下册", "四年级下册", { label:"闽教版现行主题参考", short:"主题参考版", status:"reference", statusLabel:"非新版同步", note:"本册部分单元与目前公开教材目录不一致，仅可作英语能力练习，不可替代学校同步预习。" }, ["weekly","classroom","animalnumbers","time","shopping","weather","seasons","springfestival"]),
+    book("g5a", 5, "上册", "五年级上册", { label:"闽教版（2024课标修订）", short:"2026秋预校对版", status:"precheck", statusLabel:"待纸书复核", note:"面向2026年秋季五年级上册公开目录整理，需在学校纸质教材到手后复核Lesson、词表和页码。" }, ["meeting","teachers","trip","weekend","months","directions","phone","friends"]),
+    book("g5b", 5, "下册", "五年级下册", { label:"闽教版现行主题参考", short:"待新版复核", status:"reference", statusLabel:"待新版复核", note:"当前按既有五年级下册主题编排，尚未确认学校后续实际使用的新版册次，请勿当作新版同步教材。" }, ["vacation","zoo","easter","outing","sports","feelings","buildings","dates"]),
+    book("g6a", 6, "上册", "六年级上册", { label:"闽教版学校现行版主题", short:"现行主题参考", status:"reference", statusLabel:"非2024修订同步", note:"按六年级现行常见主题编写的原创课件，未声明为2024课标修订新版同步，请以学校2026年实际发放教材为准。" }, ["olympics","exercise","health","buyclothes","housework","unusual","thanksgiving","universe"]),
+    book("g6b", 6, "下册", "六年级下册", { label:"闽教版学校现行版主题", short:"现行主题参考", status:"reference", statusLabel:"非2024修订同步", note:"按六年级现行常见主题编写的原创课件，未声明为2024课标修订新版同步，请以学校实际发放教材为准。" }, ["winter","helping","doctor","motherday","occupation","dream","middleschool","farewell"])
   ];
 })();

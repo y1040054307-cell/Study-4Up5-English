@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=28">
+  <link rel="stylesheet" href="styles.css?v=38">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -37,16 +37,19 @@
 
   <nav class="main-tabs" aria-label="主要功能">
     <button class="active" data-view="home"><span>🏠</span>学习首页</button>
+    <button data-view="outline"><span>🗺️</span>学习总纲</button>
     <button data-view="courses"><span>📚</span>课程</button>
-      <button data-view="today"><span>✅</span>每日任务</button>
-      <button data-view="words"><span>🔤</span>单词本</button>
-      <button data-view="dictionary"><span>📕</span>词典库</button>
-      <button data-view="phonics"><span>👄</span>音标课堂</button>
-      <button data-view="grammar"><span>🧠</span>语法课堂</button>
+    <button data-view="today"><span>✅</span>每日任务</button>
+    <button data-view="abilities"><span>🎯</span>能力中心</button>
+    <button data-view="grammar"><span>🧠</span>语法课堂</button>
+    <button data-view="papers"><span>📝</span>真题考卷</button>
+    <button data-view="words"><span>🔤</span>单词本</button>
+    <button data-view="beginner"><span>🌈</span>英语启蒙</button>
+    <button data-view="dictionary"><span>📕</span>词典库</button>
+    <button data-view="report"><span>📈</span>成长日报</button>
     <button data-view="market"><span>🛍️</span>成长商城</button>
     <button data-view="garden"><span>🌱</span>成长花园</button>
     <button data-view="pets"><span>🐾</span>动物伙伴</button>
-    <button data-view="report"><span>📈</span>成长报告</button>
   </nav>
 
   <main id="app" tabindex="-1">
@@ -99,6 +102,8 @@
         <div id="currentCourseCard"></div>
       </section>
 
+      <section class="home-outline-card" id="homeOutlineCard"></section>
+
       <section class="method-grid">
         <article><i>1</i><span>👀</span><h3>先看懂</h3><p>用中文说明场景与规则，知道为什么这样说。</p></article>
         <article><i>2</i><span>👂</span><h3>再听说</h3><p>点读单词和例句，跟读三遍，再替换关键词。</p></article>
@@ -110,13 +115,14 @@
 
     <section class="view" id="view-courses">
       <div class="page-title"><span class="eyebrow">CURRICULUM LIBRARY</span><h1>三至六年级课程库</h1><p>先选年级和学期，再进入单元。每单元包含理解、单词、句型、对话、阅读和练习。</p></div>
-      <div class="version-note"><span>📌</span><p><strong>教材版本提示</strong>　新版教材正在分年级启用，各校进度可能不同。这里按闽教版主题编排原创学习内容；请先对照学校发放课本的单元名称。</p></div>
+      <section class="junior-bridge-slot" id="courseBridgeBanner" hidden></section>
+      <div class="version-note"><span>📌</span><p><strong>先看版本标识，再开始学习</strong>　每册均标注“目录已核对 / 待纸书复核 / 非新版同步”。本站提供的是按教材主题编写的原创讲解与练习，不是出版社教材原文或官方电子课件；单元名称不一致时，请以学校发放的纸质教材为准。</p></div>
       <div class="library-stats">
-        <article><b>8</b><span>册课程教材</span></article><article><b>52</b><span>个完整单元</span></article><article><b>518</b><span>必备与拓展词条</span></article><article><b>156</b><span>重点句型</span></article>
+        <article><b>8</b><span>册原创学习课件</span></article><article><b>52</b><span>个学习单元</span></article><article><b>518</b><span>必备与拓展词条</span></article><article><b>416+</b><span>句型学习例句</span></article>
       </div>
       <section class="start-guide">
         <strong>第一次使用这样开始：</strong>
-        <span><i>1</i>选择年级</span><span><i>2</i>选择上册或下册</span><span><i>3</i>点击“进入单元教材”</span><span><i>4</i>按3课时完成学习</span>
+        <span><i>1</i>选择年级</span><span><i>2</i>核对版本标识</span><span><i>3</i>选择上册或下册</span><span><i>4</i>进入原创课件</span>
       </section>
       <div class="grade-switch" id="gradeSwitch"></div>
       <div class="term-switch" id="termSwitch"></div>
@@ -124,11 +130,59 @@
       <div class="unit-grid" id="unitGrid"></div>
     </section>
 
+    <section class="view" id="view-outline">
+      <div class="page-title outline-page-title"><span class="eyebrow">COMPLETE LEARNING MAP</span><h1>三至六年级学习总纲</h1><p>先看清整条学习路线，再快速进入任一册、任一单元。每个单元都整理学习目标、必备词、重点句型与学习任务。</p></div>
+      <section class="outline-overview" id="outlineOverview"></section>
+      <section class="outline-controls">
+        <div><b>选择年级</b><div class="grade-switch" id="outlineGradeSwitch"></div></div>
+        <div><b>选择教材册</b><div class="term-switch" id="outlineTermSwitch"></div></div>
+      </section>
+      <section class="outline-book-head" id="outlineBookHead"></section>
+      <div class="outline-unit-map" id="outlineUnitMap"></div>
+      <section class="outline-method">
+        <article><span>1</span><b>先看目标</b><p>知道这个单元最终要能听懂、说出和写出什么。</p></article>
+        <article><span>2</span><b>整理知识</b><p>用必备词和重点句型建立自己的单元知识树。</p></article>
+        <article><span>3</span><b>进入学习</b><p>按照理解、词汇、句型、对话、阅读、练习完成闭环。</p></article>
+        <article><span>4</span><b>间隔复习</b><p>当天、次日、第3天、第7天回看重点，避免学完就忘。</p></article>
+      </section>
+    </section>
+
     <section class="view" id="view-unit">
       <button class="back" data-view="courses">← 返回课程库</button>
       <div class="unit-hero" id="unitHero"></div>
+      <section class="unit-version-notice" id="unitVersionNotice" aria-label="教材版本说明"></section>
       <div class="lesson-tabs" id="lessonTabs"></div>
       <div class="lesson-content" id="lessonContent"></div>
+    </section>
+
+    <section class="view" id="view-papers">
+      <div class="page-title paper-page-title"><span class="eyebrow">UNIT EXAM &amp; CUMULATIVE REVIEW</span><h1>单元考卷中心</h1><p>三至六年级每单元提供6份标准卷、共180题。全部在站内完成，并在提交后立即查看逐题解析。</p></div>
+      <section class="paper-safety-note">
+        <span>📚</span>
+        <div><b>不提前考未来知识，真正形成“学习—检测—复习”闭环</b><p>单元卷只考当前单元；累计卷只从当前单元之前的内容抽题。福建组合卷参考公开学校试卷的题型结构重新编排，不直接复制第三方整卷。</p></div>
+      </section>
+      <section class="paper-dashboard" id="paperDashboard"></section>
+      <section class="paper-filter-panel">
+        <div class="paper-filter-row"><b>选择年级</b><div class="grade-switch" id="paperGradeSwitch"></div></div>
+        <div class="paper-filter-row"><b>选择学期</b><div class="term-switch" id="paperTermSwitch"></div></div>
+        <div class="paper-filter-row paper-unit-row"><b>选择单元</b><div class="paper-unit-switch" id="paperUnitSwitch"></div></div>
+      </section>
+      <section class="paper-unit-summary" id="paperUnitSummary"></section>
+      <div class="paper-grid" id="paperGrid"></div>
+      <section class="paper-exam-workspace" id="paperExamWorkspace" hidden></section>
+      <section class="paper-use-guide">
+        <div><span>1</span><b>独立作答</b><p>先不翻单词表，每题都主动回忆。</p></div>
+        <div><span>2</span><b>一次交卷</b><p>30题全部完成后才能提交。</p></div>
+        <div><span>3</span><b>逐题订正</b><p>看正确答案和解释，说出错因。</p></div>
+        <div><span>4</span><b>间隔重做</b><p>建议隔1天、3天和7天再练。</p></div>
+      </section>
+    </section>
+
+    <section class="view" id="view-abilities">
+      <div class="page-title ability-page-title"><span class="eyebrow">LEARNING ABILITY CENTER</span><h1>英语学习能力中心</h1><p>先找到真实起点，再用自然拼读、听力和口语训练，把“认识单词”变成“听得懂、读得出、说得来”。</p></div>
+      <section class="ability-summary" id="abilitySummary"></section>
+      <div class="ability-tabs" id="abilityTabs" aria-label="能力训练模块"></div>
+      <section class="ability-workspace" id="abilityWorkspace"></section>
     </section>
 
     <section class="view" id="view-today">
@@ -164,17 +218,11 @@
       <button class="soft dictionary-more" id="dictionaryMore">显示更多单词</button>
     </section>
 
-    <section class="view" id="view-phonics">
-      <div class="page-title"><span class="eyebrow">PHONICS &amp; IPA</span><h1>基础音标课堂</h1><p>先学会辨别声音，再把声音和字母组合连接起来。点击示例词听发音，观察口型并跟读。</p></div>
-      <div class="phonics-intro">
-        <article><span>1</span><div><b>音标不是字母</b><p>字母是单词的写法，音标表示实际听到的声音。例如字母 a 在不同单词中可能发不同音。</p></div></article>
-        <article><span>2</span><div><b>符号 / / 表示发音</b><p>如 sheep /ʃiːp/；符号 ː 表示长音，要比短音多保持一会儿。</p></div></article>
-        <article><span>3</span><div><b>听—看—模仿—对比</b><p>先听示例词，看口型提示，跟读3遍，再用最小对立词比较两个相近音。</p></div></article>
-      </div>
-      <div class="phonics-groups" id="phonicsGroups"></div>
-      <div class="phonics-grid" id="phonicsGrid"></div>
-      <section class="panel minimal-panel"><div class="section-head"><div><span class="eyebrow">MINIMAL PAIRS</span><h2>最小对立词辨音</h2></div></div><p>两个单词通常只差一个音。先分别点读，再闭眼判断听到的是哪一个。</p><div class="minimal-grid" id="minimalGrid"></div></section>
-      <section class="panel phonics-method"><h2>每天5分钟发音训练</h2><div><span><b>第1分钟</b>听5个示例词</span><span><b>第2分钟</b>看口型慢读</span><span><b>第3分钟</b>正常速度跟读</span><span><b>第4分钟</b>对比相近音</span><span><b>第5分钟</b>离开提示读词</span></div></section>
+    <section class="view" id="view-beginner">
+      <div class="page-title beginner-page-title"><span class="eyebrow">ENGLISH FIRST STEPS</span><h1>英语启蒙学习园地</h1><p>从26个字母开始，分清字母名称与常见发音，再进入自然拼读和音标课堂。适合零基础、三年级起步和需要补基础的孩子。</p></div>
+      <section class="beginner-progress" id="beginnerProgress"></section>
+      <div class="beginner-tabs" id="beginnerTabs" aria-label="英语启蒙学习模块"></div>
+      <section class="beginner-workspace" id="beginnerWorkspace"></section>
     </section>
 
     <section class="view" id="view-grammar">
@@ -188,6 +236,19 @@
         <aside class="grammar-topic-nav" id="grammarTopicNav" aria-label="语法主题"></aside>
         <section class="grammar-classroom" id="grammarClassroom"></section>
       </div>
+    </section>
+
+    <section class="view" id="view-bridge">
+      <div class="page-title bridge-page-title"><span class="eyebrow">PRIMARY TO JUNIOR HIGH · 12-WEEK PATH</span><h1>六年级小升初强化中心</h1><p>用12周完成“基础整理—专项突破—综合运用—模拟冲刺”，每天40分钟，真正把小学知识带进初中。</p></div>
+      <section class="bridge-dashboard" id="bridgeDashboard"></section>
+      <section class="bridge-daily-method" id="bridgeDailyMethod"></section>
+      <section class="bridge-phase-map" id="bridgePhaseMap"></section>
+      <section class="bridge-week-layout">
+        <aside class="bridge-week-nav" id="bridgeWeekNav" aria-label="小升初强化周计划"></aside>
+        <div class="bridge-week-workspace" id="bridgeWeekWorkspace"></div>
+      </section>
+      <section class="bridge-knowledge" id="bridgeKnowledge"></section>
+      <section class="bridge-module-links" id="bridgeModuleLinks"></section>
     </section>
 
     <section class="view" id="view-garden">
@@ -217,7 +278,7 @@
     </section>
 
     <section class="view" id="view-report">
-      <div class="page-title"><span class="eyebrow">GROWTH REPORT</span><h1>成长报告</h1><p>给孩子看进步，给家长看需要帮助的地方。</p></div>
+      <div class="page-title"><span class="eyebrow">DAILY GROWTH REPORT</span><h1>成长日报</h1><p>给孩子看每天的进步，给家长看需要帮助的地方。</p></div>
       <div class="report-grid" id="reportCards"></div>
       <section class="panel"><div class="section-head"><div><span class="eyebrow">RECENT 7 DAYS</span><h2>最近学习记录</h2></div></div><div class="week-chart" id="weekChart"></div></section>
       <section class="panel"><div class="section-head"><div><span class="eyebrow">PARENT TIPS</span><h2>本周家长建议</h2></div></div><div id="parentAdvice" class="advice-list"></div></section>
@@ -246,12 +307,13 @@
 
   <div class="toast" id="toast" role="status"></div>
   <audio id="voicePlayer" preload="auto" playsinline hidden></audio>
-  <script src="curriculum.js?v=28"></script>
-  <script src="dictionary.js?v=28"></script>
-  <script src="growth.js?v=28"></script>
-  <script src="grammar.js?v=28"></script>
-  <script src="audio-index.js?v=28"></script>
-  <script src="phoneme-audio.js?v=28"></script>
-  <script src="app.js?v=28"></script>
+  <script src="curriculum.js?v=38"></script>
+  <script src="dictionary.js?v=38"></script>
+  <script src="growth.js?v=38"></script>
+  <script src="grammar.js?v=38"></script>
+  <script src="audio-index.js?v=38"></script>
+  <script src="phoneme-audio.js?v=38"></script>
+  <script src="bridge-content.js?v=38"></script>
+  <script src="app.js?v=38"></script>
 </body>
 </html>
