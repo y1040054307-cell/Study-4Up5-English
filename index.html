@@ -8,21 +8,21 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="向阳英语">
-  <meta name="description" content="面向福建小学三至六年级的闽教版英语长期自学平台：同步主题课程、单词记忆、句型理解、原创阅读、分层练习和电子植物成长。">
+  <meta name="description" content="面向福建小学三至六年级的英语长期自学平台：按闽教版主题编写原创课件，并逐册标注版本核对状态。">
   <meta property="og:type" content="website">
   <meta property="og:title" content="向阳英语成长岛｜闽教版三至六年级">
   <meta property="og:description" content="每天20分钟，真正听懂、读懂、会说、会用。">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=38">
+  <link rel="stylesheet" href="styles.css?v=39">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
   <header class="topbar">
     <button class="brand" data-view="home" aria-label="返回学习首页">
       <span class="brand-mark">芽</span>
-      <span><strong>向阳英语成长岛</strong><small>闽教版 · 三至六年级长期自学</small></span>
+      <span><strong>向阳英语成长岛</strong><small>闽教版主题原创课件 · 逐册标版本</small></span>
     </button>
       <div class="top-stats">
         <button class="profile-pill" id="profileButton" type="button" aria-label="切换学习身份">
@@ -36,20 +36,21 @@
   </header>
 
   <nav class="main-tabs" aria-label="主要功能">
-    <button class="active" data-view="home"><span>🏠</span>学习首页</button>
-    <button data-view="outline"><span>🗺️</span>学习总纲</button>
-    <button data-view="courses"><span>📚</span>课程</button>
-    <button data-view="today"><span>✅</span>每日任务</button>
-    <button data-view="abilities"><span>🎯</span>能力中心</button>
-    <button data-view="grammar"><span>🧠</span>语法课堂</button>
-    <button data-view="papers"><span>📝</span>真题考卷</button>
-    <button data-view="words"><span>🔤</span>单词本</button>
-    <button data-view="beginner"><span>🌈</span>英语启蒙</button>
-    <button data-view="dictionary"><span>📕</span>词典库</button>
-    <button data-view="report"><span>📈</span>成长日报</button>
-    <button data-view="market"><span>🛍️</span>成长商城</button>
-    <button data-view="garden"><span>🌱</span>成长花园</button>
-    <button data-view="pets"><span>🐾</span>动物伙伴</button>
+    <button class="active mobile-core" data-view="home"><span>🏠</span>学习首页</button>
+    <button class="mobile-secondary" data-view="outline"><span>🗺️</span>学习总纲</button>
+    <button class="mobile-core" data-view="courses"><span>📚</span>课程</button>
+    <button class="mobile-core" data-view="today"><span>✅</span>每日任务</button>
+    <button class="mobile-core" data-view="abilities"><span>🎯</span>能力中心</button>
+    <button class="mobile-secondary" data-view="grammar"><span>🧠</span>语法课堂</button>
+    <button class="mobile-secondary" data-view="papers"><span>📝</span>测评考卷</button>
+    <button class="mobile-secondary" data-view="words"><span>🔤</span>单词本</button>
+    <button class="mobile-secondary" data-view="beginner"><span>🌈</span>英语启蒙</button>
+    <button class="mobile-secondary" data-view="dictionary"><span>📕</span>词典库</button>
+    <button class="mobile-core" data-view="report"><span>📈</span>成长日报</button>
+    <button class="mobile-secondary" data-view="market"><span>🛍️</span>成长商城</button>
+    <button class="mobile-secondary" data-view="garden"><span>🌱</span>成长花园</button>
+    <button class="mobile-secondary" data-view="pets"><span>🐾</span>动物伙伴</button>
+    <button class="mobile-more" id="openMoreMenu" type="button"><span>☰</span>更多</button>
   </nav>
 
   <main id="app" tabindex="-1">
@@ -81,8 +82,8 @@
 
       <section class="audio-pack-card" id="audioPackCard">
         <div class="audio-pack-icon">🔊</div>
-        <div class="audio-pack-copy"><small>国内自然语音 · 支持断网</small><h2>课程自然人声离线包</h2><p id="audioPackMeta">单词、句子和故事都可下载到本机</p><div class="audio-pack-progress"><span id="audioPackBar"></span></div><em id="audioPackStatus">正在检查语音包……</em></div>
-        <button class="primary" id="downloadAudioPack">下载自然人声离线包</button>
+        <div class="audio-pack-copy"><small>国内自然语音 · 支持断网</small><h2>课程自然人声离线包</h2><p id="audioPackMeta">单词、句子和故事都可下载到本机</p><div class="audio-pack-progress"><span id="audioPackBar"></span></div><em id="audioPackStatus">正在检查语音包……</em><small class="audio-network-warning">完整包约32.3 MB，建议连接 Wi‑Fi；音标包可单独下载。</small></div>
+        <div class="audio-pack-actions"><button class="soft" id="testAudioButton">先试听</button><button class="soft" id="downloadPhonemePack">仅下载音标包（2.0 MB）</button><button class="primary" id="downloadAudioPack">下载完整自然人声包</button></div>
       </section>
 
       <div class="stats-grid">
@@ -156,10 +157,10 @@
     </section>
 
     <section class="view" id="view-papers">
-      <div class="page-title paper-page-title"><span class="eyebrow">UNIT EXAM &amp; CUMULATIVE REVIEW</span><h1>单元考卷中心</h1><p>三至六年级每单元提供6份标准卷、共180题。全部在站内完成，并在提交后立即查看逐题解析。</p></div>
+      <div class="page-title paper-page-title"><span class="eyebrow">FUJIAN-STYLE UNIT ASSESSMENT</span><h1>单元测评考卷中心</h1><p>每单元一份50题足量综合卷；六年级另有60题小升初强化卷。提交后逐题显示词义、正确原因和错因。</p></div>
       <section class="paper-safety-note">
         <span>📚</span>
-        <div><b>不提前考未来知识，真正形成“学习—检测—复习”闭环</b><p>单元卷只考当前单元；累计卷只从当前单元之前的内容抽题。福建组合卷参考公开学校试卷的题型结构重新编排，不直接复制第三方整卷。</p></div>
+        <div><b>不拿多份同模板小卷堆数量，真正形成“学习—足量测评—订正”闭环</b><p>50题单元卷只考当前单元；六年级衔接卷才会复习过往知识。本站仅参考福建公开卷常见题型结构，所有题目均为原创组卷，不是学校真题。</p></div>
       </section>
       <section class="paper-dashboard" id="paperDashboard"></section>
       <section class="paper-filter-panel">
@@ -172,7 +173,7 @@
       <section class="paper-exam-workspace" id="paperExamWorkspace" hidden></section>
       <section class="paper-use-guide">
         <div><span>1</span><b>独立作答</b><p>先不翻单词表，每题都主动回忆。</p></div>
-        <div><span>2</span><b>一次交卷</b><p>30题全部完成后才能提交。</p></div>
+        <div><span>2</span><b>一次交卷</b><p>50题（六年级强化卷60题）全部完成后才能提交。</p></div>
         <div><span>3</span><b>逐题订正</b><p>看正确答案和解释，说出错因。</p></div>
         <div><span>4</span><b>间隔重做</b><p>建议隔1天、3天和7天再练。</p></div>
       </section>
@@ -297,7 +298,27 @@
     <button class="profile-dialog-close" id="closeProfileDialog" aria-label="关闭身份选择">×</button>
     <div class="profile-dialog-head"><span>👨‍👩‍👧‍👦</span><div><small>FIVE INDEPENDENT LEARNERS</small><h2 id="profileDialogTitle">选择今天的学习身份</h2><p>每个身份拥有独立的课程进度、错词、签到、小太阳、粮食、植物和动物。切换不会覆盖其他人的记录。</p></div></div>
     <div class="profile-grid" id="profileGrid"></div>
+    <button class="soft profile-parent-entry" id="openParentManager" type="button">🔐 家长与数据管理</button>
     <p class="profile-storage-note">🔒 学习记录只保存在当前浏览器中；清除浏览器数据或更换设备不会自动同步。</p>
+  </dialog>
+
+  <dialog class="profile-dialog parent-dialog" id="parentDialog" aria-labelledby="parentDialogTitle">
+    <button class="profile-dialog-close" id="closeParentDialog" aria-label="关闭家长管理">×</button>
+    <div class="profile-dialog-head"><span>🔐</span><div><small>PARENT &amp; DATA</small><h2 id="parentDialogTitle">家长与数据管理</h2><p>首次使用请设置4位家长码。导入备份和修改家长码需要验证。</p></div></div>
+    <section class="parent-unlock" id="parentUnlock"><label>4位家长码<input id="parentPinInput" type="password" inputmode="numeric" maxlength="4" placeholder="请输入4位数字"></label><button class="primary" id="unlockParent">验证 / 首次设置</button><small id="parentUnlockHint">家长码只保存在本机，请家长自行记住。</small></section>
+    <section class="parent-manager-panel" id="parentManagerPanel" hidden>
+      <div class="parent-data-actions"><button class="soft" id="exportLearningData">导出5个身份的学习备份</button><label class="soft file-button">导入学习备份<input id="importLearningData" type="file" accept="application/json" hidden></label></div>
+      <label>修改家长码<input id="newParentPin" type="password" inputmode="numeric" maxlength="4" placeholder="新的4位数字"></label><button class="soft" id="saveParentPin">保存新家长码</button>
+      <p class="profile-storage-note">建议每月导出一次。导入会覆盖本浏览器中同名身份的数据，导入前系统会自动下载一份当前备份。</p>
+    </section>
+  </dialog>
+
+  <dialog class="more-menu-dialog" id="moreMenuDialog" aria-labelledby="moreMenuTitle">
+    <button class="profile-dialog-close" id="closeMoreMenu" aria-label="关闭更多功能">×</button>
+    <h2 id="moreMenuTitle">更多学习与成长功能</h2>
+    <div class="more-menu-grid">
+      <button data-view="outline">🗺️ 学习总纲</button><button data-view="grammar">🧠 语法课堂</button><button data-view="papers">📝 测评考卷</button><button data-view="words">🔤 单词本</button><button data-view="beginner">🌈 英语启蒙</button><button data-view="dictionary">📕 词典库</button><button data-view="market">🛍️ 成长商城</button><button data-view="garden">🌱 成长花园</button><button data-view="pets">🐾 动物伙伴</button>
+    </div>
   </dialog>
 
   <dialog class="practice-dialog" id="practiceDialog" aria-labelledby="practiceDialogTitle">
@@ -307,13 +328,13 @@
 
   <div class="toast" id="toast" role="status"></div>
   <audio id="voicePlayer" preload="auto" playsinline hidden></audio>
-  <script src="curriculum.js?v=38"></script>
-  <script src="dictionary.js?v=38"></script>
-  <script src="growth.js?v=38"></script>
-  <script src="grammar.js?v=38"></script>
-  <script src="audio-index.js?v=38"></script>
-  <script src="phoneme-audio.js?v=38"></script>
-  <script src="bridge-content.js?v=38"></script>
-  <script src="app.js?v=38"></script>
+  <script src="curriculum.js?v=39"></script>
+  <script src="dictionary.js?v=39"></script>
+  <script src="growth.js?v=39"></script>
+  <script src="grammar.js?v=39"></script>
+  <script src="audio-index.js?v=39"></script>
+  <script src="phoneme-audio.js?v=39"></script>
+  <script src="bridge-content.js?v=39"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>
