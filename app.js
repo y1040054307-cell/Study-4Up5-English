@@ -636,29 +636,51 @@
   function renderBridgeBanner(id,show,context){
     const host=$(id);if(!host)return;host.hidden=!show;if(!show){host.innerHTML="";return;}
     const week=BRIDGE_WEEKS[Math.max(0,Math.min(BRIDGE_WEEKS.length-1,Number(state.bridge.week||1)-1))],percent=Math.round(bridgeDoneCount()/(BRIDGE_WEEKS.length*5)*100);
-    host.innerHTML=`<div><span>🎓</span><div><small>六年级专属 · PRIMARY TO JUNIOR HIGH</small><h2>小升初强化已接入${esc(context)}</h2><p>当前第${week.week}周“${esc(week.title)}” · 已完成${bridgeDoneCount()}/60项 · ${percent}%</p></div></div><button class="primary" data-view="bridge">进入12周强化计划 →</button>`;
+    host.innerHTML=`<div><span>🎓</span><div><small>仅在六年级课程内开放 · PRIMARY TO JUNIOR HIGH</small><h2>小升初强化学习资料</h2><p>${esc(context)}专属 · 当前第${week.week}周“${esc(week.title)}” · 已学${bridgeDoneCount()}/60课 · ${percent}%</p></div></div><button class="primary" data-view="bridge">进入12周资料课程 →</button>`;
   }
   function renderBridge(){
     state.bridge.week=Math.max(1,Math.min(BRIDGE_WEEKS.length,Number(state.bridge.week||1)));const week=BRIDGE_WEEKS[state.bridge.week-1],done=bridgeDoneCount(),total=BRIDGE_WEEKS.length*5,weekDone=week.days.filter((_,index)=>state.bridge.done.includes(bridgeTaskKey(week.week,index))).length,rewarded=state.bridge.rewarded.includes(week.week),phases=[
       ["1—3周","基础校准","词汇拼读、名词代词、四大时态"],["4—8周","专项突破","动词、介词、比较、语序、连接词"],["9—11周","综合运用","阅读、完形、写作与口语"],["第12周","模拟冲刺","两套综合卷与错题回炉"]
     ];
-    $("bridgeDashboard").innerHTML=`<article class="bridge-main-progress"><div><span>🎓</span><div><small>我的小升初强化进度</small><h2>${done} / ${total} 项</h2><p>当前第${week.week}周 · ${esc(week.phase)} · ${esc(week.title)}</p></div></div><aside><b>${Math.round(done/total*100)}%</b><i><em style="width:${done/total*100}%"></em></i><small>不同学习身份分别保存</small></aside></article><article><b>${state.bridge.rewarded.length}/12</b><small>完成周计划</small></article><article><b>${Number(state.bridge.abilityBest||0)}/20</b><small>综合检测最好成绩</small></article><article><b>${Object.keys(state.papers.scores).filter(key=>key.includes("bridge-mock")&&Number(state.papers.scores[key])>=18).length}</b><small>模拟卷已通过</small></article>`;
-    $("bridgeDailyMethod").innerHTML=`<div><small>每天40分钟 · 不用一次学很多</small><h2>固定学习闭环</h2><p>先理解，再练习，最后主动回忆。建议周一至周五完成新任务，周末只订正和重做。</p></div><div class="bridge-time-grid"><span><b>10分钟</b>词汇拼读<br>12词+2个易混组</span><span><b>10分钟</b>语法句型<br>1条规则+5题</span><span><b>10分钟</b>听说阅读<br>听2遍再找证据</span><span><b>10分钟</b>输出订正<br>5句或1段短文</span></div>`;
+    const materialCount=(window.BRIDGE_LESSON_MATERIALS||[]).reduce((sum,items)=>sum+items.length,0);
+    $("bridgeDashboard").innerHTML=`<article class="bridge-main-progress"><div><span>🎓</span><div><small>我的小升初资料课进度</small><h2>${done} / ${total} 课</h2><p>当前第${week.week}周 · ${esc(week.phase)} · ${esc(week.title)}</p></div></div><aside><b>${Math.round(done/total*100)}%</b><i><em style="width:${done/total*100}%"></em></i><small>五个学习身份分别保存</small></aside></article><article><b>${state.bridge.rewarded.length}/12</b><small>完成学习周</small></article><article><b>${materialCount}</b><small>完整学习资料</small></article><article><b>${materialCount*3}</b><small>随堂检查题</small></article>`;
+    $("bridgeDailyMethod").innerHTML=`<div><small>每课约30—40分钟 · 先学懂再完成</small><h2>每项任务都是一节资料课</h2><p>点击任务会打开独立学习窗口。认真阅读讲解和3个例句，完成3道随堂检查并订正后，才会记为完成。</p></div><div class="bridge-time-grid"><span><b>第1步</b>阅读讲解<br>理解规则和易错点</span><span><b>第2步</b>学习例句<br>英文、中文、用法</span><span><b>第3步</b>随堂检查<br>独立完成3道题</span><span><b>第4步</b>订正完成<br>错题改对再记录</span></div>`;
     $("bridgePhaseMap").innerHTML=phases.map((item,index)=>`<article class="${week.phase===item[1]?"active":""}"><span>${index+1}</span><small>${item[0]}</small><h3>${item[1]}</h3><p>${item[2]}</p></article>`).join("");
     $("bridgeWeekNav").innerHTML=`<header><small>12-WEEK PLAN</small><h2>选择学习周</h2></header>${BRIDGE_WEEKS.map(item=>{const count=item.days.filter((_,index)=>state.bridge.done.includes(bridgeTaskKey(item.week,index))).length;return `<button class="${item.week===week.week?"active":""} ${count===5?"done":""}" data-bridge-week="${item.week}"><span>${count===5?"✓":item.week}</span><div><small>${esc(item.phase)}</small><b>${esc(item.title)}</b><em>${count}/5项</em></div></button>`;}).join("")}`;
-    $("bridgeWeekWorkspace").innerHTML=`<header><div><small>第${week.week}周 · ${esc(week.phase)}</small><h2>${esc(week.title)}</h2><p>${esc(week.goal)}</p></div><aside><b>${weekDone}/5</b><small>本周完成</small></aside></header><section class="bridge-week-output"><b>本周学习成果</b><p>${esc(week.output)}</p></section><div class="bridge-day-list">${week.days.map((task,index)=>{const key=bridgeTaskKey(week.week,index),checked=state.bridge.done.includes(key);return `<button class="${checked?"done":""}" data-bridge-task="${key}" ${rewarded?"disabled":""}><span>${checked?"✓":index+1}</span><div><small>${["周一","周二","周三","周四","周五"][index]} · 约40分钟</small><b>${esc(task)}</b><p>${index===4?"完成后必须逐题订正，并把错因写成一句话。":"按10+10+10+10分钟学习闭环完成，最后离开提示复述。"}</p></div><em>${checked?"已完成":"完成打卡"}</em></button>`}).join("")}</div><footer><div><b>${weekDone===5?"本周任务已全部完成":"还差 "+(5-weekDone)+" 项"}</b><p>${rewarded?"本周奖励已经领取，请进入下一周。":"全部打卡后领取3个小太阳和2份粮食。"}</p></div><button class="primary" data-bridge-claim="${week.week}" ${weekDone<5||rewarded?"disabled":""}>${rewarded?"✓ 已领取":weekDone<5?"完成5项后领取":"领取本周奖励"}</button></footer>`;
-    $("bridgeKnowledge").innerHTML=`<div class="section-head"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>小升初必备知识总纲</h2><p>每一个分支都能跳回网站现有学习模块继续学习和练习。</p></div></div><div>${BRIDGE_KNOWLEDGE.map((item,index)=>`<article><span>${index+1}</span><h3>${item[0]}</h3><p>${item[1]}</p><small>${item[2]}</small></article>`).join("")}</div>`;
-    const links=[["courses","📚","六年级课程","按16个单元完成词汇、句型、阅读和练习"],["today","✅","每日任务","默写、释义、历史词汇和本周强化"],["abilities","🎯","能力中心","完成20题小升初综合检测和听说训练"],["grammar","🧠","语法课堂","8个主题按强化周次逐项学习"],["papers","📝","真题考卷","六年级新增30题小升初综合模拟卷"],["words","🔤","六年级单词","集中复习上下册全部重点词"]];
-    $("bridgeModuleLinks").innerHTML=`<div class="section-head"><div><span class="eyebrow">CONNECTED MODULES</span><h2>进入对应强化模块</h2></div></div><div>${links.map(item=>`<button data-bridge-open="${item[0]}"><span>${item[1]}</span><b>${item[2]}</b><small>${item[3]}</small><em>进入 →</em></button>`).join("")}</div>`;
+    $("bridgeWeekWorkspace").innerHTML=`<header><div><small>第${week.week}周 · ${esc(week.phase)}</small><h2>${esc(week.title)}</h2><p>${esc(week.goal)}</p></div><aside><b>${weekDone}/5</b><small>本周学完</small></aside></header><section class="bridge-week-output"><b>本周学习成果</b><p>${esc(week.output)}</p></section><div class="bridge-day-list">${week.days.map((task,index)=>{const key=bridgeTaskKey(week.week,index),checked=state.bridge.done.includes(key);return `<button class="${checked?"done":""}" data-bridge-lesson="${key}"><span>${checked?"✓":index+1}</span><div><small>${["周一","周二","周三","周四","周五"][index]} · 一节独立资料课</small><b>${esc(task)}</b><p>包含知识讲解、3个例句和3道随堂检查；做错可以订正后再次检查。</p></div><em>${checked?"复习资料":"打开学习资料 →"}</em></button>`}).join("")}</div><footer><div><b>${weekDone===5?"本周5节资料课已全部学完":"还差 "+(5-weekDone)+" 节资料课"}</b><p>${rewarded?"本周奖励已经领取，仍可随时重新打开资料复习。":"全部学完并通过检查后，领取3个小太阳和2份粮食。"}</p></div><button class="primary" data-bridge-claim="${week.week}" ${weekDone<5||rewarded?"disabled":""}>${rewarded?"✓ 已领取":weekDone<5?"学完5课后领取":"领取本周奖励"}</button></footer>`;
+    $("bridgeKnowledge").innerHTML=`<div class="section-head"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>小升初必备知识总纲</h2><p>每一个知识分支都已经编入上方60节资料课，可以按周学习，也可以反复打开复习。</p></div></div><div>${BRIDGE_KNOWLEDGE.map((item,index)=>`<article><span>${index+1}</span><h3>${item[0]}</h3><p>${item[1]}</p><small>${item[2]}</small></article>`).join("")}</div>`;
+    const guides=[["📖","知识讲解","说明规则、适用场景和常见易错点"],["💬","3个例句","逐句提供英文、中文和本句用法说明"],["✍️","3题检查","独立作答，错误时立即显示答案和原因"],["✅","订正完成","全部答对后才记录完成，可反复打开复习"]];
+    $("bridgeModuleLinks").innerHTML=`<div class="section-head"><div><span class="eyebrow">REAL LEARNING MATERIALS</span><h2>每节资料课包含什么</h2><p>这里不再跳转到每日任务、能力中心、语法、试卷、单词本、词典库或成长日报。</p></div></div><div>${guides.map(item=>`<article><span>${item[0]}</span><b>${item[1]}</b><small>${item[2]}</small></article>`).join("")}</div>`;
   }
 
-  function openBridgeModule(view){
-    if(view==="courses"){selectedGrade=6;selectedTerm=bookNow().grade===6?bookNow().term:"上册";}
-    if(view==="outline"){outlineGrade=6;outlineTerm=bookNow().grade===6?bookNow().term:"上册";}
-    if(view==="papers"){paperGrade=6;paperTerm=bookNow().grade===6?bookNow().term:"上册";paperUnitIndex=bookNow().grade===6?state.unitIndex:0;paperActiveId="";paperAnswers={};paperChecked=false;}
-    if(view==="abilities")abilityTab="bridge-check";
-    if(view==="words"){memoryFilter="bridge";memoryIndex=0;memoryFlipped=false;}
-    route(view);
+  function bridgeLessonFromKey(key){
+    const match=String(key||"").match(/^w(\d+):d(\d+)$/),weekNo=Number(match?.[1]),dayIndex=Number(match?.[2]);
+    if(!weekNo||dayIndex<0)return null;
+    const week=BRIDGE_WEEKS[weekNo-1],material=window.BRIDGE_LESSON_MATERIALS?.[weekNo-1]?.[dayIndex];
+    if(!week||!material)return null;
+    return {key,weekNo,dayIndex,week,task:week.days[dayIndex],material};
+  }
+  function openBridgeLesson(key){
+    const lesson=bridgeLessonFromKey(key);if(!lesson)return toast("这节学习资料暂时无法读取，请刷新网页后重试");
+    const {weekNo,dayIndex,week,task,material}=lesson,alreadyDone=state.bridge.done.includes(key),dialog=$("practiceDialog");
+    $("practiceDialogContent").innerHTML=`<div class="bridge-lesson-window"><header><span>🎓</span><div><small>第${weekNo}周 · 第${dayIndex+1}课 · 学习资料</small><h2 id="practiceDialogTitle">${esc(task)}</h2><p>${esc(week.goal)}</p></div></header><section class="bridge-lesson-teach"><small>先学懂</small><h3>知识讲解</h3><p>${esc(material.teach)}</p><div>${material.points.map((point,index)=>`<article><b>${index+1}</b><span>${esc(point)}</span></article>`).join("")}</div></section><section class="bridge-lesson-examples"><div class="bridge-lesson-section-head"><div><small>再看会</small><h3>3个完整例句</h3></div><span>可以播放英文</span></div><div>${material.examples.map((item,index)=>`<article><header><b>例句 ${index+1}</b><button type="button" data-say="${esc(item[0])}" aria-label="播放例句${index+1}">🔊 播放</button></header><p>${esc(item[0])}</p><em>${esc(item[1])}</em><small><b>用法：</b>${esc(item[2])}</small></article>`).join("")}</div></section><section class="bridge-lesson-practice"><div class="bridge-lesson-section-head"><div><small>最后独立完成</small><h3>3道随堂检查</h3></div><span>全部答对才能完成</span></div><div>${material.practice.map((item,index)=>`<label><b>${index+1}. ${esc(item[0])}</b><input type="text" autocomplete="off" spellcheck="false" data-bridge-lesson-answer data-expected="${esc(item[1])}" data-why="${esc(item[2])}" placeholder="请输入答案"><small></small></label>`).join("")}</div></section><footer><button class="soft" type="button" data-check-bridge-lesson="${esc(key)}">检查3道题</button><button class="primary" type="button" data-complete-bridge-lesson="${esc(key)}" ${alreadyDone?"":"disabled"}>${alreadyDone?"✓ 已完成，关闭资料":"全部答对后完成本课"}</button></footer></div>`;
+    $("practiceDialogContent").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say));
+    $("practiceDialogContent").querySelector("[data-check-bridge-lesson]").onclick=()=>checkBridgeLesson(key);
+    $("practiceDialogContent").querySelector("[data-complete-bridge-lesson]").onclick=()=>completeBridgeLesson(key);
+    if(dialog.showModal)dialog.showModal();else dialog.classList.add("open");
+    setTimeout(()=>$('practiceDialogContent').querySelector('[data-bridge-lesson-answer]')?.focus(),80);
+  }
+  function checkBridgeLesson(key){
+    const inputs=[...$("practiceDialogContent").querySelectorAll("[data-bridge-lesson-answer]")],clean=value=>String(value||"").trim().toLowerCase().replace(/[，。；、,.;！!？?]/g,"").replace(/\s+/g," ");let correct=0;
+    inputs.forEach(input=>{const answer=clean(input.value),expected=clean(input.dataset.expected),ok=answer===expected;input.classList.toggle("correct",ok);input.classList.toggle("wrong",!ok);const result=input.nextElementSibling;result.className=ok?"correct":"wrong";result.textContent=ok?`✓ 正确：${input.dataset.why}`:`答案：${input.dataset.expected}。${input.dataset.why}`;if(ok)correct++;});
+    const complete=$("practiceDialogContent").querySelector("[data-complete-bridge-lesson]");if(complete)complete.disabled=correct!==inputs.length;
+    toast(correct===inputs.length?"3题全部正确，可以完成本课了":`答对 ${correct}/3，请根据解析订正后再次检查`);
+  }
+  function completeBridgeLesson(key){
+    if(!state.bridge.done.includes(key)){state.bridge.done.push(key);activity();save();toast("本课已学完，进度已经保存");}
+    else toast("本课已经完成，可随时回来复习");
+    $("closePracticeDialog").click();
+    if($("view-bridge").classList.contains("active"))renderBridge();
   }
 
   function renderHome(){
@@ -672,7 +694,6 @@
     const unitDone=stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length;
     $("currentCourseCard").innerHTML=`<div class="course-progress-card"><span class="course-icon">${unit.icon}</span><div class="course-main"><small>${book.label} · Unit ${unit.number}</small><h3>${unit.title} <i>${unit.zh}</i></h3><p>${unit.goal}</p><div class="thin-bar"><span style="width:${unitDone/stages.length*100}%"></span></div><small>${unitDone}/${stages.length} 个学习环节已完成</small></div><button class="primary" data-open-stage="${nextStage().id}">继续</button></div>`;
     $("homeOutlineCard").innerHTML=`<div><span>🗺️</span><div><small>LEARNING MAP · 当前知识位置</small><h2>${book.label} → Unit ${unit.number} ${esc(unit.title)}</h2><p><b>本单元重点：</b>${esc(unit.goal)}　<b>必备词：</b>${uCorePreview(unit)}　<b>核心句：</b>${esc(unit.patterns[0]?.en||"")}</p></div></div><button class="soft" data-view="outline">查看总纲与全部单元 →</button>`;
-    renderBridgeBanner("homeBridgeBanner",book.grade===6,"学习首页");
     renderHomePet();
   }
 
@@ -695,7 +716,6 @@
   function uCorePreview(unit,limit=5){return unit.core.slice(0,limit).map(item=>`<em>${esc(item.word)}</em>`).join("、");}
   function renderOutline(){
     const book=COURSE_BOOKS.find(item=>item.grade===outlineGrade&&item.term===outlineTerm)||COURSE_BOOKS[0],completed=book.units.filter(unit=>stages.every(stage=>state.stageDone.includes(`${unit.id}:${stage.id}`))).length;
-    renderBridgeBanner("outlineBridgeBanner",outlineGrade===6,"学习总纲");
     $("outlineOverview").innerHTML=`<div class="outline-root"><span>🌳</span><small>闽教版三至六年级</small><b>英语学习知识树</b><em>8册 · 52单元</em></div><div class="outline-trunk"></div><div class="outline-grade-branches">${[3,4,5,6].map(grade=>{const books=COURSE_BOOKS.filter(item=>item.grade===grade);return `<article class="${outlineGrade===grade?"active":""}"><button data-outline-grade="${grade}"><span>${grade}</span><b>${grade}年级</b><small>${books.reduce((sum,item)=>sum+item.units.length,0)}个单元</small></button><div>${books.map(item=>`<button class="${book.id===item.id?"active":""}" data-outline-book="${item.id}">${item.term}<small>${item.units.length}单元</small></button>`).join("")}</div></article>`;}).join("")}</div>`;
     $("outlineGradeSwitch").innerHTML=[3,4,5,6].map(grade=>`<button class="${outlineGrade===grade?"active":""}" data-outline-grade="${grade}">${grade}年级</button>`).join("");
     $("outlineTermSwitch").innerHTML=["上册","下册"].map(term=>`<button class="${outlineTerm===term?"active":""}" data-outline-term="${term}">${term}</button>`).join("");
@@ -763,13 +783,12 @@
   }
   const paperScoreKey=(book,unit,typeId)=>`${unit.id}:${typeId}`;
   function renderPapers(){
-    const {book,unit}=paperSelection(),paperTypes=paperGrade===6?[...PAPER_TYPES,BRIDGE_PAPER_TYPE]:PAPER_TYPES,passScore=18,completedTotal=Object.values(state.papers.scores).filter(score=>Number(score)>=passScore).length,scores=Object.values(state.papers.scores).map(Number).filter(Number.isFinite),average=scores.length?Math.round(scores.reduce((sum,value)=>sum+value,0)/scores.length/30*100):0,currentDone=paperTypes.filter(type=>Number(state.papers.scores[paperScoreKey(book,unit,type.id)]||0)>=passScore).length;
-    renderBridgeBanner("paperBridgeBanner",paperGrade===6,"真题考卷");
-    $("paperDashboard").innerHTML=`<article><span>📚</span><div><b>52</b><small>课程单元</small></div></article><article><span>📝</span><div><b>328</b><small>完整试卷</small></div></article><article><span>✍️</span><div><b>9840</b><small>总练习题量</small></div></article><article><span>✅</span><div><b>${completedTotal}</b><small>本身份已通过</small></div></article><article><span>🎯</span><div><b>${scores.length?average+"%":"—"}</b><small>平均正确率</small></div></article>`;
+    const {book,unit}=paperSelection(),paperTypes=PAPER_TYPES,passScore=18,completedTotal=Object.values(state.papers.scores).filter(score=>Number(score)>=passScore).length,scores=Object.values(state.papers.scores).map(Number).filter(Number.isFinite),average=scores.length?Math.round(scores.reduce((sum,value)=>sum+value,0)/scores.length/30*100):0,currentDone=paperTypes.filter(type=>Number(state.papers.scores[paperScoreKey(book,unit,type.id)]||0)>=passScore).length;
+    $("paperDashboard").innerHTML=`<article><span>📚</span><div><b>52</b><small>课程单元</small></div></article><article><span>📝</span><div><b>312</b><small>完整试卷</small></div></article><article><span>✍️</span><div><b>9360</b><small>总练习题量</small></div></article><article><span>✅</span><div><b>${completedTotal}</b><small>本身份已通过</small></div></article><article><span>🎯</span><div><b>${scores.length?average+"%":"—"}</b><small>平均正确率</small></div></article>`;
     $("paperGradeSwitch").innerHTML=[3,4,5,6].map(grade=>`<button class="${paperGrade===grade?"active":""}" data-paper-grade="${grade}">${grade}年级</button>`).join("");
     $("paperTermSwitch").innerHTML=["上册","下册"].map(term=>`<button class="${paperTerm===term?"active":""}" data-paper-term="${term}">${term}</button>`).join("");
     $("paperUnitSwitch").innerHTML=book.units.map((item,index)=>`<button class="${paperUnitIndex===index?"active":""}" data-paper-unit="${index}"><span>${item.icon}</span>Unit ${item.number}<small>${esc(item.zh)}</small></button>`).join("");
-    $("paperUnitSummary").innerHTML=`<div><span>${unit.icon}</span><div><small>${esc(book.label)} · UNIT ${unit.number}</small><h2>${esc(unit.title)} <i>${esc(unit.zh)}</i></h2><p>本单元共${paperTypes.length}卷、${paperTypes.length*30}题；${paperGrade===6?"额外加入小升初综合模拟卷。":"累计卷只覆盖课程顺序中已经出现过的内容。"}</p></div></div><aside><b>${currentDone}/${paperTypes.length}</b><small>达到18/30即通过</small><div><span style="width:${currentDone/paperTypes.length*100}%"></span></div></aside>`;
+    $("paperUnitSummary").innerHTML=`<div><span>${unit.icon}</span><div><small>${esc(book.label)} · UNIT ${unit.number}</small><h2>${esc(unit.title)} <i>${esc(unit.zh)}</i></h2><p>本单元共${paperTypes.length}卷、${paperTypes.length*30}题；累计卷只覆盖课程顺序中已经出现过的内容。</p></div></div><aside><b>${currentDone}/${paperTypes.length}</b><small>达到18/30即通过</small><div><span style="width:${currentDone/paperTypes.length*100}%"></span></div></aside>`;
     $("paperGrid").innerHTML=paperTypes.map(type=>{const key=paperScoreKey(book,unit,type.id),score=Number(state.papers.scores[key]||0),attempts=Number(state.papers.attempts[key]||0),passed=score>=passScore,historyCount=paperPreviousUnits(book,paperUnitIndex).length,scope=type.id==="bridge-mock"?"当前及全部过往知识":type.id.startsWith("review-")?`${historyCount||1}个历史单元`:type.id==="fujian-combo"?"5个公开来源":"当前单元";return `<article class="paper-card ${passed?"passed":""} ${type.id==="fujian-combo"?"public-combo":""} ${type.id==="unit-advanced"||type.id==="bridge-mock"?"advanced-paper-card":""}"><div class="paper-card-top"><span>${type.icon}</span><div><small>${esc(type.kind)}</small><h3>${esc(type.title)}</h3></div><em>${esc(type.level)}</em></div><p>${esc(type.desc)}</p><div class="paper-card-facts"><span>30题</span><span>${type.minutes}分钟</span><span>${scope}</span>${type.id==="unit-advanced"||type.id==="bridge-mock"?"<span class=\"advanced-fact\">近形词 · 时态 · 语序 · 综合语境</span>":""}</div>${attempts?`<div class="paper-best"><b>最高 ${score}/30</b><small>已作答 ${attempts} 次</small></div>`:`<div class="paper-best empty"><b>尚未作答</b><small>完成全部30题后交卷</small></div>`}<button class="${passed?"soft":"primary"}" data-paper-start="${type.id}">${passed?"再次练习":"开始答卷"} →</button></article>`;}).join("");
     const workspace=$("paperExamWorkspace");
     if(!paperActiveId){workspace.hidden=true;workspace.innerHTML="";return;}
@@ -817,7 +836,6 @@
 
   function renderUnit(){
     const book=bookNow(), u=unitNow();
-    renderBridgeBanner("unitBridgeBanner",book.grade===6,"单元教材");
     $("unitHero").innerHTML=`<div class="unit-hero-icon">${u.icon}</div><div><span>完整单元教材 · ${book.label} · UNIT ${String(u.number).padStart(2,"0")}</span><h1>${u.title}</h1><h2>${u.zh}</h2><p>${u.goal}</p><div class="unit-hero-actions"><button data-open-stage="${nextStage().id}">▶ ${stages.find(s=>s.id===nextStage().id).name}</button><button data-action="print">🖨️ 打印学习单</button></div></div><div class="hero-count"><b>${stages.filter(s=>state.stageDone.includes(stageKey(s.id))).length}/${stages.length}</b><small>学习步骤</small></div>`;
     $("lessonTabs").innerHTML=stages.map(s=>`<button class="${state.stage===s.id?"active":""} ${state.stageDone.includes(stageKey(s.id))?"done":""}" data-stage="${s.id}"><span>${state.stageDone.includes(stageKey(s.id))?"✓":s.icon}</span>${s.name}</button>`).join("");
     renderStage();
@@ -1080,7 +1098,6 @@
 
   function renderToday(){
     const u=unitNow(),done=dailyComplete(),todayTasks=activeTasks(); $("todayDate").textContent=new Intl.DateTimeFormat("zh-CN",{month:"long",day:"numeric",weekday:"long"}).format(new Date()); $("todayCourse").textContent=`${bookNow().label} · ${u.title}`; $("circleProgress").textContent=`${done}/${todayTasks.length}`; $("circleProgress").style.background=`conic-gradient(var(--green) 0 ${done/todayTasks.length*100}%,#e8efeb ${done/todayTasks.length*100}% 100%)`;
-    renderBridgeBanner("todayBridgeBanner",bookNow().grade===6,"每日任务");
     $("dailyTasks").innerHTML=todayTasks.map((t,i)=>{const yes=state.dailyDone.includes(todayKey(t.id));const link=t.id==="zh2en"||t.id==="en2zh"?`data-open-dictation="${t.id}"`:t.id==="review"?"data-open-review":`data-daily-stage="${t.stage}"`;return `<button class="daily-task ${yes?"done":""}" ${link}><span>${yes?"✓":i+1}</span><i>${t.icon}</i><div><b>${t.title}</b><small>${t.detail}</small></div><em>${yes?"已完成":t.id==="review"?"+1☀️ +2🥣":"+1☀️ +1🥣"}</em></button>`}).join("");
     const claimed=state.bonuses.includes(`${iso()}:${unitKey()}`); $("claimDailyBonus").disabled=done<todayTasks.length||claimed; $("claimDailyBonus").textContent=claimed?"✓ 今日已领取":"领取全勤奖励"; $("bonusHint").textContent=done<todayTasks.length?`再完成 ${todayTasks.length-done} 项即可领取`:claimed?"明天继续保持":"现在可以领取 3☀️ + 2🥣";
     renderDailyPractice();
@@ -1089,8 +1106,7 @@
   function dailyPracticeWords(mode){return seededShuffle(unitNow().core,`${iso()}:${unitKey()}:${mode}:independent`).slice(0,Math.min(5,unitNow().core.length));}
   function renderDailyPractice(){
     const zhDone=state.dailyDone.includes(todayKey("zh2en")),enDone=state.dailyDone.includes(todayKey("en2zh")),reviewDone=state.dailyDone.includes(todayKey("review")),learned=pastLearnedWords();
-    const week=BRIDGE_WEEKS[Math.max(0,Math.min(11,Number(state.bridge.week||1)-1))],dayIndex=Math.min(4,Math.max(0,(new Date().getDay()+6)%7)),bridgeKey=bridgeTaskKey(week.week,dayIndex),bridgeDone=state.bridge.done.includes(bridgeKey),bridgeCard=bookNow().grade===6?`<article class="practice-launch bridge-daily-launch ${bridgeDone?"done":""}"><span>🎓</span><small>小升初强化 · 第${week.week}周 · ${["周一","周二","周三","周四","周五"][dayIndex]}</small><h2>${esc(week.title)}</h2><p>${esc(week.days[dayIndex])}</p><button class="primary" data-bridge-task="${bridgeKey}">${bridgeDone?"✓ 今日强化已完成":"完成本项强化打卡"}</button><button class="soft" data-view="bridge">查看完整12周安排</button></article>`:"";
-    $("dailyPracticeZone").innerHTML=`<article class="practice-launch ${zhDone?"done":""}"><span>✍️</span><small>独立窗口 A</small><h2>看中文，写英文</h2><p>窗口内只显示中文题目，不出现英文单词表，避免从旁边抄写。</p><button class="primary" data-open-dictation="zh2en">${zhDone?"再次练习":"开始英文默写"}</button></article><article class="practice-launch ${enDone?"done":""}"><span>🀄</span><small>独立窗口 B</small><h2>看英文，写中文</h2><p>窗口内只显示英文题目，不出现中文单词表，两种练习互不展示答案。</p><button class="primary" data-open-dictation="en2zh">${enDone?"再次练习":"开始中文释义"}</button></article><article class="practice-launch review-launch ${reviewDone?"done":""} ${learned.length?"":"locked"}"><span>🔁</span><small>历史巩固 · ${learned.length}个已学词可复习</small><h2>随机复习过往单词</h2><p>${learned.length?"只从已经完成过单词学习的单元抽题，绝不会提前出现未来课程单词。":"完成任意单元的“必备单词”学习后自动解锁。"}</p><button class="primary" data-open-review ${learned.length?"":"disabled"}>${reviewDone?"再次巩固":learned.length?"开始历史复习":"尚未解锁"}</button></article>${bridgeCard}`;
+    $("dailyPracticeZone").innerHTML=`<article class="practice-launch ${zhDone?"done":""}"><span>✍️</span><small>独立窗口 A</small><h2>看中文，写英文</h2><p>窗口内只显示中文题目，不出现英文单词表，避免从旁边抄写。</p><button class="primary" data-open-dictation="zh2en">${zhDone?"再次练习":"开始英文默写"}</button></article><article class="practice-launch ${enDone?"done":""}"><span>🀄</span><small>独立窗口 B</small><h2>看英文，写中文</h2><p>窗口内只显示英文题目，不出现中文单词表，两种练习互不展示答案。</p><button class="primary" data-open-dictation="en2zh">${enDone?"再次练习":"开始中文释义"}</button></article><article class="practice-launch review-launch ${reviewDone?"done":""} ${learned.length?"":"locked"}"><span>🔁</span><small>历史巩固 · ${learned.length}个已学词可复习</small><h2>随机复习过往单词</h2><p>${learned.length?"只从已经完成过单词学习的单元抽题，绝不会提前出现未来课程单词。":"完成任意单元的“必备单词”学习后自动解锁。"}</p><button class="primary" data-open-review ${learned.length?"":"disabled"}>${reviewDone?"再次巩固":learned.length?"开始历史复习":"尚未解锁"}</button></article>`;
   }
   function openReview(){
     const words=seededShuffle(pastLearnedWords(),`${iso()}:past-review`).slice(0,5),dialog=$("practiceDialog");
@@ -1128,7 +1144,6 @@
     return current;
   }
   function renderWords(){
-    renderBridgeBanner("wordsBridgeBanner",bookNow().grade===6,"单词本");
     document.querySelectorAll("[data-word-filter]").forEach(b=>b.classList.toggle("active",b.dataset.wordFilter===memoryFilter)); const pool=wordPool(); memoryIndex=Math.min(memoryIndex,Math.max(0,pool.length-1));
     if(!pool.length){$("memoryCard").innerHTML=`<div class="empty"><span>🎉</span><h2>这里暂时没有单词</h2><p>${memoryFilter==="weak"?"完成小测后，答错的词会自动来到这里。":"先进入课程学习单词吧。"}</p></div>`;$("wordDots").innerHTML="";return;}
     const w=pool[memoryIndex]; $("memoryCard").className=`memory-card ${memoryFlipped?"flipped":""}`; $("memoryCard").innerHTML=`<div class="memory-inner" id="flipWord" role="button" tabindex="0"><div class="memory-front"><small>${memoryIndex+1} / ${pool.length}</small><button class="word-audio" data-memory-say aria-label="播放单词发音">🔊</button><h2>${esc(w.word)}</h2><p>先说出中文意思，再点击翻面</p></div><div class="memory-back"><small>答案与记忆钩子</small><h2>${esc(w.meaning)}</h2><p>${esc(w.exampleZh||"把这个词放进本单元情境中说一次。")}</p><b>再大声读：${esc(w.word)}</b></div></div>`; $("wordDots").innerHTML=pool.map((_,i)=>`<button class="${i===memoryIndex?"active":""}" data-word-index="${i}" aria-label="第${i+1}个单词"></button>`).join("");
@@ -1148,7 +1163,6 @@
     return uniqueDictionaryWords(allWords().map(item=>({...item,level:`${COURSE_BOOKS.find(book=>book.units.some(unit=>unit.id===item.unitId))?.grade||3}年级`})));
   }
   function renderDictionary(){
-    renderBridgeBanner("dictionaryBridgeBanner",bookNow().grade===6,"词典库");
     const names={primary:"小学必备单词库",gaokao:"高考必备单词库",mine:"我的学习词库"},all=dictionaryWords(),letters=[...new Set(all.map(item=>item.word[0]?.toUpperCase()).filter(letter=>/[A-Z]/.test(letter)))];
     document.querySelectorAll("[data-dictionary-section]").forEach(button=>button.classList.toggle("active",button.dataset.dictionarySection===dictionarySection));
     $("dictionaryTitle").textContent=names[dictionarySection];
@@ -1189,15 +1203,13 @@
     $("abilitySummary").innerHTML=`<article class="ability-level-card"><span>${diagnostic?"🧭":"🌱"}</span><div><small>当前建议起点</small><b>${diagnostic?`${diagnostic.recommendedGrade}年级基础`:"尚未完成诊断"}</b><p>${diagnostic?`最近得分 ${diagnostic.score}/${DIAGNOSTIC_QUESTIONS.length} · ${esc(diagnostic.date)}`:"约8分钟，完成后会给出学习顺序建议。"}</p></div></article><article><b>${phonics}/${NATURAL_PHONICS_LESSONS.length}</b><small>拼读关卡</small></article><article><b>${listening}</b><small>听力单元</small></article><article><b>${speaking}</b><small>完成跟读</small></article>`;
   }
   function renderAbilities(){
-    const bridgeMode=bookNow().grade===6||abilityTab==="bridge-check",tabs=bridgeMode?[...ABILITY_TABS,BRIDGE_ABILITY_TAB]:ABILITY_TABS;
-    renderBridgeBanner("abilityBridgeBanner",bridgeMode,"能力中心");
     renderAbilitySummary();
-    $("abilityTabs").innerHTML=tabs.map(item=>`<button class="${abilityTab===item.id?"active":""}" data-ability-tab="${item.id}"><span>${item.icon}</span><b>${item.name}</b><small>${item.tip}</small></button>`).join("");
+    if(abilityTab==="bridge-check")abilityTab="diagnostic";
+    $("abilityTabs").innerHTML=ABILITY_TABS.map(item=>`<button class="${abilityTab===item.id?"active":""}" data-ability-tab="${item.id}"><span>${item.icon}</span><b>${item.name}</b><small>${item.tip}</small></button>`).join("");
     if(abilityTab==="diagnostic")renderDiagnostic();
     if(abilityTab==="natural-phonics")renderNaturalPhonics();
     if(abilityTab==="listening")renderAbilityListening();
     if(abilityTab==="speaking")renderAbilitySpeaking();
-    if(abilityTab==="bridge-check")renderBridgeAbility();
   }
   function renderBridgeAbility(){
     const answered=Object.keys(bridgeAbilityAnswers).length,score=bridgeAbilityChecked?BRIDGE_ABILITY_QUESTIONS.filter((item,index)=>bridgeAbilityAnswers[index]===item.answer).length:0,passed=score>=14;
@@ -1298,7 +1310,6 @@
 
   function renderGrammar(){
     const topics=window.GRAMMAR_TOPICS||[];if(!topics.length)return;
-    renderBridgeBanner("grammarBridgeBanner",bookNow().grade===6,"语法课堂");
     const topic=topics.find(item=>item.id===grammarTopicId)||topics[0];grammarTopicId=topic.id;
     const completed=state.grammar.completed||[],best=Number(state.grammar.quizBest?.[topic.id]||0),attempts=Number(state.grammar.attempts?.[topic.id]||0),passed=completed.includes(topic.id),result=grammarResult?.topicId===topic.id?grammarResult:null;
     $("grammarProgressText").textContent=completed.length+" / "+topics.length+" 个主题";
@@ -1394,18 +1405,17 @@
   function selectPet(id){if(!state.pets.owned.includes(id))return;state.pets.selected=id;petProgress(id);save();toast(`已选择 ${catalogPet(id).name} 作为当前伙伴`);renderPets();renderHomePet();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
 
   function renderReport(){
-    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0,diagnostic=diagnosticResult();renderBridgeBanner("reportBridgeBanner",bookNow().grade===6,"成长日报"); $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🧭</span><b>${diagnostic?diagnostic.recommendedGrade+"年级":"—"}</b><small>诊断建议起点</small></article><article><span>🔡</span><b>${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length}</b><small>拼读闯关</small></article><article><span>🎓</span><b>${bridgeDoneCount()}/60</b><small>小升初强化</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
+    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0,diagnostic=diagnosticResult(); $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🧭</span><b>${diagnostic?diagnostic.recommendedGrade+"年级":"—"}</b><small>诊断建议起点</small></article><article><span>🔡</span><b>${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length}</b><small>拼读闯关</small></article><article><span>🥣</span><b>${state.foods}</b><small>粮食库存</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
     const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const key=iso(d);days.push({name:["日","一","二","三","四","五","六"][d.getDay()],count:state.activity[key]||0,today:i===0});} const max=Math.max(4,...days.map(d=>d.count)); $("weekChart").innerHTML=days.map(d=>`<div class="chart-day"><b>${d.count}</b><span style="height:${Math.max(8,d.count/max*120)}px"></span><small>${d.today?"今天":"周"+d.name}</small></div>`).join("");
-    const advice=[];if(bookNow().grade===6)advice.push(`小升初强化已完成 ${bridgeDoneCount()}/60 项，当前第${state.bridge.week}周；请先保证每周5项全部订正，再进入下一周。`); if(!diagnostic)advice.push("先完成一次入学诊断，找到不太难也不太简单的学习起点。");else if(state.abilities.phonicsCompleted.length<NATURAL_PHONICS_LESSONS.length)advice.push(`诊断建议从${diagnostic.recommendedGrade}年级基础开始；自然拼读已完成 ${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length} 关，可每次练1关。`);if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
+    const advice=[]; if(!diagnostic)advice.push("先完成一次入学诊断，找到不太难也不太简单的学习起点。");else if(state.abilities.phonicsCompleted.length<NATURAL_PHONICS_LESSONS.length)advice.push(`诊断建议从${diagnostic.recommendedGrade}年级基础开始；自然拼读已完成 ${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length} 关，可每次练1关。`);if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
   }
 
   document.addEventListener("click",e=>{
     const view=e.target.closest("[data-view]"); if(view){route(view.dataset.view);return;}
     const profileChoice=e.target.closest("[data-profile-id]");if(profileChoice){switchProfile(profileChoice.dataset.profileId);return;}
     const bridgeWeekButton=e.target.closest("[data-bridge-week]");if(bridgeWeekButton){state.bridge.week=Number(bridgeWeekButton.dataset.bridgeWeek);save();renderBridge();return;}
-    const bridgeTaskButton=e.target.closest("[data-bridge-task]");if(bridgeTaskButton){const key=bridgeTaskButton.dataset.bridgeTask,week=Number(key.match(/^w(\d+):/)?.[1]||0);if(state.bridge.rewarded.includes(week))return toast("本周奖励已经领取，完成记录已锁定");const done=state.bridge.done.includes(key);state.bridge.done=done?state.bridge.done.filter(item=>item!==key):[...state.bridge.done,key];if(!done)activity();save();if($("view-bridge").classList.contains("active"))renderBridge();if($("view-today").classList.contains("active"))renderToday();return;}
+    const bridgeLessonButton=e.target.closest("[data-bridge-lesson]");if(bridgeLessonButton){openBridgeLesson(bridgeLessonButton.dataset.bridgeLesson);return;}
     const bridgeClaim=e.target.closest("[data-bridge-claim]");if(bridgeClaim){const week=Number(bridgeClaim.dataset.bridgeClaim),complete=BRIDGE_WEEKS[week-1].days.every((_,index)=>state.bridge.done.includes(bridgeTaskKey(week,index)));if(!complete)return toast("请先完成本周5项强化任务");if(state.bridge.rewarded.includes(week))return toast("本周奖励已经领取");state.bridge.rewarded.push(week);state.bridge.week=Math.min(12,week+1);reward(3,`完成小升初强化第${week}周`,2);renderBridge();return;}
-    const bridgeOpen=e.target.closest("[data-bridge-open]");if(bridgeOpen){openBridgeModule(bridgeOpen.dataset.bridgeOpen);return;}
     const outlineGradeButton=e.target.closest("[data-outline-grade]");if(outlineGradeButton){outlineGrade=Number(outlineGradeButton.dataset.outlineGrade);outlineTerm="上册";renderOutline();return;}
     const outlineTermButton=e.target.closest("[data-outline-term]");if(outlineTermButton){outlineTerm=outlineTermButton.dataset.outlineTerm;renderOutline();return;}
     const outlineBookButton=e.target.closest("[data-outline-book]");if(outlineBookButton){const book=COURSE_BOOKS.find(item=>item.id===outlineBookButton.dataset.outlineBook);if(book){outlineGrade=book.grade;outlineTerm=book.term;renderOutline();}return;}
@@ -1484,5 +1494,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();setupAudioPack();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=36",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=37",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
