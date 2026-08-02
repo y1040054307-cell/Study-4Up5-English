@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-icon-180.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/app-icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=29">
+  <link rel="stylesheet" href="styles.css?v=30">
   <title>向阳英语成长岛｜闽教版三至六年级</title>
 </head>
 <body>
@@ -38,6 +38,7 @@
   <nav class="main-tabs" aria-label="主要功能">
     <button class="active" data-view="home"><span>🏠</span>学习首页</button>
     <button data-view="courses"><span>📚</span>课程</button>
+      <button data-view="abilities"><span>🎯</span>能力中心</button>
       <button data-view="today"><span>✅</span>每日任务</button>
       <button data-view="words"><span>🔤</span>单词本</button>
       <button data-view="dictionary"><span>📕</span>词典库</button>
@@ -129,6 +130,13 @@
       <div class="unit-hero" id="unitHero"></div>
       <div class="lesson-tabs" id="lessonTabs"></div>
       <div class="lesson-content" id="lessonContent"></div>
+    </section>
+
+    <section class="view" id="view-abilities">
+      <div class="page-title ability-page-title"><span class="eyebrow">LEARNING ABILITY CENTER</span><h1>英语学习能力中心</h1><p>先找到真实起点，再用自然拼读、听力和口语训练，把“认识单词”变成“听得懂、读得出、说得来”。</p></div>
+      <section class="ability-summary" id="abilitySummary"></section>
+      <div class="ability-tabs" id="abilityTabs" aria-label="能力训练模块"></div>
+      <section class="ability-workspace" id="abilityWorkspace"></section>
     </section>
 
     <section class="view" id="view-today">
@@ -246,12 +254,12 @@
 
   <div class="toast" id="toast" role="status"></div>
   <audio id="voicePlayer" preload="auto" playsinline hidden></audio>
-  <script src="curriculum.js?v=29"></script>
-  <script src="dictionary.js?v=29"></script>
-  <script src="growth.js?v=29"></script>
-  <script src="grammar.js?v=29"></script>
-  <script src="audio-index.js?v=29"></script>
-  <script src="phoneme-audio.js?v=29"></script>
-  <script src="app.js?v=29"></script>
+  <script src="curriculum.js?v=30"></script>
+  <script src="dictionary.js?v=30"></script>
+  <script src="growth.js?v=30"></script>
+  <script src="grammar.js?v=30"></script>
+  <script src="audio-index.js?v=30"></script>
+  <script src="phoneme-audio.js?v=30"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>
