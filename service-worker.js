@@ -1,4 +1,4 @@
-const CACHE_NAME = "sunny-english-island-v40";
+const CACHE_NAME = "sunny-english-island-v41";
 const AUDIO_CACHE_NAME = "sunny-audio-pack-v31";
 const APP_FILES = ["./", "./index.html", "./styles.css", "./curriculum.js", "./quality-g3a.js", "./dictionary.js", "./growth.js", "./grammar.js", "./audio-index.js", "./phoneme-audio.js", "./bridge-content.js", "./app.js", "./manifest.webmanifest", "./assets/app-icon-180.png", "./assets/app-icon-192.png", "./assets/app-icon-512.png", "./assets/cat-growth.webp", "./assets/dog-growth.webp", "./assets/turtle-growth.webp"];
 self.addEventListener("install", event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => Promise.allSettled(APP_FILES.map(file=>cache.add(file))))); self.skipWaiting(); });
