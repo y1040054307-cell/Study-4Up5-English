@@ -17,7 +17,7 @@
   const TEST_BALANCE = 99999;
   let persistedEconomy = {suns:0,foods:0};
   const iso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, grammar:{completed:[],quizBest:{},attempts:{}}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
+  const defaultState = { bookId:"g4a", unitIndex:0, stage:"overview", suns:0, foods:0, mastered:[], weak:[], phonicsDone:[], stageDone:[], dailyDone:[], bonuses:[], signIns:[], activity:{}, quiz:{correct:0,total:0}, grammar:{completed:[],quizBest:{},attempts:{}}, abilities:{diagnostic:null,phonicsCompleted:[],listeningCompleted:[],speakingCompleted:[],rewarded:[]}, plant:{selected:"sunflower",owned:["sunflower"],progress:{sunflower:{energy:70,xp:0,lastFed:""}},lastDate:iso()}, pets:{selected:"",owned:[],progress:{}} };
   const load = (profileId=activeUserId) => { try {
     const key=profileStoreKey(profileId);
     if(!localStorage.getItem(key)&&profileId===USER_PROFILES[0].id&&localStorage.getItem(STORE))localStorage.setItem(key,localStorage.getItem(STORE));
@@ -30,7 +30,8 @@
     const petOwned=[...new Set((legacyPets.owned||[]).map(petKind).filter(Boolean))],selectedKind=petKind(legacyPets.selected),petSelected=petOwned.includes(selectedKind)?selectedKind:petOwned[0]||"";
     const pets={...defaultState.pets,...legacyPets,selected:petSelected,owned:petOwned,progress:petProgressMerged};
     const rawGrammar=raw.grammar||{},grammar={...defaultState.grammar,...rawGrammar,completed:[...(rawGrammar.completed||[])],quizBest:{...(rawGrammar.quizBest||{})},attempts:{...(rawGrammar.attempts||{})}};
-    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})},grammar};
+    const rawAbilities=raw.abilities||{},abilities={...defaultState.abilities,...rawAbilities,phonicsCompleted:[...(rawAbilities.phonicsCompleted||[])],listeningCompleted:[...(rawAbilities.listeningCompleted||[])],speakingCompleted:[...(rawAbilities.speakingCompleted||[])],rewarded:[...(rawAbilities.rewarded||[])]};
+    return {...defaultState,...raw,suns:TEST_MODE?TEST_BALANCE:persistedEconomy.suns,foods:TEST_MODE?TEST_BALANCE:persistedEconomy.foods,plant,pets,quiz:{...defaultState.quiz,...(raw.quiz||{})},grammar,abilities};
   } catch { persistedEconomy={suns:0,foods:0};const fresh=structuredClone(defaultState);fresh.suns=TEST_MODE?TEST_BALANCE:0;fresh.foods=TEST_MODE?TEST_BALANCE:0;return fresh; } };
   let state = load(activeUserId);
   let selectedGrade = Number(state.bookId[1]) || 4;
@@ -48,6 +49,17 @@
   let grammarTopicId = (window.GRAMMAR_TOPICS||[])[0]?.id || "articles";
   let grammarAnswers = {};
   let grammarResult = null;
+  let abilityTab = "diagnostic";
+  let diagnosticAnswers = {};
+  let abilityPhonicsLesson = "short-vowels";
+  let abilityPhonicsAnswer = "";
+  let abilityListeningAnswers = {};
+  let abilityListeningChecked = false;
+  let speakingRecording = null;
+  let speakingRecorder = null;
+  let speakingStream = null;
+  let speakingChunks = [];
+  let speakingRecordedKeys = new Set();
   let toastTimer;
   let petActionTimer;
   let deferredInstallPrompt = null;
@@ -61,7 +73,7 @@
   let localAudioAbort = null;
   let speechRequestId = 0;
   let networkVoiceNoticeShown = false;
-  const AUDIO_PACK_CACHE = "sunny-audio-pack-v29";
+  const AUDIO_PACK_CACHE = "sunny-audio-pack-v30";
 
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -83,6 +95,35 @@
     {id:"zh2en",icon:"✍️",title:"看中文写英文",detail:"完成本单元5个词的英文默写，注意拼写",stage:"words"},
     {id:"en2zh",icon:"🀄",title:"看英文写中文",detail:"写出5个英文单词的准确中文意思",stage:"words"},
     {id:"review",icon:"🔁",title:"复习过往单词",detail:"只从已经学过的单元中随机抽取，不提前出现未来词汇",stage:"review"}
+  ];
+
+  const ABILITY_TABS = [
+    {id:"diagnostic",icon:"🧭",name:"入学诊断",tip:"找到合适起点"},
+    {id:"natural-phonics",icon:"🔡",name:"自然拼读",tip:"看词会读、听音会拼"},
+    {id:"listening",icon:"🎧",name:"听力训练",tip:"只听声音判断意思"},
+    {id:"speaking",icon:"🎙️",name:"口语录音",tip:"听—录—回放—改进"}
+  ];
+  const DIAGNOSTIC_QUESTIONS = [
+    {area:"词汇",grade:3,q:"‘书包’的英文是？",options:["bag","book","desk"],answer:"bag",why:"bag 表示书包；book 是书，desk 是课桌。"},
+    {area:"句型",grade:3,q:"— How are you? — ____",options:["I'm fine.","I'm nine.","It's red."],answer:"I'm fine.",why:"How are you? 询问身体或近况，应回答 I'm fine. 等。"},
+    {area:"语法",grade:3,q:"This is ____ apple.",options:["a","an","the"],answer:"an",why:"apple 以元音音素开头，表示一个苹果用 an。"},
+    {area:"词汇",grade:4,q:"选择正确的复数：two ____",options:["box","boxs","boxes"],answer:"boxes",why:"box 以 x 结尾，复数通常加 -es。"},
+    {area:"语序",grade:4,q:"哪一句语序正确？",options:["Where the book is?","Where is the book?","The book where is?"],answer:"Where is the book?",why:"特殊疑问句常用“疑问词 + be动词 + 主语”。"},
+    {area:"阅读",grade:4,q:"‘It is rainy. Take an umbrella.’ 最合适的意思是？",options:["天晴了，戴帽子。","下雨了，带上雨伞。","天冷了，穿外套。"],answer:"下雨了，带上雨伞。",why:"rainy 是下雨的，umbrella 是雨伞。"},
+    {area:"动词",grade:5,q:"She ____ breakfast at seven every day.",options:["have","has","having"],answer:"has",why:"一般现在时中 she 是第三人称单数，have 变为 has。"},
+    {area:"时态",grade:5,q:"Yesterday I ____ to the park.",options:["go","went","will go"],answer:"went",why:"yesterday 表示过去，go 的过去式是 went。"},
+    {area:"介词",grade:5,q:"We have English ____ Monday.",options:["in","on","at"],answer:"on",why:"具体星期前使用介词 on。"},
+    {area:"句型",grade:6,q:"— What did you see? — I ____ two pandas.",options:["see","saw","seen"],answer:"saw",why:"问过去发生的事，回答中的 see 要用过去式 saw。"},
+    {area:"连接词",grade:6,q:"I stayed home ____ it was raining.",options:["because","but","or"],answer:"because",why:"后半句说明待在家的原因，所以用 because。"},
+    {area:"阅读",grade:6,q:"‘Tom is taller than Ben, but Ben runs faster.’ 哪项正确？",options:["Tom 更高，Ben 跑得更快。","Ben 更高，Tom 跑得更快。","两人一样高。"],answer:"Tom 更高，Ben 跑得更快。",why:"taller than 表示比……高；faster 表示更快。"}
+  ];
+  const NATURAL_PHONICS_LESSONS = [
+    {id:"short-vowels",level:"第1关",title:"短元音与 CVC 拼读",rule:"三个音依次滑读，再合成一个词。元音要短，不要拖长。",pattern:"辅音 + 短元音 + 辅音",examples:["cat","pen","sit","hot","sun"],blend:["c → a → t","/k/ → /æ/ → /t/","cat"],quiz:{q:"哪个词中的 a 发短音 /æ/？",options:["cat","cake","day"],answer:"cat",why:"cat 是 CVC 结构，a 发 /æ/；cake 和 day 中 a 发 /eɪ/。"}},
+    {id:"digraphs",level:"第2关",title:"辅音字母组合",rule:"两个字母常常合起来表示一个声音，不能拆成两个字母名来读。",pattern:"sh / ch / th / wh",examples:["ship","chair","three","white"],blend:["sh → i → p","/ʃ/ → /ɪ/ → /p/","ship"],quiz:{q:"哪个词以 /ʃ/ 开头？",options:["ship","chair","three"],answer:"ship",why:"sh 常发 /ʃ/；ch 常发 /tʃ/；th 在 three 中发 /θ/。"}},
+    {id:"silent-e",level:"第3关",title:"神奇的静音 e",rule:"词尾 e 通常不单独发音，却会让前面的元音读字母本身的长音。",pattern:"a-e / i-e / o-e / u-e",examples:["cake","bike","home","cute"],blend:["c-a-k → cap 的短音规律","加上词尾 e","cake /keɪk/"],quiz:{q:"哪组词体现了静音 e 改变元音？",options:["cap—cape","cat—cats","dog—dogs"],answer:"cap—cape",why:"cape 的词尾 e 不发音，使 a 从 /æ/ 变为 /eɪ/。"}},
+    {id:"vowel-teams",level:"第4关",title:"元音字母组合",rule:"两个元音字母组合后常出现稳定读音，但也要留意少量特殊词。",pattern:"ee / ea / ai / ay / oa",examples:["green","read","rain","day","boat"],blend:["r → ai → n","/r/ → /eɪ/ → /n/","rain"],quiz:{q:"哪个字母组合在 boat 中常发 /əʊ/？",options:["oa","ai","ee"],answer:"oa",why:"boat 中 oa 发 /əʊ/，把 b + oa + t 合读。"}},
+    {id:"r-controlled",level:"第5关",title:"r 控制元音",rule:"元音后跟 r 时，读音会发生变化。先把组合当作一个整体记。",pattern:"ar / or / er / ir / ur",examples:["car","short","her","bird","nurse"],blend:["b → ir → d","/b/ → /ɜː/ → /d/","bird"],quiz:{q:"bird 和 nurse 中间的元音最接近哪个音？",options:["/ɜː/","/æ/","/eɪ/"],answer:"/ɜː/",why:"ir 和 ur 在这两个词中都常发 /ɜː/。"}},
+    {id:"syllables",level:"第6关",title:"音节与重读",rule:"多音节词先分节，再找重读音节。重读部分更清楚，弱读部分更轻。",pattern:"音节拍手 + 重读标记",examples:["teacher","banana","computer","holiday"],blend:["com · PU · ter","中间音节重读","computer"],quiz:{q:"computer 的重读音节在哪里？",options:["第1音节","第2音节","第3音节"],answer:"第2音节",why:"computer /kəmˈpjuːtə/ 中 ˈ 在第二音节前。"}}
   ];
 
   const PHONICS_GROUPS = {
@@ -304,7 +345,7 @@
   function switchProfile(profileId){
     const nextId=validProfileId(profileId);if(nextId===activeUserId){closeProfileDialog();return;}
     save();activeUserId=nextId;localStorage.setItem(ACTIVE_PROFILE_STORE,activeUserId);state=load(activeUserId);
-    selectedGrade=Number(state.bookId[1])||4;selectedTerm=state.bookId.endsWith("a")?"上册":"下册";memoryFilter="current";memoryIndex=0;memoryFlipped=false;quizAnswers={};grammarAnswers={};grammarResult=null;
+    selectedGrade=Number(state.bookId[1])||4;selectedTerm=state.bookId.endsWith("a")?"上册":"下册";memoryFilter="current";memoryIndex=0;memoryFlipped=false;quizAnswers={};grammarAnswers={};grammarResult=null;diagnosticAnswers={};abilityListeningAnswers={};abilityListeningChecked=false;abilityPhonicsAnswer="";speakingRecordedKeys=new Set();
     carePlant();carePets();renderHeader();closeProfileDialog();route("home");toast(`已切换到${USER_PROFILES.find(item=>item.id===activeUserId).name}，学习记录互不混用`);
   }
   const installedAsApp = () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone===true;
@@ -375,6 +416,7 @@
     document.querySelectorAll(".main-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===view || (view==="unit"&&b.dataset.view==="courses")));
     if(view==="home") renderHome();
     if(view==="courses") renderCourses();
+    if(view==="abilities") renderAbilities();
     if(view==="unit") renderUnit();
     if(view==="today") renderToday();
     if(view==="words") renderWords();
@@ -738,6 +780,83 @@
   }
   function moveWord(known){ const pool=wordPool(); if(!pool.length)return; const w=pool[memoryIndex]; if(known){if(!state.mastered.includes(w.key))state.mastered.push(w.key);state.weak=state.weak.filter(x=>x!==w.key);toast("已记住：明天再回忆一次");}else{if(!state.weak.includes(w.key))state.weak.push(w.key);state.mastered=state.mastered.filter(x=>x!==w.key);toast("已加入复习清单，慢慢来");} activity();save();memoryIndex=(memoryIndex+1)%Math.max(1,pool.length);memoryFlipped=false;renderWords(); }
 
+  const abilityReward=(key,amount,message,food=0)=>{if(state.abilities.rewarded.includes(key))return false;state.abilities.rewarded.push(key);reward(amount,message,food);return true;};
+  const abilityHash=value=>[...String(value)].reduce((sum,char)=>((sum*31)+char.charCodeAt(0))>>>0,7);
+  const abilityPrompts=()=>{
+    const u=unitNow(),storySentences=String(u.story||"").match(/[^.!?]+[.!?]/g)||[];
+    return [...u.patterns.map(item=>({en:item.en.replace(/\s*—.*$/,"").trim(),zh:item.zh.replace(/\s*—.*$/,"").trim()})),...storySentences.slice(0,2).map(en=>({en:en.trim(),zh:"本单元故事句：先理解大意，再模仿语音语调。"}))].slice(0,5);
+  };
+  function abilityListeningItems(){
+    const u=unitNow(),all=bookNow().units.flatMap(unit=>unit.core),ordered=[...u.core].sort((a,b)=>abilityHash(`${activeUserId}:${unitKey()}:${a.word}`)-abilityHash(`${activeUserId}:${unitKey()}:${b.word}`));
+    return ordered.slice(0,Math.min(5,ordered.length)).map((item,index)=>{
+      const meanings=[item.meaning];
+      for(let step=1;meanings.length<3&&step<all.length;step+=1){const candidate=all[(abilityHash(item.word)+index+step*7)%all.length]?.meaning;if(candidate&&!meanings.includes(candidate))meanings.push(candidate);}
+      meanings.sort((a,b)=>abilityHash(`${item.word}:${a}`)-abilityHash(`${item.word}:${b}`));
+      return {...item,options:meanings};
+    });
+  }
+  function renderAbilitySummary(){
+    const a=state.abilities,diagnostic=a.diagnostic,phonics=a.phonicsCompleted.length,listening=a.listeningCompleted.length,speaking=a.speakingCompleted.length;
+    $("abilitySummary").innerHTML=`<article class="ability-level-card"><span>${diagnostic?"🧭":"🌱"}</span><div><small>当前建议起点</small><b>${diagnostic?`${diagnostic.recommendedGrade}年级基础`:"尚未完成诊断"}</b><p>${diagnostic?`最近得分 ${diagnostic.score}/${DIAGNOSTIC_QUESTIONS.length} · ${esc(diagnostic.date)}`:"约8分钟，完成后会给出学习顺序建议。"}</p></div></article><article><b>${phonics}/${NATURAL_PHONICS_LESSONS.length}</b><small>拼读关卡</small></article><article><b>${listening}</b><small>听力单元</small></article><article><b>${speaking}</b><small>完成跟读</small></article>`;
+  }
+  function renderAbilities(){
+    renderAbilitySummary();
+    $("abilityTabs").innerHTML=ABILITY_TABS.map(item=>`<button class="${abilityTab===item.id?"active":""}" data-ability-tab="${item.id}"><span>${item.icon}</span><b>${item.name}</b><small>${item.tip}</small></button>`).join("");
+    if(abilityTab==="diagnostic")renderDiagnostic();
+    if(abilityTab==="natural-phonics")renderNaturalPhonics();
+    if(abilityTab==="listening")renderAbilityListening();
+    if(abilityTab==="speaking")renderAbilitySpeaking();
+  }
+  function renderDiagnostic(){
+    const result=state.abilities.diagnostic,shownAnswers=result?.answers||diagnosticAnswers,answered=Object.keys(shownAnswers).length;
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head diagnostic-head"><div><span>🧭</span><small>START FROM THE RIGHT PLACE</small><h2>入学诊断：不是考试，是寻找起点</h2><p>共12题，覆盖词汇、句型、语法、语序和阅读。不会的题可以直接选“最像的答案”，结果不会影响课程记录。</p></div><aside><b>${result?`${result.score}/12`:`${answered}/12`}</b><small>${result?`建议${result.recommendedGrade}年级起步`:"已回答"}</small></aside></header><div class="diagnostic-grid">${DIAGNOSTIC_QUESTIONS.map((item,index)=>{const selected=shownAnswers[index],checked=Boolean(result),correct=checked&&selected===item.answer;return `<article class="diagnostic-question ${checked?(correct?"correct":"wrong"):""}"><div><span>${index+1}</span><small>${item.area} · ${item.grade}年级梯度</small></div><h3>${esc(item.q)}</h3><div>${item.options.map(option=>`<button class="${selected===option?"selected":""} ${checked&&option===item.answer?"answer":""}" data-diagnostic-answer="${index}" data-answer-value="${esc(option)}" ${checked?"disabled":""}>${esc(option)}</button>`).join("")}</div>${checked?`<p><b>${correct?"✓ 回答正确":"正确答案："+esc(item.answer)}</b>${esc(item.why)}</p>`:""}</article>`}).join("")}</div><div class="ability-submit-row">${result?`<button class="soft" data-diagnostic-reset>重新诊断</button><button class="primary" data-ability-tab="natural-phonics">按建议开始自然拼读 →</button>`:`<button class="primary" data-diagnostic-submit ${answered<DIAGNOSTIC_QUESTIONS.length?"disabled":""}>${answered<DIAGNOSTIC_QUESTIONS.length?`还需完成 ${DIAGNOSTIC_QUESTIONS.length-answered} 题`:"查看诊断结果"}</button>`}</div>${result?diagnosticAdvice(result):""}`;
+  }
+  function diagnosticAdvice(result){
+    const tips=result.recommendedGrade<=3?["先完成短元音和辅音组合","从三年级上册开始，每天1个小环节","听懂后再看文字，不要求一次全对"]:result.recommendedGrade===4?["完成自然拼读前4关","从四年级对应学期开始","每天加入5分钟听力辨词"]:result.recommendedGrade===5?["重点补静音e、元音组合和时态","从五年级对应学期开始","每周完成2次录音回听"]:["复习多音节和重读规律","可从六年级课程开始","加强整句听力、表达和阅读复述"];
+    return `<section class="diagnostic-result"><span>🎯</span><div><small>个性化学习建议</small><h2>建议从 ${result.recommendedGrade} 年级基础开始</h2><p>这不是给孩子贴标签，而是让内容既不太难，也不无聊。</p><ul>${tips.map(tip=>`<li>${tip}</li>`).join("")}</ul></div></section>`;
+  }
+  function submitDiagnostic(){
+    if(Object.keys(diagnosticAnswers).length<DIAGNOSTIC_QUESTIONS.length)return toast("请先完成全部12题");
+    const score=DIAGNOSTIC_QUESTIONS.filter((item,index)=>diagnosticAnswers[index]===item.answer).length,recommendedGrade=score<=3?3:score<=6?4:score<=9?5:6,first=!state.abilities.diagnostic;
+    state.abilities.diagnostic={score,recommendedGrade,date:iso(),answers:{...diagnosticAnswers}};
+    if(first)abilityReward("diagnostic",3,"完成入学诊断",1);else save();renderAbilities();
+  }
+  function renderNaturalPhonics(){
+    const lesson=NATURAL_PHONICS_LESSONS.find(item=>item.id===abilityPhonicsLesson)||NATURAL_PHONICS_LESSONS[0],done=state.abilities.phonicsCompleted.includes(lesson.id),checked=Boolean(abilityPhonicsAnswer),correct=abilityPhonicsAnswer===lesson.quiz.answer;
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head phonics-head"><div><span>🔡</span><small>SEE · SOUND · BLEND</small><h2>自然拼读：把字母规律变成读词能力</h2><p>音标告诉我们“声音是什么”，自然拼读教我们“看到字母怎样猜读”。两者配合学习效果更好。</p></div><aside><b>${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length}</b><small>已闯关</small></aside></header><div class="phonics-level-nav">${NATURAL_PHONICS_LESSONS.map(item=>`<button class="${item.id===lesson.id?"active":""} ${state.abilities.phonicsCompleted.includes(item.id)?"done":""}" data-ability-phonics-lesson="${item.id}"><span>${state.abilities.phonicsCompleted.includes(item.id)?"✓":item.level}</span><b>${item.title}</b></button>`).join("")}</div><section class="phonics-lesson"><div class="phonics-rule-card"><small>${lesson.level} · 核心规律</small><h2>${esc(lesson.title)}</h2><p>${esc(lesson.rule)}</p><b>${esc(lesson.pattern)}</b></div><div class="phonics-example-row">${lesson.examples.map(word=>`<button data-say="${esc(word)}"><span>🔊</span><b>${esc(word)}</b><small>点听并跟读3遍</small></button>`).join("")}</div><div class="blend-road"><small>拼读示范</small>${lesson.blend.map((part,index)=>`<div><span>${index+1}</span><b>${esc(part)}</b></div>${index<lesson.blend.length-1?"<i>→</i>":""}`).join("")}</div><section class="phonics-check ${checked?(correct?"correct":"wrong"):""}"><small>理解检查</small><h3>${esc(lesson.quiz.q)}</h3><div>${lesson.quiz.options.map(option=>`<button class="${abilityPhonicsAnswer===option?"selected":""} ${checked&&option===lesson.quiz.answer?"answer":""}" data-ability-phonics-answer="${esc(option)}">${esc(option)}</button>`).join("")}</div>${checked?`<p><b>${correct?"✓ 找对规律了！":"再观察一下正确选项。"}</b>${esc(lesson.quiz.why)}</p>`:""}${correct?`<button class="primary phonics-pass" data-ability-phonics-pass="${lesson.id}" ${done?"disabled":""}>${done?"✓ 本关已完成":"完成本关 +2 ☀️"}</button>`:""}</section></section>`;
+    $("abilityWorkspace").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say,.74));
+  }
+  function renderAbilityListening(){
+    const items=abilityListeningItems(),key=unitKey(),completed=state.abilities.listeningCompleted.includes(key);
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head listening-head"><div><span>🎧</span><small>LISTEN BEFORE YOU LOOK</small><h2>本单元听力：只听声音找意思</h2><p>${esc(bookNow().label)} · Unit ${unitNow().number} ${esc(unitNow().title)}。题目顺序已打乱，先听2遍，再选择中文意思。</p></div><aside><b>${completed?"✓":`${Object.keys(abilityListeningAnswers).length}/${items.length}`}</b><small>${completed?"本单元已完成":"已作答"}</small></aside></header><div class="listening-list">${items.map((item,index)=>{const selected=abilityListeningAnswers[index],checked=abilityListeningChecked,correct=selected===item.meaning;return `<article class="listening-question ${checked?(correct?"correct":"wrong"):""}"><div><span>${index+1}</span><button data-listening-say="${esc(item.word)}">▶ 播放第 ${index+1} 题</button><small>不要先看答案，建议播放2遍</small></div><div class="listening-options">${item.options.map(option=>`<button class="${selected===option?"selected":""} ${checked&&option===item.meaning?"answer":""}" data-listening-answer="${index}" data-answer-value="${esc(option)}" ${checked?"disabled":""}>${esc(option)}</button>`).join("")}</div>${checked?`<p><b>${correct?"✓ 听对了":"正确答案："+esc(item.meaning)}</b><span>原词是 <strong>${esc(item.word)}</strong></span><button data-say="${esc(item.word)}">🔊 再听一次</button></p>`:""}</article>`}).join("")}</div><div class="ability-submit-row">${abilityListeningChecked?`<button class="soft" data-listening-retry>重新练习</button><button class="primary" data-ability-tab="speaking">进入口语录音 →</button>`:`<button class="primary" data-listening-submit ${Object.keys(abilityListeningAnswers).length<items.length?"disabled":""}>检查听力答案</button>`}</div>`;
+    $("abilityWorkspace").querySelectorAll("[data-listening-say],[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.listeningSay||button.dataset.say,.7));
+  }
+  function submitAbilityListening(){
+    const items=abilityListeningItems();if(Object.keys(abilityListeningAnswers).length<items.length)return toast("请先听完并完成全部题目");abilityListeningChecked=true;
+    const score=items.filter((item,index)=>abilityListeningAnswers[index]===item.meaning).length,key=unitKey(),first=!state.abilities.listeningCompleted.includes(key);
+    if(first){state.abilities.listeningCompleted.push(key);abilityReward(`listening:${key}`,2,`完成本单元听力 ${score}/${items.length}`,1);}else save();renderAbilities();
+  }
+  function renderAbilitySpeaking(){
+    const prompts=abilityPrompts(),completed=state.abilities.speakingCompleted;
+    $("abilityWorkspace").innerHTML=`<header class="ability-module-head speaking-head"><div><span>🎙️</span><small>LISTEN · RECORD · PLAY BACK</small><h2>本单元口语：听原音，录自己，再比较</h2><p>系统不会给孩子贴“好或不好”的分数。重点是回听后发现一个可以改进的地方，再录一次。</p></div><aside><b>${prompts.filter((_,index)=>completed.includes(`${unitKey()}:${index}`)).length}/${prompts.length}</b><small>句已完成</small></aside></header><div class="speaking-guide"><span><b>1</b>听原音2遍</span><i>→</i><span><b>2</b>看句意理解</span><i>→</i><span><b>3</b>录音并回放</span><i>→</i><span><b>4</b>勾选完成</span></div><div class="speaking-list">${prompts.map((item,index)=>{const key=`${unitKey()}:${index}`,done=completed.includes(key),recorded=speakingRecordedKeys.has(key);return `<article><div class="speaking-number">${done?"✓":index+1}</div><div class="speaking-copy"><h3>${esc(item.en)}</h3><p>${esc(item.zh)}</p><div><button class="soft" data-say="${esc(item.en)}">🔊 听标准句</button><button class="record-button" data-speaking-record="${index}">● ${recorded?"再录一次":"开始录音"}</button><button class="primary" data-speaking-complete="${index}" ${done||!recorded?"disabled":""}>${done?"已完成":recorded?"完成这句":"录音后解锁"}</button></div><section class="recording-result" id="recordingResult${index}"><small>录音只在当前页面临时播放，不会上传或保存。</small></section></div></article>`}).join("")}</div><section class="speaking-self-check"><span>👂</span><div><h3>回听时只检查3件事</h3><p><b>声音：</b>每个关键词是否清楚？　<b>节奏：</b>有没有一个词一个词地断开？　<b>语调：</b>问句和陈述句是否有自然变化？</p></div></section>`;
+    $("abilityWorkspace").querySelectorAll("[data-say]").forEach(button=>button.onclick=()=>speak(button.dataset.say,.74));
+  }
+  async function startSpeakingRecording(index,button){
+    if(speakingRecorder?.state==="recording"){speakingRecorder.stop();return;}
+    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return toast("当前浏览器不支持网页录音，请使用最新版微信、Chrome、Edge 或 Safari");
+    try{
+      speakingStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});speakingChunks=[];
+      const preferred=["audio/webm;codecs=opus","audio/mp4","audio/webm"].find(type=>MediaRecorder.isTypeSupported?.(type));speakingRecorder=new MediaRecorder(speakingStream,preferred?{mimeType:preferred}:undefined);
+      button.textContent="■ 停止并回放";button.classList.add("recording");const result=$("recordingResult"+index);result.innerHTML="<b>正在录音……读完后点击“停止并回放”</b>";
+      speakingRecorder.ondataavailable=event=>{if(event.data.size)speakingChunks.push(event.data);};
+      speakingRecorder.onstop=()=>{const blob=new Blob(speakingChunks,{type:speakingRecorder.mimeType||"audio/webm"});if(speakingRecording)URL.revokeObjectURL(speakingRecording);speakingRecording=URL.createObjectURL(blob);speakingRecordedKeys.add(`${unitKey()}:${index}`);result.innerHTML=`<audio controls playsinline src="${speakingRecording}"></audio><small>先完整听一遍，再和“标准句”比较。录音不会上传。</small>`;button.textContent="● 再录一次";button.classList.remove("recording");const completeButton=$("abilityWorkspace")?.querySelector(`[data-speaking-complete="${index}"]`);if(completeButton){completeButton.disabled=false;completeButton.textContent="完成这句";}speakingStream?.getTracks().forEach(track=>track.stop());speakingStream=null;};
+      speakingRecorder.start();
+    }catch{toast("没有获得麦克风权限。请在浏览器地址栏的网站设置中允许麦克风。");}
+  }
+  function completeSpeaking(index){
+    const key=`${unitKey()}:${index}`;if(state.abilities.speakingCompleted.includes(key))return;if(!speakingRecordedKeys.has(key))return toast("请先录音并回放，再完成这句");state.abilities.speakingCompleted.push(key);abilityReward(`speaking:${key}`,1,"完成一句口语回听");renderAbilities();
+  }
+
   function renderPhonics(){
     const icons={short:"🟡",long:"🟢",diph:"🌈",stops:"💨",consonants:"👄",clusters:"🔗"},groups=Object.entries(PHONICS_GROUPS),total=groups.reduce((sum,[,item])=>sum+item.items.length,0),done=state.phonicsDone.length,group=PHONICS_GROUPS[phonicsGroup];
     $("phonicsGroups").innerHTML=`<div class="phonics-progress"><div><b>音标学习进度</b><span>${done} / ${total} 个音</span></div><i><em style="width:${Math.min(100,done/total*100)}%"></em></i></div><div class="phonics-group-buttons">${groups.map(([id,item])=>`<button class="${id===phonicsGroup?"active":""}" data-phonics-group="${id}">${icons[id]} ${item.name}<small>${item.items.length}个</small></button>`).join("")}</div>`;
@@ -846,14 +965,26 @@
   function selectPet(id){if(!state.pets.owned.includes(id))return;state.pets.selected=id;petProgress(id);save();toast(`已选择 ${catalogPet(id).name} 作为当前伙伴`);renderPets();renderHomePet();if(document.getElementById("view-market").classList.contains("active"))renderMarket();}
 
   function renderReport(){
-    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0; $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🥣</span><b>${state.foods}</b><small>粮食库存</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
+    const accuracy=state.quiz.total?Math.round(state.quiz.correct/state.quiz.total*100):0,diagnostic=state.abilities.diagnostic; $("reportCards").innerHTML=`<article><span>📚</span><b>${completedUnits()}</b><small>完成单元</small></article><article><span>🧩</span><b>${state.stageDone.length}</b><small>完成学习步骤</small></article><article><span>🔤</span><b>${state.mastered.length}</b><small>掌握单词</small></article><article><span>🎯</span><b>${accuracy||"—"}${accuracy?"%":""}</b><small>小测正确率</small></article><article><span>🧭</span><b>${diagnostic?diagnostic.recommendedGrade+"年级":"—"}</b><small>诊断建议起点</small></article><article><span>🔡</span><b>${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length}</b><small>拼读闯关</small></article><article><span>🥣</span><b>${state.foods}</b><small>粮食库存</small></article><article><span>🐾</span><b>${state.pets.owned.length}</b><small>动物伙伴</small></article>`;
     const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const key=iso(d);days.push({name:["日","一","二","三","四","五","六"][d.getDay()],count:state.activity[key]||0,today:i===0});} const max=Math.max(4,...days.map(d=>d.count)); $("weekChart").innerHTML=days.map(d=>`<div class="chart-day"><b>${d.count}</b><span style="height:${Math.max(8,d.count/max*120)}px"></span><small>${d.today?"今天":"周"+d.name}</small></div>`).join("");
-    const advice=[]; if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
+    const advice=[]; if(!diagnostic)advice.push("先完成一次入学诊断，找到不太难也不太简单的学习起点。");else if(state.abilities.phonicsCompleted.length<NATURAL_PHONICS_LESSONS.length)advice.push(`诊断建议从${diagnostic.recommendedGrade}年级基础开始；自然拼读已完成 ${state.abilities.phonicsCompleted.length}/${NATURAL_PHONICS_LESSONS.length} 关，可每次练1关。`);if(state.weak.length)advice.push(`本周有 ${state.weak.length} 个词需要复习。每天只挑5个做“看中文说英文”，不要罚抄。`); else advice.push("目前没有积累错词。完成一次单元小测后，系统会给出更准确的复习建议。"); if(streakCount()<3)advice.push("先把目标定为连续3天，每天20分钟；形成节奏比一次学一小时更重要。"); else advice.push(`已经连续学习 ${streakCount()} 天。请多肯定孩子的坚持，不只看分数。`); advice.push("家长可以做听众：请孩子用本单元句型介绍一件真实的事，听懂后追问一个简单问题。"); $("parentAdvice").innerHTML=advice.map((a,i)=>`<article><span>${i+1}</span><p>${a}</p></article>`).join("");
   }
 
   document.addEventListener("click",e=>{
     const view=e.target.closest("[data-view]"); if(view){route(view.dataset.view);return;}
     const profileChoice=e.target.closest("[data-profile-id]");if(profileChoice){switchProfile(profileChoice.dataset.profileId);return;}
+    const abilityTabButton=e.target.closest("[data-ability-tab]");if(abilityTabButton){abilityTab=abilityTabButton.dataset.abilityTab;renderAbilities();return;}
+    const diagnosticAnswer=e.target.closest("[data-diagnostic-answer]");if(diagnosticAnswer&&!state.abilities.diagnostic){diagnosticAnswers[Number(diagnosticAnswer.dataset.diagnosticAnswer)]=diagnosticAnswer.dataset.answerValue;renderAbilities();return;}
+    const diagnosticSubmit=e.target.closest("[data-diagnostic-submit]");if(diagnosticSubmit){submitDiagnostic();return;}
+    const diagnosticReset=e.target.closest("[data-diagnostic-reset]");if(diagnosticReset){diagnosticAnswers={};state.abilities.diagnostic=null;save();renderAbilities();return;}
+    const phonicsLesson=e.target.closest("[data-ability-phonics-lesson]");if(phonicsLesson){abilityPhonicsLesson=phonicsLesson.dataset.abilityPhonicsLesson;abilityPhonicsAnswer="";renderAbilities();return;}
+    const phonicsAnswer=e.target.closest("[data-ability-phonics-answer]");if(phonicsAnswer){abilityPhonicsAnswer=phonicsAnswer.dataset.abilityPhonicsAnswer;renderAbilities();return;}
+    const phonicsPass=e.target.closest("[data-ability-phonics-pass]");if(phonicsPass){const key=phonicsPass.dataset.abilityPhonicsPass;if(!state.abilities.phonicsCompleted.includes(key)){state.abilities.phonicsCompleted.push(key);abilityReward(`natural-phonics:${key}`,2,"完成一个自然拼读关卡");}renderAbilities();return;}
+    const listeningAnswer=e.target.closest("[data-listening-answer]");if(listeningAnswer&&!abilityListeningChecked){abilityListeningAnswers[Number(listeningAnswer.dataset.listeningAnswer)]=listeningAnswer.dataset.answerValue;renderAbilities();return;}
+    const listeningSubmit=e.target.closest("[data-listening-submit]");if(listeningSubmit){submitAbilityListening();return;}
+    const listeningRetry=e.target.closest("[data-listening-retry]");if(listeningRetry){abilityListeningAnswers={};abilityListeningChecked=false;renderAbilities();return;}
+    const speakingRecord=e.target.closest("[data-speaking-record]");if(speakingRecord){startSpeakingRecording(Number(speakingRecord.dataset.speakingRecord),speakingRecord);return;}
+    const speakingComplete=e.target.closest("[data-speaking-complete]");if(speakingComplete){completeSpeaking(Number(speakingComplete.dataset.speakingComplete));return;}
     const grammarTopic=e.target.closest("[data-grammar-topic]");if(grammarTopic){grammarTopicId=grammarTopic.dataset.grammarTopic;grammarAnswers={};grammarResult=null;renderGrammar();return;}
     const grammarOption=e.target.closest("[data-grammar-option]");if(grammarOption){grammarAnswers[Number(grammarOption.dataset.grammarOption)]=grammarOption.dataset.grammarValue;grammarResult=null;renderGrammar();return;}
     const grammarSubmit=e.target.closest("#submitGrammarQuiz");if(grammarSubmit){submitGrammarQuiz();return;}
@@ -898,5 +1029,5 @@
   $("feedBtn").onclick=()=>{const progress=plantProgress();if(state.suns<2)return toast("小太阳不足，先完成学习任务吧");state.suns-=2;progress.energy=Math.min(100,progress.energy+20);progress.xp+=5;progress.lastFed=iso();save();toast("💧 浇灌成功，植物成长值 +5；小太阳充足时可以继续浇灌");renderGarden();};
 
   carePlant();carePets();renderHeader();renderHome();setupAppInstall();setupAudioPack();
-  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=29",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js?v=30",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 })();
